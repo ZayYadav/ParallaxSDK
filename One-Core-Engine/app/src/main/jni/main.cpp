@@ -14,7 +14,7 @@ int type = 1, utype = 2;
 extern "C"
 JNIEXPORT jstring JNICALL
 com_onecore_loader_activity_LoginActivity_GetKey(JNIEnv *env, jclass clazz) {
-    return env->NewStringUTF(OBFUSCATE("https://t.me/OneCoreEngine")); //telegram link
+    return env->NewStringUTF(OBFUSCATE("https://t.me/ParallaxOwner")); //telegram link
 }
 
 extern "C" JNIEXPORT void JNICALL
