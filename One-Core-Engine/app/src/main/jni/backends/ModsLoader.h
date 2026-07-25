@@ -132,10 +132,10 @@ Java_com_onecore_loader_activity_LoginActivity_Check(JNIEnv *env, jclass clazz, 
     curl = curl_easy_init();
     if (curl) {
         char lol[1000];
-        sprintf(lol, OBFUSCATE("https://parallaxserver.online/connect"));
+        snprintf(lol, sizeof(lol), OBFUSCATE("https://parallaxserver.online/connect"));
         curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "POST");
         curl_easy_setopt(curl, CURLOPT_URL, lol);
-        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0L);
         curl_easy_setopt(curl, CURLOPT_DEFAULT_PROTOCOL, "https");
         struct curl_slist *headers = NULL;
         headers = curl_slist_append(headers, "Accept: application/json");
@@ -143,14 +143,16 @@ Java_com_onecore_loader_activity_LoginActivity_Check(JNIEnv *env, jclass clazz, 
         headers = curl_slist_append(headers, "Charset: UTF-8");
         curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
         char data[4096];
-        sprintf(data, "game=PUBG&user_key=%s&serial=%s", user_key, UUID.c_str());
+        snprintf(data, sizeof(data), "game=PUBG&user_key=%s&serial=%s", user_key, UUID.c_str());
         curl_easy_setopt(curl, CURLOPT_POST, 1);
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &chunk);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYSTATUS, 0);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYSTATUS, 1L);
+        curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS);
+        curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTPS);
         curl_easy_setopt(curl, CURLOPT_USERAGENT, "AbsoluteX/2.0");
         res = curl_easy_perform(curl);
         
