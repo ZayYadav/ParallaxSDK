@@ -29,6 +29,7 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Locale;
+import net.lingala.zip4j.model.FileHeader;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -37,7 +38,11 @@ public class DownloadZip {
     private final Context context;
     private final ExecutorService executor;
     private final Handler handler;
-    private String ZIP_FILE_NAME = "Saved.zip";
+    private static final String ZIP_FILE_NAME = "Saved.zip";
+    private static final String ALLOWED_DOWNLOAD_HOST = "parallaxserver.online";
+    private static final int CONNECT_TIMEOUT_MS = 45000;
+    private static final int READ_TIMEOUT_MS = 60000;
+    private static final long MAX_DOWNLOAD_BYTES = 150L * 1024L * 1024L;
     
     // Animation views
     private static LinearLayout downloadOverlay = null;
@@ -350,7 +355,7 @@ public class DownloadZip {
 
                     if (unzipEncrypted(zipPath, outputDir, password)) {
                         moveSoFiles(new File(outputDir, "loader"));
-                        new File(context.getFilesDir(), ZIP_FILE_NAME).delete();
+                        secureDelete(new File(context.getFilesDir(), ZIP_FILE_NAME));
                         
                         hideDownloadAnimation(true, "✓ Download Complete!\n✓ Files extracted successfully!");
                         
@@ -375,49 +380,94 @@ public class DownloadZip {
 
     private boolean downloadFile(String downloadUrl, DownloadCallback callback) {
         File outputZip = new File(context.getFilesDir(), ZIP_FILE_NAME);
-        try (InputStream input = new URL(downloadUrl).openStream();
-             OutputStream output = new FileOutputStream(outputZip)) {
+        HttpURLConnection connection = null;
 
-            HttpURLConnection connection = (HttpURLConnection) new URL(downloadUrl).openConnection();
-            connection.connect();
-            int lengthOfFile = connection.getContentLength();
-            
-            long totalBytes = lengthOfFile;
-            downloadedBytes = 0;
-
-            byte[] data = new byte[4096];
-            int count;
-            while ((count = input.read(data)) != -1) {
-                downloadedBytes += count;
-                int progress = (int) ((downloadedBytes * 100) / totalBytes);
-                
-                // Update progress
-                final int finalProgress = progress;
-                handler.post(() -> {
-                    if (downloadProgressBar != null && isDownloading) {
-                        updateDownloadProgress(finalProgress, "Downloading...", downloadedBytes, totalBytes);
-                    }
-                    if (callback != null) {
-                        callback.onProgress(finalProgress);
-                    }
-                });
-                
-                output.write(data, 0, count);
+        try {
+            URL url = new URL(downloadUrl);
+            if (!isTrustedDownloadUrl(url)) {
+                throw new SecurityException("Untrusted download URL");
             }
 
-            return outputZip.exists();
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            connection.setReadTimeout(READ_TIMEOUT_MS);
+            connection.setInstanceFollowRedirects(false);
+            connection.setUseCaches(false);
+            connection.setRequestProperty("Accept-Encoding", "identity");
+            connection.setRequestProperty("Connection", "close");
+            connection.connect();
+
+            int responseCode = connection.getResponseCode();
+            if (responseCode != HttpURLConnection.HTTP_OK) {
+                throw new SecurityException("Download failed with HTTP " + responseCode);
+            }
+
+            long totalBytes = connection.getContentLengthLong();
+            if (totalBytes <= 0 || totalBytes > MAX_DOWNLOAD_BYTES) {
+                throw new SecurityException("Unexpected download size");
+            }
+
+            downloadedBytes = 0;
+            try (InputStream input = connection.getInputStream();
+                 OutputStream output = new FileOutputStream(outputZip, false)) {
+                byte[] data = new byte[8192];
+                int count;
+                while ((count = input.read(data)) != -1) {
+                    downloadedBytes += count;
+                    if (downloadedBytes > MAX_DOWNLOAD_BYTES) {
+                        throw new SecurityException("Download exceeded maximum size");
+                    }
+
+                    int progress = (int) Math.min(100, (downloadedBytes * 100) / totalBytes);
+                    final int finalProgress = progress;
+                    handler.post(() -> {
+                        if (downloadProgressBar != null && isDownloading) {
+                            updateDownloadProgress(finalProgress, "Downloading...", downloadedBytes, totalBytes);
+                        }
+                        if (callback != null) {
+                            callback.onProgress(finalProgress);
+                        }
+                    });
+
+                    output.write(data, 0, count);
+                }
+            }
+
+            return outputZip.exists() && outputZip.length() == downloadedBytes;
 
         } catch (Exception e) {
             e.printStackTrace();
+            secureDelete(outputZip);
             return false;
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
         }
+    }
+
+    private boolean isTrustedDownloadUrl(URL url) {
+        String host = url.getHost();
+        return "https".equalsIgnoreCase(url.getProtocol())
+                && ALLOWED_DOWNLOAD_HOST.equalsIgnoreCase(host)
+                && url.getPath() != null
+                && url.getPath().startsWith("/Parallaxlibs/")
+                && url.getQuery() != null
+                && !url.getQuery().contains("..");
     }
 
     private boolean unzipEncrypted(String zipPath, String outputDir, String password) {
         try {
+            File destination = new File(outputDir).getCanonicalFile();
             ZipFile zipFile = new ZipFile(zipPath, password.toCharArray());
-            zipFile.extractAll(outputDir);
-            setPermissions(new File(outputDir));
+            for (FileHeader header : zipFile.getFileHeaders()) {
+                File target = new File(destination, header.getFileName()).getCanonicalFile();
+                if (!target.getPath().startsWith(destination.getPath() + File.separator)) {
+                    throw new SecurityException("Blocked unsafe ZIP entry");
+                }
+            }
+            zipFile.extractAll(destination.getPath());
+            setPrivatePermissions(destination);
             return true;
         } catch (Exception e) {
             e.printStackTrace();
@@ -443,21 +493,27 @@ public class DownloadZip {
         }
     }
 
-    private void setPermissions(File fileOrDir) {
+    private void setPrivatePermissions(File fileOrDir) {
         if (fileOrDir.isDirectory()) {
             File[] files = fileOrDir.listFiles();
             if (files != null) {
                 for (File file : files) {
-                    setPermissions(file);
+                    setPrivatePermissions(file);
                 }
             }
         }
         try {
-            fileOrDir.setExecutable(true, false);
-            fileOrDir.setReadable(true, false);
-            fileOrDir.setWritable(true, false);
+            fileOrDir.setExecutable(fileOrDir.isDirectory() || fileOrDir.getName().endsWith(".so"), true);
+            fileOrDir.setReadable(true, true);
+            fileOrDir.setWritable(true, true);
         } catch (Exception e) {
             e.printStackTrace();
+        }
+    }
+
+    private void secureDelete(File file) {
+        if (file != null && file.exists() && !file.delete()) {
+            file.deleteOnExit();
         }
     }
 }

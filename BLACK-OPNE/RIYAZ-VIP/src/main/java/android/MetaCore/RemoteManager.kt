@@ -49,6 +49,8 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
         private const val CT = 45000
         private const val RT = 60000
         private const val MAX_RETRIES = 3
+        private const val TRUSTED_API_HOST = "parallaxserver.online"
+        private const val TRUSTED_API_PATH = "/SDK/connect.php"
         private val exe: ExecutorService = Executors.newSingleThreadExecutor()
 
         @Volatile
@@ -75,7 +77,17 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
     }
 
     private fun iv(u: String?): Boolean {
-        return u != null && u.startsWith("https://") && !u.contains(" ") && !u.contains("\"")
+        return try {
+            val parsed = URL(u ?: return false)
+            parsed.protocol.equals("https", true) &&
+                    parsed.host.equals(TRUSTED_API_HOST, true) &&
+                    parsed.path == TRUSTED_API_PATH &&
+                    parsed.query.isNullOrEmpty() &&
+                    !u.contains(" ") &&
+                    !u.contains("\"")
+        } catch (e: Exception) {
+            false
+        }
     }
 
     override fun activateSdk(userkey: String?) {
