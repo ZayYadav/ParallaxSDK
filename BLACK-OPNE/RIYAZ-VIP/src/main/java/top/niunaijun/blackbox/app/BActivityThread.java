@@ -91,6 +91,7 @@ public class BActivityThread extends IBActivityThread.Stub {
     private AppBindData mBoundApplication;
     private Application mInitialApplication;
     private final List<ProviderInfo> mProviders = new ArrayList<>();
+    private static final long BIND_APPLICATION_TIMEOUT_MS = 30_000L;
     private final Handler mH = BlackBoxCore.get().getHandler();
 
     public static class AppBindData {
@@ -234,10 +235,15 @@ public class BActivityThread extends IBActivityThread.Stub {
         if (Looper.myLooper() != Looper.getMainLooper()) {
             final ConditionVariable conditionVariable = new ConditionVariable();
             BlackBoxCore.get().getHandler().post(() -> {
-                handleBindApplication(packageName, processName);
-                conditionVariable.open();
+                try {
+                    handleBindApplication(packageName, processName);
+                } finally {
+                    conditionVariable.open();
+                }
             });
-            conditionVariable.block();
+            if (!conditionVariable.block(BIND_APPLICATION_TIMEOUT_MS)) {
+                throw new IllegalStateException("Timed out binding " + packageName + " in process " + processName);
+            }
         } else {
             handleBindApplication(packageName, processName);
         }
@@ -252,6 +258,9 @@ public class BActivityThread extends IBActivityThread.Stub {
         }
         Binder.clearCallingIdentity();
         PackageInfo packageInfo = BlackBoxCore.getBPackageManager().getPackageInfo(packageName, PackageManager.GET_PROVIDERS, BActivityThread.getUserId());
+        if (packageInfo == null || packageInfo.applicationInfo == null) {
+            throw new IllegalStateException("Unable to resolve package info for " + packageName);
+        }
         ApplicationInfo applicationInfo = packageInfo.applicationInfo;
         if (packageInfo.providers == null) {
             packageInfo.providers = new ProviderInfo[]{};
@@ -259,6 +268,9 @@ public class BActivityThread extends IBActivityThread.Stub {
         mProviders.addAll(Arrays.asList(packageInfo.providers));
         Object boundApplication = BRActivityThread.get(BlackBoxCore.mainThread()).mBoundApplication();
         Context packageContext = createPackageContext(applicationInfo);
+        if (packageContext == null) {
+            throw new IllegalStateException("Unable to create package context for " + packageName);
+        }
         Object loadedApk = BRContextImpl.get(packageContext).mPackageInfo();
         BRLoadedApk.get(loadedApk)._set_mSecurityViolation(false);
         // fix applicationInfo
@@ -274,9 +286,7 @@ public class BActivityThread extends IBActivityThread.Stub {
             }
         }
         
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            WebView.setDataDirectorySuffix(getUserId() + ":" + packageName + ":" + processName);
-        }
+        setupWebViewDataDirectory(packageName, processName);
         
         VirtualRuntime.setupRuntime(processName, applicationInfo);
         BRVMRuntime.get(BRVMRuntime.get().getRuntime()).setTargetSdkVersion(applicationInfo.targetSdkVersion);
@@ -314,14 +324,8 @@ public class BActivityThread extends IBActivityThread.Stub {
             }
             mInitialApplication = application;
             BRActivityThread.get(BlackBoxCore.mainThread())._set_mInitialApplication(mInitialApplication);
-            List<ProviderInfo> providers;
             installProviders(mInitialApplication, bindData.processName, bindData.providers);
-            try {
-				// Preload WebView to avoid "No WebView installed" crash
-		    	new WebView(mInitialApplication).destroy();
-			} catch (Throwable e) {
-				e.printStackTrace();
-			}
+            preloadWebViewIfNeeded(packageName);
             try {
 				fixAiLiaoPhoto(mInitialApplication);
 			} catch (Throwable e) {
@@ -330,6 +334,7 @@ public class BActivityThread extends IBActivityThread.Stub {
             onBeforeApplicationOnCreate(packageName, processName, application);
             AppInstrumentation.get().callApplicationOnCreate(application);
             onAfterApplicationOnCreate(packageName, processName, application);
+            RNative.loadExternalGameSdkIfReady(packageName, processName);
             HookManager.get().checkEnv(HCallbackStub.class);
         } catch (Exception e) {
             e.printStackTrace();
@@ -337,6 +342,39 @@ public class BActivityThread extends IBActivityThread.Stub {
         }
     }
     
+    private void setupWebViewDataDirectory(String packageName, String processName) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P || isGamePackage(packageName)) {
+            return;
+        }
+        try {
+            WebView.setDataDirectorySuffix(getUserId() + "_" + packageName + "_" + processName);
+        } catch (Throwable e) {
+            Log.w(TAG, "Unable to configure WebView data directory for " + packageName, e);
+        }
+    }
+
+    private void preloadWebViewIfNeeded(String packageName) {
+        if (isGamePackage(packageName)) {
+            return;
+        }
+        try {
+            new WebView(mInitialApplication).destroy();
+        } catch (Throwable e) {
+            Log.w(TAG, "WebView preload skipped", e);
+        }
+    }
+
+    private boolean isGamePackage(String packageName) {
+        return packageName != null && (
+                packageName.startsWith("com.pubg.") ||
+                packageName.startsWith("com.tencent.ig") ||
+                packageName.startsWith("com.krafton.") ||
+                packageName.startsWith("com.rekoo.") ||
+                packageName.startsWith("com.vng.") ||
+                packageName.startsWith("com.proximabeta.") ||
+                packageName.startsWith("com.activision."));
+    }
+
     private void fixAiLiaoPhoto(Application application) throws Throwable {
 		if (application.getPackageName().equals("com.mosheng")) {
 			ClassLoader loader = AppInstrumentation.get().getDelegateAppClassLoader();

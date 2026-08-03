@@ -1,5 +1,7 @@
 package top.niunaijun.blackbox.core;
 
+import android.util.Log;
+
 import top.niunaijun.blackbox.BlackBoxCore;
 
 /**
@@ -11,7 +13,8 @@ import top.niunaijun.blackbox.BlackBoxCore;
  * 此处无Bug
  */
 public class CrashHandler implements Thread.UncaughtExceptionHandler {
-    private Thread.UncaughtExceptionHandler mDefaultHandler;
+    private static final String TAG = "CrashHandler";
+    private final Thread.UncaughtExceptionHandler mDefaultHandler;
 
     public static void create() {
         new CrashHandler();
@@ -24,9 +27,19 @@ public class CrashHandler implements Thread.UncaughtExceptionHandler {
 
     @Override
     public void uncaughtException(Thread t, Throwable e) {
-        if (BlackBoxCore.get().getExceptionHandler() != null) {
-            BlackBoxCore.get().getExceptionHandler().uncaughtException(t, e);
+        try {
+            if (BlackBoxCore.get().getExceptionHandler() != null) {
+                BlackBoxCore.get().getExceptionHandler().uncaughtException(t, e);
+            }
+        } catch (Throwable handlerError) {
+            Log.e(TAG, "App exception handler failed", handlerError);
         }
-        mDefaultHandler.uncaughtException(t, e);
+
+        if (mDefaultHandler != null && mDefaultHandler != this) {
+            mDefaultHandler.uncaughtException(t, e);
+            return;
+        }
+
+        Log.e(TAG, "Uncaught exception in virtual process", e);
     }
 }
