@@ -65,27 +65,15 @@ android {
         }
     
     }
-    /*
     splits {
         abi {
             enable true
             reset()
             include 'armeabi-v7a', 'arm64-v8a'
-            universalApk false
+            // Smaller phone-specific APKs plus a universal compatibility APK.
+            universalApk true
         }
     }
-    
-    applicationVariants.all { variant ->
-        variant.outputs.each { output ->
-            def abiName = output.getFilter("ABI")
-            def apkName = "Mods-Loader"
-            if (abiName == "arm64-v8a") {
-                output.outputFileName = "${apkName}-64bit.apk"
-            } else if (abiName == "armeabi-v7a") {
-                output.outputFileName = "${apkName}-32bit.apk"
-            }
-        }
-    }*/
     
     buildTypes {
         debug {

@@ -27,9 +27,6 @@ import android.graphics.Shader;
 import android.graphics.SweepGradient;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
-import android.net.ConnectivityManager;
-import android.net.NetworkCapabilities;
-import android.net.NetworkInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -60,8 +57,8 @@ import android.view.ViewGroup;
 import com.onecore.loader.R;
 import com.onecore.loader.utils.CrashHandler;
 import com.onecore.loader.utils.FLog;
-import com.onecore.loader.security.AppIntegrity;
 import com.onecore.loader.security.SecurePreferences;
+import com.onecore.loader.security.SecurityThreatDetector;
 import com.Jagdish.tastytoast.TastyToast;
 
 public class LoginActivity extends AppCompatActivity {
@@ -647,15 +644,16 @@ public class LoginActivity extends AppCompatActivity {
         }
     }
 
-    private boolean isVpnActive() {
-        ConnectivityManager cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
-        if (Build.VERSION.SDK_INT >= 23) {
-            NetworkCapabilities nc = cm.getNetworkCapabilities(cm.getActiveNetwork());
-            return nc != null && nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN);
-        } else {
-            NetworkInfo info = cm.getActiveNetworkInfo();
-            return info != null && info.getType() == ConnectivityManager.TYPE_VPN;
-        }
+    private void showSecurityWarning(SecurityThreatDetector.Threat threat) {
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.security_warning_title)
+                .setMessage(threat.messageResource())
+                .setCancelable(false)
+                .setPositiveButton(R.string.close_app, (dialog, which) -> {
+                    dialog.dismiss();
+                    finishAffinity();
+                })
+                .show();
     }
 
     @Override
@@ -663,6 +661,12 @@ public class LoginActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         setContentView(R.layout.activity_login);
+
+        SecurityThreatDetector.Threat threat = SecurityThreatDetector.detect(this);
+        if (threat != SecurityThreatDetector.Threat.NONE) {
+            showSecurityWarning(threat);
+            return;
+        }
 
         this.logo = findViewById(R.id.logoAnimator);
         this.particlesContainer = findViewById(R.id.particles_container);
@@ -677,13 +681,6 @@ public class LoginActivity extends AppCompatActivity {
         InitView();
         hideSystemUI();
 
-        if (!AppIntegrity.isSignatureValid(this)) {
-            TastyToast.makeText(this, "✗ Invalid Signature! ✗", TastyToast.LENGTH_LONG, TastyToast.ERROR);
-            finish();
-        } else if (isVpnActive()) {
-            TastyToast.makeText(this, "⚠ VPN Detected! Please disable VPN ⚠", TastyToast.LENGTH_LONG, TastyToast.WARNING);
-            finish();
-        }
     }
     
     private void hideSystemUI() {

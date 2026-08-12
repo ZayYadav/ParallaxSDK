@@ -50,6 +50,10 @@ The CI workflow performs both stages automatically.
 - Tapjacking protection rejects obscured touches on the license input, while
   WorkManager and notification registrations are delegated to their current
   AndroidX manifests for modern Android compatibility.
+- Signature or VPN policy failures now stop at a non-cancelable warning in both
+  the splash entry point and direct login flow.
+- APK builds produce smaller ARM32 and ARM64 packages alongside a universal ARM
+  compatibility APK. Install the matching ABI package when download size matters.
 
 These controls are defense in depth; no client-side Android application can be
 made impossible to inspect or modify. Server-side authorization should remain
