@@ -13,6 +13,7 @@ import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
@@ -31,6 +32,8 @@ public final class HostedLicenseClient {
     private static final String TRANSFORMATION = "AES/GCM/NoPadding";
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
     private static final SecureRandom RANDOM = new SecureRandom();
+    private static final Pattern ACTIVATION_KEY_PATTERN = Pattern.compile(
+            "^OC-(?:[A-F0-9]{4}-){7}[A-F0-9]{4}$");
     private static final String LICENSE_TOKEN = "HOSTED_LICENSE_TOKEN";
     public static final String LICENSE_EXPIRES_AT = "HOSTED_LICENSE_EXPIRES_AT";
 
@@ -57,7 +60,10 @@ public final class HostedLicenseClient {
             if (!integrity.isValid()) {
                 return "Application signature verification failed";
             }
-            String normalizedKey = activationKey.trim().toUpperCase(Locale.US);
+            String normalizedKey = normalizeActivationKey(activationKey);
+            if (!isSupportedActivationKey(normalizedKey)) {
+                return "Use an OC- activation key created in OneCore Integrity";
+            }
             long timestamp = System.currentTimeMillis() / 1000L;
             String nonce = randomNonce();
             String deviceId = DeviceIdentity.deviceId();
@@ -140,7 +146,15 @@ public final class HostedLicenseClient {
             if (body.isEmpty()) {
                 throw new IllegalStateException("Licensing server returned an empty response");
             }
-            JSONObject decrypted = decrypt(new JSONObject(body));
+            JSONObject envelope = new JSONObject(body);
+            if (!envelope.has("iv") || !envelope.has("tag") || !envelope.has("ciphertext")) {
+                String bootstrapError = envelope.optString("error", "").trim();
+                if (!bootstrapError.isEmpty()) {
+                    throw new IllegalStateException("Licensing server error: " + bootstrapError);
+                }
+                throw new IllegalStateException("Licensing server returned an unsupported response");
+            }
+            JSONObject decrypted = decrypt(envelope);
             if (!response.isSuccessful() && !decrypted.has("message")) {
                 throw new IllegalStateException("Licensing server rejected the request");
             }
@@ -207,6 +221,16 @@ public final class HostedLicenseClient {
                 Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
     }
 
+    public static String normalizeActivationKey(String activationKey) {
+        return activationKey == null
+                ? ""
+                : activationKey.trim().toUpperCase(Locale.US);
+    }
+
+    public static boolean isSupportedActivationKey(String activationKey) {
+        return ACTIVATION_KEY_PATTERN.matcher(normalizeActivationKey(activationKey)).matches();
+    }
+
     private static String proofMessage(
             String purpose,
             String deviceId,
@@ -238,8 +262,18 @@ public final class HostedLicenseClient {
 
     private static String userFacingError(Exception exception) {
         String message = exception.getMessage();
-        if (message != null && message.toLowerCase(Locale.US).contains("configured")) {
+        String normalized = message == null ? "" : message.toLowerCase(Locale.US);
+        if (normalized.contains("configured")
+                || normalized.contains("server error")
+                || normalized.contains("unsupported response")) {
             return message;
+        }
+        if (normalized.contains("timeout") || normalized.contains("timed out")) {
+            return "Licensing server timed out. Please try again";
+        }
+        if (normalized.contains("unable to resolve host")
+                || normalized.contains("failed to connect")) {
+            return "Unable to reach the licensing server";
         }
         return "Secure license verification is temporarily unavailable";
     }

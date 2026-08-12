@@ -113,6 +113,28 @@ jobs:
       - name: Prepare build log folder
         run: mkdir -p "${BUILD_LOG_DIR}"
 
+      - name: Validate loader licensing configuration
+        shell: python
+        run: |
+          import base64
+          import os
+          from urllib.parse import urlparse
+
+          base_url = os.environ.get("ONECORE_API_BASE_URL", "").strip()
+          parsed = urlparse(base_url)
+          if parsed.scheme != "https" or not parsed.netloc or parsed.query or parsed.fragment:
+              raise SystemExit("ONECORE_API_BASE_URL must be an absolute HTTPS URL")
+
+          encoded_key = os.environ.get("ONECORE_API_ENCRYPTION_KEY", "").strip()
+          try:
+              decoded_key = base64.b64decode(encoded_key, validate=True)
+          except Exception as exc:
+              raise SystemExit("ONECORE_API_ENCRYPTION_KEY is not valid base64") from exc
+          if len(decoded_key) != 32:
+              raise SystemExit("ONECORE_API_ENCRYPTION_KEY must decode to exactly 32 bytes")
+
+          print("Loader licensing configuration is valid")
+
       - name: Build SDK release AAR
         working-directory: ${{ env.SDK_PROJECT_DIR }}
         run: |
