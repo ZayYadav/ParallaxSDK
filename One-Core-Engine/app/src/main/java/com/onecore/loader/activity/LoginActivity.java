@@ -183,7 +183,7 @@ public class LoginActivity extends AppCompatActivity {
 
     static {
         try {
-            System.loadLibrary("MCoreEsp");
+            System.loadLibrary("ParallaxLoader");
         } catch (UnsatisfiedLinkError e) {
             FLog.error("Native library not loaded: " + e.getMessage());
         }

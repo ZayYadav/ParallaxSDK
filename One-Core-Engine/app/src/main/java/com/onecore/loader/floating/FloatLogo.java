@@ -44,7 +44,7 @@ public class FloatLogo extends Service {
 
     static {
         try {
-            System.loadLibrary("MCoreEsp");
+            System.loadLibrary("ParallaxLoader");
         } catch(UnsatisfiedLinkError w) {
             FLog.error(w.getMessage());
         }

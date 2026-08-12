@@ -23,7 +23,7 @@ public class Overlay extends Service {
 
     static {
         try {
-            System.loadLibrary("client");
+            System.loadLibrary("ParallaxLoader");
         } catch(UnsatisfiedLinkError w) {
             FLog.error(w.getMessage());
         }

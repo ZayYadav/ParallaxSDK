@@ -19,9 +19,9 @@ import org.lsposed.lsparanoid.Obfuscate;
 @Obfuscate
 public class BEnvironment {
    
-  //  private static final File sExternalVirtualRoot = BlackBoxCore.getContext().getExternalFilesDir("RIYAZcore");
+  //  private static final File sExternalVirtualRoot = BlackBoxCore.getContext().getExternalFilesDir("ParallaxCore");
     private static final File sVBoxRoot = BlackBoxCore.getContext().getFilesDir();
-  //  private static final File sVBoxRoot = new File(BlackBoxCore.getContext().getCacheDir().getParent(), "RIYAZcore");
+  //  private static final File sVBoxRoot = new File(BlackBoxCore.getContext().getCacheDir().getParent(), "ParallaxCore");
     private static final File sExternalVBoxRoot = Environment.getExternalStorageDirectory();
     
 	public static void load() {

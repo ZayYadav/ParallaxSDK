@@ -35,7 +35,7 @@ public class FloatAim extends Service {
 
 	static {
         try {
-            System.loadLibrary("MCoreEsp");
+            System.loadLibrary("ParallaxLoader");
         } catch(UnsatisfiedLinkError w) {
             FLog.error(w.getMessage());
         }
@@ -144,4 +144,3 @@ public class FloatAim extends Service {
 			windowManager.removeView(mainView);
 	}
 }
-

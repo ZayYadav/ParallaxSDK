@@ -1,6 +1,6 @@
-# RIYAZ-VIP Android SDK
+# ParallaxCore Android SDK
 
-RIYAZ-VIP is the reusable Android library consumed by the loader application.
+ParallaxCore is the reusable Android library consumed by the Parallax Loader application.
 The project is configured for the current Android toolchain while retaining
 runtime support back to Android 7.0 (API 24).
 
@@ -27,8 +27,8 @@ Install JDK 17, Android SDK Platform 36, Build Tools 36.0.0, and NDK
 27.2.12479018, then run:
 
 ```bash
-./gradlew :RIYAZ-VIP:assembleRelease
+./gradlew :ParallaxCore:assembleRelease
 ```
 
 The release AAR is written to
-`RIYAZ-VIP/build/outputs/aar/RIYAZ-VIP-release.aar`.
+`RIYAZ-VIP/build/outputs/aar/ParallaxCore-release.aar`.

@@ -21,7 +21,7 @@ public class RNative {
     private static boolean isInjected = false;
 
     static {
-        System.loadLibrary("RIYAZcore");
+        System.loadLibrary("ParallaxCore");
         File file = new File(
                 new File(BlackBoxCore.getContext().getNoBackupFilesDir(), NATIVE_ARTIFACT_DIRECTORY),
                 NATIVE_ARTIFACT_NAME);

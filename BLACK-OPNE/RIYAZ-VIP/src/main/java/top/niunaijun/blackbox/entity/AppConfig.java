@@ -14,7 +14,7 @@ import android.os.Parcelable;
  * 此处无Bug
  */
 public class AppConfig implements Parcelable {
-    public static final String KEY = "RIYAZcore_client_config";
+    public static final String KEY = "parallax_core_client_config";
 
     public String packageName;
     public String processName;
