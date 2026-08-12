@@ -1,11 +1,11 @@
 LOCAL_PATH := $(call my-dir)
 MAIN_LOCAL_PATH := $(LOCAL_PATH)
 
-# ========== Main Shared Library (blackbox) ==========
+# ========== ParallaxCore shared library ==========
 include $(CLEAR_VARS)
 
 # --- Module Name ---
-LOCAL_MODULE := RIYAZcore
+LOCAL_MODULE := ParallaxCore
 
 # -------- C FLAGS (SAFE) --------
 LOCAL_CFLAGS := \
@@ -52,21 +52,21 @@ LOCAL_C_INCLUDES += $(LOCAL_PATH)/KittyMemory   # <-- ADDED
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/libzip
 
 # --- Source Files ---
-RIYAZBBOX_SRC := $(wildcard $(LOCAL_PATH)/*.cpp)
-RIYAZBBOX_SRC += $(wildcard $(LOCAL_PATH)/Hook/*.cpp)
-RIYAZBBOX_SRC += $(wildcard $(LOCAL_PATH)/IO/*.cpp)
-RIYAZBBOX_SRC += $(wildcard $(LOCAL_PATH)/JniHook/*.cpp)
-RIYAZBBOX_SRC += $(wildcard $(LOCAL_PATH)/SandHook/*.cpp)
-RIYAZBBOX_SRC += $(wildcard $(LOCAL_PATH)/KittyMemory/*.cpp)   # <-- ADDED
+PARALLAX_CORE_SRC := $(wildcard $(LOCAL_PATH)/*.cpp)
+PARALLAX_CORE_SRC += $(wildcard $(LOCAL_PATH)/Hook/*.cpp)
+PARALLAX_CORE_SRC += $(wildcard $(LOCAL_PATH)/IO/*.cpp)
+PARALLAX_CORE_SRC += $(wildcard $(LOCAL_PATH)/JniHook/*.cpp)
+PARALLAX_CORE_SRC += $(wildcard $(LOCAL_PATH)/SandHook/*.cpp)
+PARALLAX_CORE_SRC += $(wildcard $(LOCAL_PATH)/KittyMemory/*.cpp)   # <-- ADDED
 
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/Riyaz
 
 # C Files (xdl - SandHook/xdl)
-RIYAZBBOX_SRC += $(wildcard $(LOCAL_PATH)/SandHook/xdl/*.c)
+PARALLAX_CORE_SRC += $(wildcard $(LOCAL_PATH)/SandHook/xdl/*.c)
 # C Files (libzip - SandHook/libzip)
-RIYAZBBOX_SRC += $(wildcard $(LOCAL_PATH)/SandHook/libzip/*.c)
+PARALLAX_CORE_SRC += $(wildcard $(LOCAL_PATH)/SandHook/libzip/*.c)
 
-LOCAL_SRC_FILES := $(RIYAZBBOX_SRC:$(LOCAL_PATH)/%=%)
+LOCAL_SRC_FILES := $(PARALLAX_CORE_SRC:$(LOCAL_PATH)/%=%)
 
 #LOCAL_STATIC_LIBRARIES := libdobby
 

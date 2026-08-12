@@ -53,7 +53,8 @@
                     android:layout_height="88dp"
                     android:layout_gravity="center"
                     android:contentDescription="Parallax logo"
-                    android:src="@drawable/ic_launcher" />
+                    android:scaleType="centerCrop"
+                    android:src="@drawable/parallax_labs_brand" />
             </FrameLayout>
 
             <LinearLayout

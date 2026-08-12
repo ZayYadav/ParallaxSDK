@@ -66,9 +66,10 @@ jobs:
 
     env:
       SDK_PROJECT_DIR: BLACK-OPNE
-      SDK_MODULE: RIYAZ-VIP
+      SDK_MODULE: ParallaxCore
+      SDK_MODULE_DIR: RIYAZ-VIP
       LOADER_PROJECT_DIR: One-Core-Engine
-      LOADER_AAR_PATH: One-Core-Engine/app/libs/Bcore-release.aar
+      LOADER_AAR_PATH: One-Core-Engine/app/libs/ParallaxCore-release.aar
       NDK_VERSION: 27.2.12479018
       BUILD_LOG_DIR: build-logs
       ONECORE_API_BASE_URL: https://onintigirty.parallaxserver.online
@@ -117,10 +118,10 @@ jobs:
           set -o pipefail
           ./gradlew :${{ env.SDK_MODULE }}:assembleRelease --stacktrace 2>&1 | tee "../${BUILD_LOG_DIR}/sdk-release-aar.log"
 
-      - name: Replace loader Bcore AAR with freshly built SDK AAR
+      - name: Replace loader ParallaxCore AAR with freshly built SDK AAR
         run: |
           set -euo pipefail
-          SDK_AAR="${SDK_PROJECT_DIR}/${SDK_MODULE}/build/outputs/aar/${SDK_MODULE}-release.aar"
+          SDK_AAR="${SDK_PROJECT_DIR}/${SDK_MODULE_DIR}/build/outputs/aar/${SDK_MODULE}-release.aar"
           test -f "$SDK_AAR"
           mkdir -p "$(dirname "${LOADER_AAR_PATH}")"
           rm -f "${LOADER_AAR_PATH}"
@@ -171,7 +172,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sdk-release-aar
-          path: ${{ env.SDK_PROJECT_DIR }}/${{ env.SDK_MODULE }}/build/outputs/aar/*-release.aar
+          path: ${{ env.SDK_PROJECT_DIR }}/${{ env.SDK_MODULE_DIR }}/build/outputs/aar/*-release.aar
           if-no-files-found: error
 
       - name: Upload loader release APK

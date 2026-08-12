@@ -63,7 +63,7 @@ DWORD NewBase = 0;
 
 DWORD libanogsEnd = 0;//
 
-__int64 RIYAZ()
+__int64 ParallaxCoreReturnZero()
 {
   return 0LL;
 }
@@ -78,9 +78,9 @@ void *anogs_thread(void *){
     while (!isLibraryLoaded(oxorany("libanogs.so"))){
         sleep(1);
     }
-    LOGI("RIYAZ CORE 4.5 BGMI BYPASS LIBRAY");
+    LOGI("ParallaxCore runtime initialized");
     
-HOOK_LIB_NO_ORIG("libanogs.so", "0x51FA80",RIYAZ); //get time of day by RIYAZ
+HOOK_LIB_NO_ORIG("libanogs.so", "0x51FA80", ParallaxCoreReturnZero);
 
 return NULL;
 }

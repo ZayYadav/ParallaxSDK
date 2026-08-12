@@ -1,3 +1,4 @@
-include ':RIYAZ-VIP'
+include ':ParallaxCore'
+project(':ParallaxCore').projectDir = file('RIYAZ-VIP')
 
-rootProject.name = "RIYAZ BBOX"
+rootProject.name = "Parallax SDK"

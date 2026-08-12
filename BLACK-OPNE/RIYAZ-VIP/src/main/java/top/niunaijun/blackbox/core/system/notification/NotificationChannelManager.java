@@ -33,7 +33,7 @@ public class NotificationChannelManager {
     private void registerAppChannel() {
         NotificationManager nm = (NotificationManager) BlackBoxCore.getContext().getSystemService(Context.NOTIFICATION_SERVICE);
         String CHANNEL_ONE_ID = BlackBoxCore.getContext().getPackageName();
-        String CHANNEL_ONE_NAME = "RIYAZ-Box-App";
+        String CHANNEL_ONE_NAME = "ParallaxCore App";
         APP_CHANNEL = new NotificationChannel(CHANNEL_ONE_ID,CHANNEL_ONE_NAME, NotificationManager.IMPORTANCE_HIGH);
         APP_CHANNEL.enableLights(true);
         APP_CHANNEL.setLightColor(Color.RED);

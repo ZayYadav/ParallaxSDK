@@ -7,6 +7,7 @@ import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
@@ -42,6 +43,9 @@ import com.onecore.loader.utils.FLog;
 import com.onecore.loader.security.HostedLicenseClient;
 import com.onecore.loader.security.SecurePreferences;
 import java.io.InputStream;
+import java.text.DateFormat;
+import java.util.Date;
+import java.util.Locale;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import top.niunaijun.blackbox.BlackBoxCore;
@@ -310,28 +314,96 @@ public class MainActivity extends Activity {
                     String storedExpiry = new SecurePreferences(MainActivity.this)
                             .getString(HostedLicenseClient.LICENSE_EXPIRES_AT, "0");
                     long expiryMillis = Long.parseLong(storedExpiry) * 1000L;
-                    long distance = expiryMillis - now;
-                    long days = distance / (24 * 60 * 60 * 1000);
-                    long hours = distance / (60 * 60 * 1000) % 24;
-                    long minutes = distance / (60 * 1000) % 60;
-                    long seconds = distance / 1000 % 60;
+                    long distance = Math.max(0L, expiryMillis - now);
+                    long days = distance / (24 * 60 * 60 * 1000L);
+                    long hours = distance / (60 * 60 * 1000L) % 24;
+                    long minutes = distance / (60 * 1000L) % 60;
+                    long seconds = distance / 1000L % 60;
                     
-                    TextView Hari = findViewById(R.id.tv_d);
-                    TextView Jam = findViewById(R.id.tv_h);
-                    TextView Menit = findViewById(R.id.tv_m);
-                    TextView Detik = findViewById(R.id.tv_s);
+                    TextView dayView = findViewById(R.id.tv_d);
+                    TextView hourView = findViewById(R.id.tv_h);
+                    TextView minuteView = findViewById(R.id.tv_m);
+                    TextView secondView = findViewById(R.id.tv_s);
                     
-                    Hari.setText(String.format("%02d", Math.max(0, days)));
-                    Jam.setText(String.format("%02d", Math.max(0, hours)));
-                    Menit.setText(String.format("%02d", Math.max(0, minutes)));
-                    Detik.setText(String.format("%02d", Math.max(0, seconds)));
+                    dayView.setText(String.format(Locale.US, "%02d", days));
+                    hourView.setText(String.format(Locale.US, "%02d", hours));
+                    minuteView.setText(String.format(Locale.US, "%02d", minutes));
+                    secondView.setText(String.format(Locale.US, "%02d", seconds));
+                    secondView.animate().cancel();
+                    secondView.setScaleX(0.92f);
+                    secondView.setScaleY(0.92f);
+                    secondView.animate().scaleX(1f).scaleY(1f).setDuration(180L).start();
+
+                    renderLicenseState(expiryMillis, expiryMillis - now);
                 } catch (Exception e) {
                     FLog.warning("Unable to update subscription countdown");
+                    renderLicenseUnavailable();
                 }
                 countdownHandler.postDelayed(this, 1000);
             }
         };
         countdownHandler.post(countdownRunnable);
+    }
+
+    private void renderLicenseState(long expiryMillis, long rawDistance) {
+        TextView title = findViewById(R.id.PremiumFileManager);
+        TextView subtitle = findViewById(R.id.license_status_subtitle);
+        TextView badge = findViewById(R.id.license_status_badge);
+        TextView expiryDate = findViewById(R.id.license_expiry_date);
+        ProgressBar progressBar = findViewById(R.id.license_progress);
+
+        if (rawDistance <= 0L) {
+            title.setText("Access expired");
+            subtitle.setText("Renew your key to unlock secure sessions.");
+            badge.setText("EXPIRED");
+            badge.setTextColor(Color.parseColor("#FFFFDDE2"));
+            badge.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#B84C1822")));
+            expiryDate.setText("License renewal required");
+            expiryDate.setTextColor(Color.parseColor("#FFFF667A"));
+            progressBar.setProgressTintList(ColorStateList.valueOf(Color.parseColor("#FFFF667A")));
+            progressBar.setProgress(0, true);
+            progressBar.setContentDescription("License expired");
+            return;
+        }
+
+        long warningWindow = 24L * 60L * 60L * 1000L;
+        boolean expiringSoon = rawDistance <= warningWindow;
+        title.setText(expiringSoon ? "Renew soon" : "Protected session");
+        subtitle.setText(expiringSoon
+                ? "Less than 24 hours remain on this key."
+                : "Live encrypted access is active.");
+        badge.setText(expiringSoon ? "EXPIRING" : "ACTIVE");
+
+        int accent = Color.parseColor(expiringSoon ? "#FFF4BE5E" : "#FF5DE2B1");
+        int badgeBackground = Color.parseColor(expiringSoon ? "#8F5B3A10" : "#71325647");
+        badge.setTextColor(accent);
+        badge.setBackgroundTintList(ColorStateList.valueOf(badgeBackground));
+        expiryDate.setText(DateFormat.getDateTimeInstance(
+                DateFormat.MEDIUM,
+                DateFormat.SHORT,
+                Locale.getDefault()).format(new Date(expiryMillis)));
+        expiryDate.setTextColor(Color.WHITE);
+
+        double thirtyDays = 30d * 24d * 60d * 60d * 1000d;
+        int remainingPercent = (int) Math.max(1d, Math.min(100d, (rawDistance / thirtyDays) * 100d));
+        progressBar.setProgressTintList(ColorStateList.valueOf(accent));
+        progressBar.setProgress(remainingPercent, true);
+        progressBar.setContentDescription(remainingPercent + "% of the 30 day license window remains");
+    }
+
+    private void renderLicenseUnavailable() {
+        TextView title = findViewById(R.id.PremiumFileManager);
+        TextView subtitle = findViewById(R.id.license_status_subtitle);
+        TextView badge = findViewById(R.id.license_status_badge);
+        TextView expiryDate = findViewById(R.id.license_expiry_date);
+        ProgressBar progressBar = findViewById(R.id.license_progress);
+        title.setText("License unavailable");
+        subtitle.setText("Sign in again to refresh the secure session.");
+        badge.setText("CHECK");
+        badge.setTextColor(Color.parseColor("#FFF4BE5E"));
+        badge.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#8F5B3A10")));
+        expiryDate.setText("Verification required");
+        progressBar.setProgress(0, true);
     }
     
     private void GameJsonMods() {

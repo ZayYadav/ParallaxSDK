@@ -24,6 +24,8 @@
     <color name="premium_gold">#FFF0C96A</color>
     <color name="premium_gold_dark">#FFB9862E</color>
     <color name="premium_success">#FF5DE2B1</color>
+    <color name="premium_warning">#FFF4BE5E</color>
+    <color name="premium_error">#FFFF667A</color>
     <color name="premium_text_secondary">#FFAFB8C8</color>
     <color name="premium_text_muted">#FF748094</color>
     <color name="premium_stroke">#263F506B</color>

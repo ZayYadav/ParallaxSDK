@@ -46,7 +46,7 @@ public class IUserManagerProxy extends BinderInvocationStub {
     public static class GetProfileParent extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            Object sVBoxCore = BRUserInfo.get()._new(BActivityThread.getUserId(), "RIYAZcore", BRUserInfo.get().FLAG_PRIMARY());
+            Object sVBoxCore = BRUserInfo.get()._new(BActivityThread.getUserId(), "ParallaxCore", BRUserInfo.get().FLAG_PRIMARY());
             return sVBoxCore;
         }
     }

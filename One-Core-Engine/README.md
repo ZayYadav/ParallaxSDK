@@ -1,6 +1,6 @@
-# One Core Engine loader
+# Parallax Loader
 
-Android loader application for the RIYAZ-VIP SDK.
+Android loader application for the ParallaxCore SDK.
 
 ## Compatibility
 
@@ -12,7 +12,7 @@ Android loader application for the RIYAZ-VIP SDK.
 | Native page sizes | 4 KB and 16 KB |
 | Build toolchain | AGP 8.11.1, Gradle 8.13, JDK 17, NDK 27.2 |
 
-The OneCore Engine loader intentionally produces a single 64-bit ARM APK. Its
+Parallax Loader intentionally produces a single 64-bit ARM APK. Its
 SDK AAR can still contain additional architectures, but the installable loader
 does not package 32-bit ARM, x86, or x86_64 native libraries.
 
@@ -29,7 +29,7 @@ project does not attempt to tamper with linker or process inspection APIs.
 ## Build
 
 Install JDK 17, Android SDK Platform 36, and NDK 27.2.12479018. Build the SDK
-AAR first, copy it to `app/libs/Bcore-release.aar`, and then run:
+AAR first, copy it to `app/libs/ParallaxCore-release.aar`, and then run:
 
 ```bash
 ./gradlew :app:assembleRelease

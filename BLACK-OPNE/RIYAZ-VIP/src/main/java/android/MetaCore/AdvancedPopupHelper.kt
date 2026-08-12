@@ -3,39 +3,43 @@ package android.MetaCore
 import android.app.Activity
 import android.app.Dialog
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
+import android.view.View
 import android.view.WindowManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import java.lang.reflect.Field
+import org.json.JSONObject
 import org.lsposed.lsparanoid.Obfuscate
+import java.lang.reflect.Field
+import kotlin.math.min
 
 @Obfuscate
 object AdvancedPopupHelper {
 
     private val handler = Handler(Looper.getMainLooper())
 
-    /* ================= GET TOP ACTIVITY ================= */
     private fun getTopActivity(): Activity? {
         return try {
-            val atClass = Class.forName("android.app.ActivityThread")
-            val currentAT = atClass.getMethod("currentActivityThread").invoke(null)
-            val mActivitiesField: Field = atClass.getDeclaredField("mActivities")
-            mActivitiesField.isAccessible = true
-            val activities = mActivitiesField.get(currentAT) as Map<*, *>
+            val activityThreadClass = Class.forName("android.app.ActivityThread")
+            val activityThread = activityThreadClass.getMethod("currentActivityThread").invoke(null)
+            val activitiesField: Field = activityThreadClass.getDeclaredField("mActivities")
+            activitiesField.isAccessible = true
+            val activities = activitiesField.get(activityThread) as Map<*, *>
 
             for (record in activities.values) {
-                val rClass = record!!::class.java
-                val pausedField = rClass.getDeclaredField("paused")
+                val activityRecord = record ?: continue
+                val recordClass = activityRecord::class.java
+                val pausedField = recordClass.getDeclaredField("paused")
                 pausedField.isAccessible = true
-                if (!pausedField.getBoolean(record)) {
-                    val activityField = rClass.getDeclaredField("activity")
+                if (!pausedField.getBoolean(activityRecord)) {
+                    val activityField = recordClass.getDeclaredField("activity")
                     activityField.isAccessible = true
-                    return activityField.get(record) as Activity
+                    return activityField.get(activityRecord) as? Activity
                 }
             }
             null
@@ -44,33 +48,44 @@ object AdvancedPopupHelper {
         }
     }
 
-    /* ================= ENTRY ================= */
     @JvmStatic
     fun showAuto() {
-        val act = getTopActivity() ?: return
-        if (act.isFinishing || act.isDestroyed) return
-        showPopup(act)
+        val activity = getTopActivity() ?: return
+        if (activity.isFinishing || activity.isDestroyed) return
+        showPopup(activity)
     }
 
-    /* ================= SHOW POPUP ================= */
-    private fun showPopup(act: Activity) {
+    private fun showPopup(activity: Activity) {
         handler.post {
             try {
-                val dialog = Dialog(act, android.R.style.Theme_Translucent_NoTitleBar)
+                val dialog = Dialog(activity, android.R.style.Theme_Translucent_NoTitleBar)
                 dialog.setCancelable(false)
 
-                val webView = WebView(act)
-                webView.settings.javaScriptEnabled = true
-                webView.settings.domStorageEnabled = true
+                val webView = WebView(activity)
                 webView.setBackgroundColor(Color.TRANSPARENT)
-                webView.webViewClient = WebViewClient()
+                webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+                webView.isLongClickable = false
+                webView.setOnLongClickListener { true }
+                webView.settings.apply {
+                    javaScriptEnabled = true
+                    domStorageEnabled = false
+                    allowContentAccess = false
+                    allowFileAccess = true
+                    blockNetworkLoads = true
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                        mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                    }
+                }
+                webView.webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean = true
+                }
 
-                // Device info get karenge
-                val deviceInfo = """
-                    Device: ${Build.MANUFACTURER} ${Build.MODEL}
-                    Android: ${Build.VERSION.RELEASE}
-                    SDK: ${Build.VERSION.SDK_INT}
-                """.trimIndent()
+                val deviceInfo = JSONObject().apply {
+                    put("device", "${Build.MANUFACTURER} ${Build.MODEL}".trim())
+                    put("android", Build.VERSION.RELEASE ?: "Unknown")
+                    put("api", Build.VERSION.SDK_INT)
+                    put("abi", Build.SUPPORTED_ABIS.firstOrNull() ?: "Unknown")
+                }.toString()
 
                 webView.addJavascriptInterface(object {
                     @JavascriptInterface
@@ -79,20 +94,13 @@ object AdvancedPopupHelper {
                             if (dialog.isShowing) dialog.dismiss()
                         }
                     }
-                    
+
                     @JavascriptInterface
-                    fun getDeviceInfo(): String {
-                        return deviceInfo
-                    }
-                    
-                    @JavascriptInterface
-                    fun getExpireStatus(): String {
-                        return "PARALLAX Access Revoked"
-                    }
+                    fun getDeviceInfo(): String = deviceInfo
                 }, "Android")
 
                 webView.loadDataWithBaseURL(
-                    null,
+                    "file:///android_res/drawable/",
                     HTML,
                     "text/html",
                     "utf-8",
@@ -100,405 +108,123 @@ object AdvancedPopupHelper {
                 )
 
                 dialog.setContentView(webView)
+                dialog.setOnDismissListener {
+                    webView.removeJavascriptInterface("Android")
+                    webView.stopLoading()
+                    webView.loadUrl("about:blank")
+                    webView.destroy()
+                }
                 dialog.show()
 
+                val metrics = activity.resources.displayMetrics
                 dialog.window?.apply {
-                    setLayout(dp(act, 250), dp(act, 400))
+                    setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+                    setLayout(
+                        min(dp(activity, 380), metrics.widthPixels - dp(activity, 24)),
+                        min(dp(activity, 580), metrics.heightPixels - dp(activity, 32))
+                    )
                     setGravity(Gravity.CENTER)
                     addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-                    setDimAmount(0.6f)
+                    addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    setDimAmount(0.78f)
                 }
-
             } catch (_: Throwable) {
+                // Expiry handling must never crash the host application.
             }
         }
     }
 
-    /* ================= DP UTILS ================= */
-    private fun dp(act: Activity, v: Int): Int {
-        return (v * act.resources.displayMetrics.density).toInt()
+    private fun dp(activity: Activity, value: Int): Int {
+        return (value * activity.resources.displayMetrics.density).toInt()
     }
 
-    /* ================= HTML (CLEAN BLACK BACKGROUND) ================= */
     private const val HTML = """
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.12.2/lottie.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <style>
-*{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif}
-
-body{
-    background:transparent;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    height:100vh;
-}
-
-.card{
-    width:240px;
-    background:#000000; /* Pure black background */
-    border-radius:12px;
-    padding:14px;
-    border:2px solid #4dabf7; /* Sky blue border */
-    box-shadow:0 8px 25px rgba(0,0,0,0.8),
-               0 0 0 1px rgba(77, 171, 247, 0.3);
-    position:relative;
-    overflow:hidden;
-}
-
-/* Simple border glow effect */
-.card::before{
-    content:'';
-    position:absolute;
-    top:-2px;
-    left:-2px;
-    right:-2px;
-    bottom:-2px;
-    background:#4dabf7;
-    border-radius:14px;
-    z-index:-1;
-    opacity:0.3;
-    filter:blur(5px);
-}
-
-/* Header */
-.header{
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    gap:8px;
-    margin-bottom:12px;
-    padding-bottom:10px;
-    border-bottom:1px solid rgba(77, 171, 247, 0.4);
-}
-
-.title-icon{
-    width:20px;
-    height:20px;
-}
-
-.title{
-    font-size:14px;
-    font-weight:700;
-    color:#4dabf7;
-    letter-spacing:0.5px;
-}
-
-/* Expire Status */
-.expire-status{
-    background:rgba(77, 171, 247, 0.1);
-    border-radius:8px;
-    padding:6px;
-    margin:10px 0;
-    text-align:center;
-    border:1px solid rgba(77, 171, 247, 0.2);
-}
-
-.expire-text{
-    font-size:10px;
-    font-weight:600;
-    color:#a5d8ff;
-}
-
-/* Device Info */
-.device-info{
-    background:rgba(77, 171, 247, 0.08);
-    border-radius:8px;
-    padding:7px;
-    margin:10px 0;
-    border:1px solid rgba(77, 171, 247, 0.15);
-}
-
-.info-row{
-    display:flex;
-    justify-content:space-between;
-    margin:3px 0;
-}
-
-.info-label{
-    font-size:9px;
-    color:#a5d8ff;
-    font-weight:500;
-}
-
-.info-value{
-    font-size:9px;
-    color:#ffffff;
-    font-weight:600;
-}
-
-/* Content */
-.content{
-    margin:8px 0;
-}
-
-.row{
-    display:flex;
-    align-items:center;
-    gap:6px;
-    margin:5px 0;
-    padding:5px;
-}
-
-.icon{
-    width:14px;
-    height:14px;
-    min-width:14px;
-}
-
-.text{
-    font-size:10px;
-    color:#ffffff;
-}
-
-.highlight{
-    color:#ffcc00;
-    font-weight:600;
-}
-
-/* Android support */
-.android-support{
-    text-align:center;
-    margin:8px 0;
-    padding:6px;
-    background:rgba(77, 171, 247, 0.05);
-    border-radius:6px;
-    border:1px solid rgba(77, 171, 247, 0.1);
-}
-
-.support-text{
-    font-size:9px;
-    color:#ffcc00;
-    font-weight:600;
-}
-
-/* Footer */
-.footer{
-    margin-top:10px;
-    text-align:center;
-    padding-top:8px;
-    border-top:1px solid rgba(77, 171, 247, 0.2);
-}
-
-.footer-row{
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    gap:5px;
-    margin-bottom:4px;
-}
-
-.footer-icon{
-    width:12px;
-    height:12px;
-}
-
-.footer-text{
-    font-size:10px;
-    font-weight:700;
-    color:#ffcc00;
-}
-
-.footer-note{
-    font-size:8px;
-    color:#a5d8ff;
-}
-
-/* Countdown */
-.countdown{
-    font-size:9px;
-    color:#33ff66;
-    font-weight:600;
-    text-align:center;
-    margin-top:6px;
-    background:rgba(51,255,102,0.1);
-    padding:4px;
-    border-radius:5px;
-    border:1px solid rgba(51,255,102,0.2);
-}
-
+:root{color-scheme:dark;--gold:#d5a94f;--paper:#eef1f5;--muted:#97a1b1;--danger:#ff667a;--surface:#111722}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;margin:0;overflow:hidden}
+body{display:flex;align-items:center;justify-content:center;padding:10px;background:transparent;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:var(--paper)}
+.card{position:relative;width:100%;max-width:352px;padding:18px;overflow:hidden;border:1px solid rgba(213,169,79,.45);border-radius:28px;background:linear-gradient(145deg,rgba(24,30,41,.98),rgba(5,7,11,.99));box-shadow:0 26px 70px rgba(0,0,0,.7),0 0 40px rgba(213,169,79,.09);animation:enter .55s cubic-bezier(.2,.8,.2,1) both}
+.card:before{content:'';position:absolute;width:230px;height:230px;left:50%;top:-150px;transform:translateX(-50%);border-radius:50%;background:rgba(213,169,79,.18);filter:blur(52px);pointer-events:none}
+.top{position:relative;display:flex;align-items:center;gap:12px}
+.logo{width:58px;height:58px;object-fit:cover;border-radius:16px;border:1px solid rgba(213,169,79,.5);box-shadow:0 8px 28px rgba(0,0,0,.45)}
+.eyebrow{font-size:9px;line-height:1.4;font-weight:800;letter-spacing:2px;color:var(--gold)}
+.brand{margin-top:3px;font-size:18px;font-weight:850;letter-spacing:.4px}
+.hero{position:relative;margin-top:18px;padding:18px 14px;text-align:center;border:1px solid rgba(255,102,122,.22);border-radius:20px;background:linear-gradient(135deg,rgba(255,102,122,.12),rgba(255,255,255,.025))}
+.lock{position:relative;width:58px;height:58px;margin:0 auto 12px;display:grid;place-items:center;border-radius:50%;background:rgba(255,102,122,.12);box-shadow:0 0 0 8px rgba(255,102,122,.035);animation:pulse 1.8s ease-in-out infinite}
+.lock svg{width:27px;height:27px;fill:none;stroke:var(--danger);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.hero h1{margin:0;font-size:21px;letter-spacing:.4px}
+.hero p{margin:7px auto 0;max-width:260px;color:var(--muted);font-size:11px;line-height:1.55}
+.status{display:inline-flex;align-items:center;gap:7px;margin-top:12px;padding:7px 11px;border:1px solid rgba(255,102,122,.24);border-radius:999px;color:#ffd5dc;background:rgba(255,102,122,.08);font-size:9px;font-weight:800;letter-spacing:1px}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--danger);box-shadow:0 0 9px var(--danger)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.info{padding:10px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(255,255,255,.035);min-width:0}
+.info label{display:block;margin-bottom:4px;color:#6f7a8c;font-size:8px;font-weight:800;letter-spacing:1px;text-transform:uppercase}
+.info strong{display:block;overflow:hidden;color:#e8ebf0;font-size:10px;text-overflow:ellipsis;white-space:nowrap}
+.notice{display:flex;align-items:center;gap:10px;margin-top:12px;padding:11px 12px;border-radius:14px;background:rgba(213,169,79,.08);color:#c8d0dc;font-size:10px;line-height:1.45}
+.notice svg{width:20px;min-width:20px;fill:none;stroke:var(--gold);stroke-width:1.8}
+.actions{margin-top:14px}
+button{width:100%;height:48px;border:0;border-radius:15px;background:linear-gradient(90deg,#b98a35,#efd27c);color:#090b0f;font-size:11px;font-weight:900;letter-spacing:1.2px;text-transform:uppercase;box-shadow:0 10px 28px rgba(213,169,79,.18)}
+.timer{margin-top:10px;color:#6f798a;text-align:center;font-size:9px;letter-spacing:.5px}
+.timer b{color:var(--gold)}
+.bar{height:3px;margin-top:8px;overflow:hidden;border-radius:99px;background:rgba(255,255,255,.08)}
+.bar span{display:block;width:100%;height:100%;transform-origin:left;background:linear-gradient(90deg,var(--danger),var(--gold));animation:drain 10s linear forwards}
+@keyframes enter{from{opacity:0;transform:translateY(20px) scale(.96)}to{opacity:1;transform:none}}
+@keyframes pulse{50%{transform:scale(1.06);box-shadow:0 0 0 12px rgba(255,102,122,.025)}}
+@keyframes drain{to{transform:scaleX(0)}}
 </style>
 </head>
-
 <body>
-
-<div class="card">
-    <div class="header">
-        <div id="iconTitle" class="title-icon"></div>
-        <div class="title">LICENCE EXPIRED</div>
+<main class="card">
+  <header class="top">
+    <img class="logo" src="parallax_labs_brand.jpg" alt="Parallax Labs">
+    <div><div class="eyebrow">PARALLAX / ONECORE</div><div class="brand">Runtime access</div></div>
+  </header>
+  <section class="hero">
+    <div class="lock">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></svg>
     </div>
-    
-    <!-- Expire Status -->
-    <div class="expire-status">
-        <div class="expire-text" id="expireStatus">
-            <i>🔒</i> PARALLAX Access Revoked
-        </div>
-    </div>
-    
-    <!-- Device Info -->
-    <div class="device-info">
-        <div id="deviceInfo">
-            <!-- Device info will be inserted here -->
-        </div>
-    </div>
-    
-    <div class="content">
-        <div class="row">
-            <div id="iconSupport" class="icon"></div>
-            <div class="text">
-                <span class="highlight">Support:</span> A8 to A17
-            </div>
-        </div>
-        
-        <div class="row">
-            <div id="iconDev" class="icon"></div>
-            <div class="text">
-                <span class="highlight">Developer:</span> PARALLAX BBOX
-            </div>
-        </div>
-        
-        <div class="row">
-            <div id="iconContact" class="icon"></div>
-            <div class="text">
-                <span class="highlight">Contact:</span> Officials
-            </div>
-        </div>
-    </div>
-    
-    <!-- Android Support -->
-    <div class="android-support">
-        <div class="support-text">Android 8.0 to 17.0</div>
-    </div>
-    
-    <div class="footer">
-        <div class="footer-row">
-            <div id="iconPerfect" class="footer-icon"></div>
-            <span class="footer-text">PARALLAX BBOX SDK</span>
-        </div>
-        <div class="footer-note">License renewal required</div>
-        
-        <div class="countdown">
-            Close: <span id="timer">10</span>s
-        </div>
-    </div>
-</div>
-
+    <h1>License expired</h1>
+    <p>This secure runtime session is no longer authorized. Renew the activation key before continuing.</p>
+    <div class="status"><span class="dot"></span> ACCESS REVOKED</div>
+  </section>
+  <section class="grid">
+    <div class="info"><label>Device</label><strong id="device">Loading...</strong></div>
+    <div class="info"><label>Android</label><strong id="android">Loading...</strong></div>
+    <div class="info"><label>Runtime API</label><strong id="api">Loading...</strong></div>
+    <div class="info"><label>Architecture</label><strong id="abi">Loading...</strong></div>
+  </section>
+  <div class="notice">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.6-2.9 8-7 10-4.1-2-7-5.4-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>
+    <span>Parallax Core supports API 24-36. Contact your authorized provider to renew access.</span>
+  </div>
+  <div class="actions">
+    <button type="button" onclick="Android.close()">Close securely</button>
+    <div class="timer">Closing automatically in <b id="timer">10</b>s</div>
+    <div class="bar"><span></span></div>
+  </div>
+</main>
 <script>
-// Load Lottie animations (only for icons)
-lottie.loadAnimation({
-    container: document.getElementById('iconTitle'),
-    renderer: 'svg',
-    loop: true,
-    autoplay: true,
-    path: 'https://assets10.lottiefiles.com/packages/lf20_j1adxtyb.json'
-});
-
-lottie.loadAnimation({
-    container: document.getElementById('iconPerfect'),
-    renderer: 'svg',
-    loop: true,
-    autoplay: true,
-    path: 'https://assets4.lottiefiles.com/packages/lf20_jtbfg2nb.json'
-});
-
-lottie.loadAnimation({
-    container: document.getElementById('iconSupport'),
-    renderer: 'svg',
-    loop: true,
-    autoplay: true,
-    path: 'https://assets2.lottiefiles.com/packages/lf20_jcikwtux.json'
-});
-
-lottie.loadAnimation({
-    container: document.getElementById('iconDev'),
-    renderer: 'svg',
-    loop: true,
-    autoplay: true,
-    path: 'https://assets7.lottiefiles.com/packages/lf20_w51pcehl.json'
-});
-
-lottie.loadAnimation({
-    container: document.getElementById('iconContact'),
-    renderer: 'svg',
-    loop: true,
-    autoplay: true,
-    path: 'https://assets3.lottiefiles.com/packages/lf20_5ngs2ksb.json'
-});
-
-// Get device info from Android
-function loadDeviceInfo() {
-    if (window.Android && Android.getDeviceInfo) {
-        try {
-            const info = Android.getDeviceInfo();
-            const lines = info.split('\n');
-            
-            const deviceInfoDiv = document.getElementById('deviceInfo');
-            deviceInfoDiv.innerHTML = '';
-            
-            lines.forEach(line => {
-                if (line.trim()) {
-                    const [label, value] = line.split(':').map(s => s.trim());
-                    if (label && value) {
-                        const row = document.createElement('div');
-                        row.className = 'info-row';
-                        
-                        const labelSpan = document.createElement('span');
-                        labelSpan.className = 'info-label';
-                        labelSpan.textContent = label + ':';
-                        
-                        const valueSpan = document.createElement('span');
-                        valueSpan.className = 'info-value';
-                        valueSpan.textContent = value;
-                        
-                        row.appendChild(labelSpan);
-                        row.appendChild(valueSpan);
-                        deviceInfoDiv.appendChild(row);
-                    }
-                }
-            });
-            
-        } catch (e) {
-            document.getElementById('deviceInfo').innerHTML = 
-                '<div class="info-row"><span class="info-label">Device:</span><span class="info-value">Unknown</span></div>';
-        }
-    }
-}
-
-// Simple countdown timer
-let seconds = 10;
-const timerElement = document.getElementById('timer');
-
-const countdown = setInterval(() => {
-    seconds--;
-    timerElement.textContent = seconds;
-    
-    if (seconds <= 5) {
-        timerElement.style.color = '#ff3366';
-    }
-    
-    if (seconds <= 0) {
-        clearInterval(countdown);
-        if (window.Android && Android.close) {
-            Android.close();
-        }
-    }
-}, 1000);
-
-// Initialize
-document.addEventListener('DOMContentLoaded', function() {
-    loadDeviceInfo();
-    
-    // Fallback auto-close
-    setTimeout(() => {
-        if (window.Android && Android.close) {
-            Android.close();
-        }
-    }, 10000);
-});
+(function(){
+  try{
+    var info=JSON.parse(Android.getDeviceInfo());
+    ['device','android','api','abi'].forEach(function(key){
+      document.getElementById(key).textContent=String(info[key]||'Unknown');
+    });
+  }catch(ignore){}
+  var seconds=10;
+  var timer=document.getElementById('timer');
+  var interval=setInterval(function(){
+    seconds-=1;
+    timer.textContent=String(Math.max(0,seconds));
+    if(seconds<=0){clearInterval(interval);Android.close();}
+  },1000);
+})();
 </script>
 </body>
 </html>
