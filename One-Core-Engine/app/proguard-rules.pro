@@ -20,6 +20,15 @@
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
 
+# Remove source paths and release logging while preserving stack-trace line mapping.
+-renamesourcefileattribute SourceFile
+-keepattributes LineNumberTable,*Annotation*,Signature,InnerClasses,EnclosingMethod
+-assumenosideeffects class android.util.Log {
+    public static *** v(...);
+    public static *** d(...);
+    public static *** i(...);
+}
+
 -keep class top.niunaijun.blackbox.** {*; }
 -keep class top.niunaijun.blackbox.core.NativeCore { *; }
 -keep class top.niunaijun.blackbox.BlackBoxCore { *; }
@@ -39,7 +48,6 @@
 -keep class com.Jagdish.Loader.floating.Overlay { *; }
 -keep class com.Jagdish.Loader.floating.ESPView { *; }
 -keep class android.** { *; }
--keepattributes *Annotation*
 -dontwarn top.niunaijun.**
 # Keep SLF4J logging classes
 -keep class org.slf4j.** { *; }

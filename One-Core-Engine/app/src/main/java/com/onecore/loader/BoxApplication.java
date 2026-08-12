@@ -9,6 +9,7 @@ import com.Jagdish.tastytoast.TastyToast;
 import com.onecore.loader.utils.FLog;
 import com.onecore.loader.utils.NetworkConnection;
 import com.onecore.loader.utils.FPrefs;
+import com.onecore.loader.security.AppIntegrity;
 import com.google.android.material.color.DynamicColors;
 import com.topjohnwu.superuser.Shell;
 import java.io.IOException;
@@ -80,6 +81,10 @@ public class BoxApplication extends Application {
     public void onCreate() {
         super.onCreate();
         gApp = this;
+        if (!AppIntegrity.isSignatureValid(this)) {
+            FLog.error("Application integrity validation failed");
+            return;
+        }
         BlackBoxCore.get().doCreate();
         try {
             MetaActivationManager.activateSdk(BoxApp());

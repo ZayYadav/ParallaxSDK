@@ -2,14 +2,14 @@
 
     <!-- Base Material3 theme -->
     <style name="AnyTimeCore.AppTheme" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="colorPrimary">@color/colorPrimary</item>
-        <item name="colorPrimaryDark">#FF17202E</item>
-        <item name="colorAccent">@color/colorAccent</item>
-        <item name="android:windowBackground">@color/background</item>
+        <item name="colorPrimary">@color/premium_gold</item>
+        <item name="colorPrimaryDark">@color/premium_background</item>
+        <item name="colorAccent">@color/premium_gold</item>
+        <item name="android:windowBackground">@color/premium_background</item>
         <item name="android:windowContentOverlay">@null</item>
-        <item name="android:navigationBarColor">@color/background</item>
-        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
-        <item name="android:windowFullscreen">true</item>
+        <item name="android:statusBarColor">@color/premium_background</item>
+        <item name="android:navigationBarColor">@color/premium_background</item>
+        <item name="android:windowFullscreen">false</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="materialAlertDialogTheme">@style/ThemeOverlay.Material3.MaterialAlertDialog</item>
         <item name="alertDialogTheme">@style/ThemeOverlay.Material3.MaterialAlertDialog</item>

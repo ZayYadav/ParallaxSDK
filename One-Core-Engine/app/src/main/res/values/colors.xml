@@ -17,6 +17,17 @@
     <color name="startbtn">#f8465c</color>
     <color name="stopbtn">#2ebc86</color>
     <color name="button">#FFFF445C</color>
+    <color name="premium_ink">#080B12</color>
+    <color name="premium_background">#080B12</color>
+    <color name="premium_surface">#E6121824</color>
+    <color name="premium_surface_light">#FF182131</color>
+    <color name="premium_gold">#FFF0C96A</color>
+    <color name="premium_gold_dark">#FFB9862E</color>
+    <color name="premium_success">#FF5DE2B1</color>
+    <color name="premium_text_secondary">#FFAFB8C8</color>
+    <color name="premium_text_muted">#FF748094</color>
+    <color name="premium_stroke">#263F506B</color>
+    <color name="premium_stroke_gold">#66F0C96A</color>
     
     
 

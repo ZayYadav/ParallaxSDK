@@ -23,6 +23,7 @@ import java.util.Random;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import com.onecore.loader.R;
+import androidx.core.content.res.ResourcesCompat;
 
 public class ESPView extends View implements Runnable {
 
@@ -174,7 +175,8 @@ public class ESPView extends View implements Runnable {
 		int shadowColor5 = Color.argb(200, 0, 0, 0);
         mVehiclesPaint.setShadowLayer(7, 0, 0, shadowColor5);
         mVehiclesPaint.setColor(Color.parseColor(IMGUI_COLORS[new Random().nextInt(1)]));
-        mVehiclesPaint.setTypeface(getResources().getFont(R.font.acme));
+        Typeface appTypeface = ResourcesCompat.getFont(getContext(), R.font.acme);
+        mVehiclesPaint.setTypeface(appTypeface);
         
         // =======================================================
         mItemsPaint = new Paint();
@@ -183,14 +185,14 @@ public class ESPView extends View implements Runnable {
         mItemsPaint.setShadowLayer(7, 0, 0, shadowColor4);
         mItemsPaint.setColor(Color.parseColor(IMGUI_COLORS[new Random().nextInt(1)]));
         mItemsPaint.setTextAlign(Paint.Align.CENTER);
-        mItemsPaint.setTypeface(getResources().getFont(R.font.acme));
+        mItemsPaint.setTypeface(appTypeface);
         
         // =======================================================
         mTextPaint = new Paint();
         mTextPaint.setAntiAlias(true);
         mTextPaint.setTextAlign(Paint.Align.CENTER);
         mTextPaint.setColor(Color.rgb(0, 0, 0));
-        mTextPaint.setTypeface(getResources().getFont(R.font.acme));
+        mTextPaint.setTypeface(appTypeface);
         mTextPaint.setDither(true);
         
         // =======================================================
@@ -198,7 +200,7 @@ public class ESPView extends View implements Runnable {
         mNamePaint.setStyle(Paint.Style.FILL_AND_STROKE);
 	    mNamePaint.setAntiAlias(true);
         mNamePaint.setColor(Color.argb(255, 9, 255, 255));
-        mNamePaint.setTypeface(getResources().getFont(R.font.acme));
+        mNamePaint.setTypeface(appTypeface);
         mNamePaint.setTextAlign(Paint.Align.CENTER);
         mNamePaint.setTextSize(mScaleY * 18);
         
@@ -209,7 +211,7 @@ public class ESPView extends View implements Runnable {
         mTeamPaint.setTextAlign(Paint.Align.CENTER);
 		mTeamPaint.setTextSize(mScaleY * 18);
 		mTeamPaint.setAlpha(200);
-        mTeamPaint.setTypeface(Typeface.create(getResources().getFont(R.font.acme), Typeface.BOLD));
+        mTeamPaint.setTypeface(Typeface.create(appTypeface, Typeface.BOLD));
 
         // =======================================================
         DistancePaint = new Paint();
@@ -220,7 +222,7 @@ public class ESPView extends View implements Runnable {
         DistancePaint.setColor(Color.rgb(255, 175, 20));
 		DistancePaint.setTextSize(mScaleY * 18);
 		DistancePaint.setAlpha(208);
-        DistancePaint.setTypeface(Typeface.create(getResources().getFont(R.font.acme), Typeface.BOLD));
+        DistancePaint.setTypeface(Typeface.create(appTypeface, Typeface.BOLD));
 
         // =======================================================
 
@@ -232,7 +234,7 @@ public class ESPView extends View implements Runnable {
         weaponPaint.setColor(Color.argb(255, 255, 255, 255));
 		weaponPaint.setAlpha(208);
 		weaponPaint.setTextSize(mScaleY * 18);
-        weaponPaint.setTypeface(Typeface.create(getResources().getFont(R.font.acme), Typeface.BOLD));
+        weaponPaint.setTypeface(Typeface.create(appTypeface, Typeface.BOLD));
     }
     
     public void ClearCanvas(Canvas cvs) {

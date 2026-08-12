@@ -16,6 +16,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.view.View;
+import android.view.WindowManager;
+import android.text.TextUtils;
 import android.view.animation.Animation;
 import android.view.animation.LinearInterpolator;
 import android.view.animation.RotateAnimation;
@@ -66,6 +68,8 @@ public class MainActivity extends Activity {
     private boolean isGameLaunched = false;
     private String selectedGamePkg = "";
     private boolean isIndiaSelected = false;
+    private final Handler countdownHandler = new Handler(Looper.getMainLooper());
+    private Runnable countdownRunnable;
     
     public static MainActivity get() {
         return instance;
@@ -80,12 +84,12 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         setContentView(R.layout.activity_main);
         Thread.setDefaultUncaughtExceptionHandler(new CrashHandler(this));
         instance = this;
         blackBoxCore = BlackBoxCore.get();
         blackBoxCore.doCreate();
-        countDownStart();
         GameJsonMods();
         sharedPreferences = getSharedPreferences(getPackageName(), Activity.MODE_PRIVATE);
         
@@ -99,6 +103,9 @@ public class MainActivity extends Activity {
         gameSelection = findViewById(R.id.radio_group_games);
         radioIndia = findViewById(R.id.radio_india);
         tvHideEsp = findViewById(R.id.tv_hide_esp);
+        TextView deviceStatus = findViewById(R.id.tv_device_status);
+        deviceStatus.setText("Android API " + Build.VERSION.SDK_INT
+                + "  •  " + TextUtils.join(", ", Build.SUPPORTED_ABIS));
 
         // Make sure radio button is unchecked initially
         if (radioIndia != null) {
@@ -293,12 +300,13 @@ public class MainActivity extends Activity {
     }
     
     private void countDownStart() {
-        Handler handler = new Handler();
-        Runnable runnable = new Runnable() {
+        if (countdownRunnable != null) {
+            countdownHandler.removeCallbacks(countdownRunnable);
+        }
+        countdownRunnable = new Runnable() {
             @Override
             public void run() {
                 try {
-                    handler.postDelayed(this, 1000);
                     SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
                     Date expiryDate = dateFormat.parse(TimeExpired());
                     long now = System.currentTimeMillis();
@@ -318,11 +326,12 @@ public class MainActivity extends Activity {
                     Menit.setText(String.format("%02d", Math.max(0, minutes)));
                     Detik.setText(String.format("%02d", Math.max(0, seconds)));
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    FLog.warning("Unable to update subscription countdown");
                 }
+                countdownHandler.postDelayed(this, 1000);
             }
         };
-        handler.postDelayed(runnable, 0);
+        countdownHandler.post(countdownRunnable);
     }
     
     private void GameJsonMods() {
@@ -395,12 +404,23 @@ public class MainActivity extends Activity {
         super.onResume();
         countDownStart();
     }
+
+    @Override
+    protected void onPause() {
+        if (countdownRunnable != null) {
+            countdownHandler.removeCallbacks(countdownRunnable);
+        }
+        super.onPause();
+    }
     
     @Override
     public void onDestroy() {
-        super.onDestroy();
+        if (countdownRunnable != null) {
+            countdownHandler.removeCallbacks(countdownRunnable);
+        }
         stopService(new Intent(MainActivity.get(), FloatLogo.class));
         stopService(new Intent(MainActivity.get(), Overlay.class));
         stopService(new Intent(MainActivity.get(), FloatAim.class));
+        super.onDestroy();
     }
 }
