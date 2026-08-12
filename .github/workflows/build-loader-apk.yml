@@ -164,7 +164,7 @@ jobs:
           set -euo pipefail
           RELEASE_APK=$(find "${LOADER_PROJECT_DIR}/app/build/outputs/apk/release" -name '*.apk' -print -quit)
           test -n "$RELEASE_APK"
-          apksigner verify --print-certs "$RELEASE_APK" \
+          "${ANDROID_HOME}/build-tools/36.0.0/apksigner" verify --print-certs "$RELEASE_APK" \
             | tee "${BUILD_LOG_DIR}/loader-signing-certificate.txt"
 
       - name: Upload SDK AAR
