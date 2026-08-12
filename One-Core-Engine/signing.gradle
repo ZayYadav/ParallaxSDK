@@ -8,7 +8,7 @@ android {
                 properties.load(propertiesFile.newDataInputStream())
             }
             def getString = { String propertyName, String environmentName, String prompt ->
-                return properties?.get(propertyName) ?: System.getenv(environmentName) ?:
+                return System.getenv(environmentName) ?: properties?.get(propertyName) ?:
                         System.console()?.readLine('\n' + prompt + ': ')
             }
 
@@ -28,7 +28,7 @@ android {
                 properties.load(propertiesFile.newDataInputStream())
             }
             def getString = { String propertyName, String environmentName, String prompt ->
-                return properties?.get(propertyName) ?: System.getenv(environmentName) ?:
+                return System.getenv(environmentName) ?: properties?.get(propertyName) ?:
                         System.console()?.readLine('\n' + prompt + ': ')
             }
 

@@ -1,6 +1,6 @@
 {
   "name": "onecore/integrity-api",
-  "description": "Google Play Integrity-backed licensing API for OneCore Engine",
+  "description": "Self-hosted and optional Google Play Integrity licensing API for OneCore Engine",
   "type": "project",
   "license": "proprietary",
   "require": {

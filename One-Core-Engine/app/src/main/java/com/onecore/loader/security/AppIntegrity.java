@@ -36,6 +36,25 @@ public final class AppIntegrity {
         return false;
     }
 
+    /** Returns the first APK signing certificate as uppercase SHA-256 hex. */
+    public static String currentSigningCertificateSha256(Context context) {
+        try {
+            Signature[] signatures = getSignatures(context);
+            if (signatures.length == 0) {
+                throw new IllegalStateException("APK has no signing certificate");
+            }
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(signatures[0].toByteArray());
+            StringBuilder hex = new StringBuilder(digest.length * 2);
+            for (byte value : digest) {
+                hex.append(String.format(Locale.US, "%02X", value & 0xff));
+            }
+            return hex.toString();
+        } catch (Exception exception) {
+            throw new IllegalStateException("Unable to read APK signing certificate", exception);
+        }
+    }
+
     private static Signature[] getSignatures(Context context) throws PackageManager.NameNotFoundException {
         PackageManager packageManager = context.getPackageManager();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {

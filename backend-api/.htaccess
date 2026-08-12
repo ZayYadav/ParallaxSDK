@@ -8,7 +8,7 @@ Options -Indexes
     RewriteRule ^ index.php [QSA,L]
 </IfModule>
 
-<FilesMatch "^(config(?:\.local)?\.php|composer\.(?:json|lock)|install\.sql)$">
+<FilesMatch "^(config(?:\.local)?\.php|composer\.(?:json|lock)|.*\.sql)$">
     Require all denied
 </FilesMatch>
 

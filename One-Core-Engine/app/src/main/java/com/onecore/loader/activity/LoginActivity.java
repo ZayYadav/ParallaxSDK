@@ -58,6 +58,7 @@ import com.onecore.loader.R;
 import com.onecore.loader.utils.CrashHandler;
 import com.onecore.loader.utils.FLog;
 import com.onecore.loader.security.SecurePreferences;
+import com.onecore.loader.security.HostedLicenseClient;
 import com.onecore.loader.security.SecurityThreatDetector;
 import com.Jagdish.tastytoast.TastyToast;
 
@@ -187,8 +188,6 @@ public class LoginActivity extends AppCompatActivity {
             FLog.error("Native library not loaded: " + e.getMessage());
         }
     }
-
-    private static native String Check(Context context, String key);
 
     private void showLoadingAnimation(String message) {
         runOnUiThread(() -> {
@@ -493,7 +492,7 @@ public class LoginActivity extends AppCompatActivity {
         new Thread(() -> {
             Message msg = new Message();
             try {
-                String result = Check(activity, key);
+                String result = new HostedLicenseClient(activity).activate(key);
                 if ("OK".equals(result)) {
                     msg.what = 0;
                 } else {
@@ -664,6 +663,10 @@ public class LoginActivity extends AppCompatActivity {
 
         SecurityThreatDetector.Threat threat = SecurityThreatDetector.detect(this);
         if (threat != SecurityThreatDetector.Threat.NONE) {
+            new Thread(() -> new HostedLicenseClient(this).reportSecurityEvent(
+                    threat.name(),
+                    threat == SecurityThreatDetector.Threat.INVALID_SIGNATURE
+                            ? "critical" : "warning")).start();
             showSecurityWarning(threat);
             return;
         }

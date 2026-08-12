@@ -9,6 +9,14 @@ plugins {
 
 apply from: '../signing.gradle'
 
+def oneCoreApiBaseUrl = providers.gradleProperty('onecoreApiBaseUrl')
+        .orElse(System.getenv('ONECORE_API_BASE_URL') ?: 'https://onintigirty.parallaxserver.online')
+        .get()
+def oneCoreApiEncryptionKey = providers.gradleProperty('onecoreApiEncryptionKey')
+        .orElse(System.getenv('ONECORE_API_ENCRYPTION_KEY') ?: '')
+        .get()
+def javaString = { String value -> '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"' }
+
 
 def getSigningCertificateSha256 = { signingConfig ->
     if (signingConfig == null || signingConfig.storeFile == null || !signingConfig.storeFile.exists()) {
@@ -58,6 +66,8 @@ android {
         versionName rootProject.ext.versionName
         vectorDrawables.useSupportLibrary = true
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField "String", "ONECORE_API_BASE_URL", javaString(oneCoreApiBaseUrl)
+        buildConfigField "String", "ONECORE_API_ENCRYPTION_KEY", javaString(oneCoreApiEncryptionKey)
         
         ndk {
             // OneCore Engine APKs intentionally target modern 64-bit ARM devices only.

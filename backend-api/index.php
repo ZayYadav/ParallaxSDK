@@ -5,8 +5,8 @@ final class ApiException extends RuntimeException
 {
     public function __construct(
         string $message,
-        public readonly int $httpStatus = 400,
-        public readonly string $errorCode = 'BAD_REQUEST'
+        public int $httpStatus = 400,
+        public string $errorCode = 'BAD_REQUEST'
     ) {
         parent::__construct($message);
     }
@@ -26,6 +26,7 @@ if (!is_file($autoload)) {
 require_once $autoload;
 require_once __DIR__ . '/JWTHelper.php';
 require_once __DIR__ . '/IntegrityVerifier.php';
+require_once __DIR__ . '/SelfHostedVerifier.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, private');
@@ -58,6 +59,54 @@ try {
     );
 
     $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+    if ($route === '/security/event' && $method === 'POST') {
+        applyRateLimit($database, $clientIp, $route);
+        $payload = encryptedPayload($crypto, $database, $config);
+        $requestNonce = $payload['nonce'];
+        $requestDeviceId = validatedDeviceId($payload['device_id'] ?? null);
+        $eventType = strtoupper(trim((string) ($payload['event_type'] ?? '')));
+        $severity = strtolower(trim((string) ($payload['severity'] ?? 'warning')));
+        if (preg_match('/^[A-Z0-9_]{3,64}$/D', $eventType) !== 1
+            || !in_array($severity, ['info', 'warning', 'critical'], true)) {
+            throw new ApiException('Security event is invalid', 422, 'VALIDATION_ERROR');
+        }
+        try {
+            (new SelfHostedVerifier($config))->verifySecurityProof(
+                $requestDeviceId,
+                $requestNonce,
+                $payload['timestamp'],
+                $eventType,
+                (string) ($payload['device_public_key'] ?? ''),
+                (string) ($payload['device_proof'] ?? '')
+            );
+        } catch (SelfHostedVerificationException $exception) {
+            throw new ApiException(
+                $exception->getMessage(),
+                $exception->httpStatus,
+                'DEVICE_PROOF_INVALID'
+            );
+        }
+        $details = $payload['details'] ?? null;
+        if ($details !== null && !is_array($details)) {
+            throw new ApiException('Security event details must be an object', 422, 'VALIDATION_ERROR');
+        }
+        $database->execute(
+            'INSERT INTO security_events
+                (device_id, event_type, severity, ip_address, details)
+             VALUES (:device_id, :event_type, :severity, :ip_address, :details)',
+            [
+                'device_id' => $requestDeviceId,
+                'event_type' => $eventType,
+                'severity' => $severity,
+                'ip_address' => $clientIp,
+                'details' => $details === null
+                    ? null
+                    : json_encode($details, JSON_THROW_ON_ERROR),
+            ]
+        );
+        encryptedResponse($crypto, ['status' => 'recorded'], 202, $requestNonce);
+    }
+
     if ($route === '/verify' && $method === 'POST') {
         $rateLimit = applyRateLimit($database, $clientIp, $route);
         $payload = encryptedPayload($crypto, $database, $config);
@@ -73,34 +122,75 @@ try {
             throw new ApiException('Device access has been revoked', 403, 'DEVICE_REVOKED');
         }
 
-        $integrityToken = $payload['integrity_token'] ?? null;
-        if (!is_string($integrityToken) || $integrityToken === '') {
-            throw new ApiException('integrity_token is required', 422, 'VALIDATION_ERROR');
-        }
-
         $policy = $database->getAppConfigMap();
-        $verifier = new IntegrityVerifier($config);
-        try {
-            $verdict = $verifier->verify(
-                $integrityToken,
-                $requestDeviceId,
-                $requestNonce,
-                $payload['timestamp'],
-                $policy
-            );
-        } catch (IntegrityVerificationException $exception) {
-            logIntegrity(
-                $database,
-                $requestDeviceId,
-                $exception->verdict(),
-                $clientIp,
-                false
-            );
-            throw new ApiException(
-                $exception->getMessage(),
-                $exception->httpStatus(),
-                'INTEGRITY_REJECTED'
-            );
+        $verificationMode = validatedVerificationMode($policy['verification_mode'] ?? 'self_hosted');
+        $verdict = [];
+        $successVerdict = 'SELF_HOSTED_ACCEPTED';
+        if ($verificationMode === 'self_hosted') {
+            $activationKey = $payload['activation_key'] ?? null;
+            if (!is_string($activationKey)
+                || preg_match('/^OC-(?:[A-F0-9]{4}-){7}[A-F0-9]{4}$/D', strtoupper(trim($activationKey))) !== 1) {
+                throw new ApiException('A valid activation_key is required', 422, 'VALIDATION_ERROR');
+            }
+            $verifier = new SelfHostedVerifier($config);
+            try {
+                $verdict = $verifier->verifyActivation(
+                    $payload,
+                    $requestDeviceId,
+                    $requestNonce,
+                    $payload['timestamp'],
+                    $activationKey,
+                    (string) ($policy['allowed_cert_fingerprint'] ?? '')
+                );
+                bindSelfHostedLicense(
+                    $database,
+                    $requestDeviceId,
+                    $activationKey,
+                    $verdict
+                );
+            } catch (SelfHostedVerificationException $exception) {
+                logIntegrity(
+                    $database,
+                    $requestDeviceId,
+                    $exception->verdict,
+                    $clientIp,
+                    false
+                );
+                throw new ApiException(
+                    $exception->getMessage(),
+                    $exception->httpStatus,
+                    'LICENSE_REJECTED'
+                );
+            }
+        } else {
+            $integrityToken = $payload['integrity_token'] ?? null;
+            if (!is_string($integrityToken) || $integrityToken === '') {
+                throw new ApiException('integrity_token is required', 422, 'VALIDATION_ERROR');
+            }
+            $verifier = new IntegrityVerifier($config);
+            try {
+                $verdict = $verifier->verify(
+                    $integrityToken,
+                    $requestDeviceId,
+                    $requestNonce,
+                    $payload['timestamp'],
+                    $policy
+                );
+                $successVerdict = $verdict['app_recognition_verdict'];
+            } catch (IntegrityVerificationException $exception) {
+                logIntegrity(
+                    $database,
+                    $requestDeviceId,
+                    $exception->verdict(),
+                    $clientIp,
+                    false
+                );
+                throw new ApiException(
+                    $exception->getMessage(),
+                    $exception->httpStatus(),
+                    'INTEGRITY_REJECTED'
+                );
+            }
         }
 
         $expirySeconds = validatedExpiry($policy['token_expiry_seconds'] ?? 600);
@@ -154,15 +244,18 @@ try {
             );
         });
 
-        logIntegrity($database, $requestDeviceId, 'PLAY_RECOGNIZED', $clientIp, true, [
-            'device_verdicts' => $verdict['device_recognition_verdict'],
-            'licensing_verdict' => $verdict['app_licensing_verdict'],
-            'version_code' => $verdict['version_code'],
+        logIntegrity($database, $requestDeviceId, $successVerdict, $clientIp, true, [
+            'verification_mode' => $verificationMode,
+            'device_verdicts' => $verdict['device_recognition_verdict'] ?? [],
+            'licensing_verdict' => $verdict['app_licensing_verdict'] ?? 'SELF_HOSTED',
+            'version_code' => $verdict['version_code'] ?? null,
         ]);
         encryptedResponse($crypto, [
             'status' => 'success',
             'license_token' => $license['token'],
             'expires_in' => $license['expires_in'],
+            'expires_at' => $license['expires_at'],
+            'verification_mode' => $verificationMode,
             'rate_limit_remaining' => $rateLimit['remaining'],
         ], 200, $requestNonce);
     }
@@ -187,10 +280,34 @@ try {
         }
 
         $device = $database->fetchOne(
-            'SELECT status, current_token_hash, current_token_jti, token_expires_at
+            'SELECT status, current_token_hash, current_token_jti, token_expires_at,
+                    device_public_key
              FROM devices WHERE device_id = :device_id',
             ['device_id' => $requestDeviceId]
         );
+        $policy = $database->getAppConfigMap();
+        if (validatedVerificationMode($policy['verification_mode'] ?? 'self_hosted') === 'self_hosted') {
+            if (!is_string($device['device_public_key'] ?? null)
+                || !is_string($payload['device_proof'] ?? null)) {
+                throw new ApiException('Device proof is required', 403, 'DEVICE_PROOF_REQUIRED');
+            }
+            try {
+                (new SelfHostedVerifier($config))->verifyLicenseProof(
+                    $requestDeviceId,
+                    $requestNonce,
+                    $payload['timestamp'],
+                    $token,
+                    $device['device_public_key'],
+                    $payload['device_proof']
+                );
+            } catch (SelfHostedVerificationException $exception) {
+                throw new ApiException(
+                    $exception->getMessage(),
+                    $exception->httpStatus,
+                    'DEVICE_PROOF_INVALID'
+                );
+            }
+        }
         $valid = $device !== null
             && $device['status'] === 'active'
             && is_string($device['current_token_hash'])
@@ -377,7 +494,7 @@ function encryptedResponse(
     array $payload,
     int $status = 200,
     ?string $requestNonce = null
-): never {
+): void {
     $payload['server_timestamp'] = time();
     if ($requestNonce !== null) {
         $payload['request_nonce'] = $requestNonce;
@@ -428,6 +545,9 @@ function validatedExpiry(mixed $value): int
 function validatedPolicyUpdates(array $payload): array
 {
     $updates = [];
+    if (array_key_exists('verification_mode', $payload)) {
+        $updates['verification_mode'] = validatedVerificationMode($payload['verification_mode']);
+    }
     if (array_key_exists('token_expiry_seconds', $payload)) {
         $value = filter_var($payload['token_expiry_seconds'], FILTER_VALIDATE_INT);
         if ($value === false || $value < 60 || $value > 86_400) {
@@ -457,6 +577,137 @@ function validatedPolicyUpdates(array $payload): array
         $updates['require_licensed'] = $payload['require_licensed'];
     }
     return $updates;
+}
+
+function validatedVerificationMode(mixed $value): string
+{
+    if (!is_string($value) || !in_array($value, ['self_hosted', 'play_integrity'], true)) {
+        throw new ApiException('verification_mode is invalid', 422, 'VALIDATION_ERROR');
+    }
+    return $value;
+}
+
+function bindSelfHostedLicense(
+    Database $database,
+    string $deviceId,
+    string $activationKey,
+    array $verdict
+): void {
+    $keyHash = SelfHostedVerifier::activationKeyHash($activationKey);
+    $database->transaction(function (Database $db) use (
+        $deviceId,
+        $keyHash,
+        $verdict
+    ): void {
+        $licenseKey = $db->fetchOne(
+            'SELECT id, status, max_devices, expires_at
+             FROM license_keys WHERE key_hash = :key_hash FOR UPDATE',
+            ['key_hash' => $keyHash]
+        );
+        if ($licenseKey === null
+            || $licenseKey['status'] !== 'active'
+            || ($licenseKey['expires_at'] !== null
+                && strtotime((string) $licenseKey['expires_at']) <= time())) {
+            throw new SelfHostedVerificationException(
+                'Activation key is invalid, revoked, or expired',
+                403,
+                'ACTIVATION_KEY_DENIED'
+            );
+        }
+
+        $device = $db->fetchOne(
+            'SELECT status, device_public_key_sha256
+             FROM devices WHERE device_id = :device_id FOR UPDATE',
+            ['device_id' => $deviceId]
+        );
+        if (($device['status'] ?? null) === 'revoked') {
+            throw new SelfHostedVerificationException(
+                'Device access has been revoked',
+                403,
+                'DEVICE_REVOKED'
+            );
+        }
+        if ($device !== null
+            && is_string($device['device_public_key_sha256'])
+            && !hash_equals($device['device_public_key_sha256'], $verdict['public_key_sha256'])) {
+            throw new SelfHostedVerificationException(
+                'Device key binding mismatch',
+                403,
+                'DEVICE_IDENTITY_MISMATCH'
+            );
+        }
+
+        if ($device === null) {
+            $db->execute(
+                'INSERT INTO devices
+                    (device_id, device_public_key, device_public_key_sha256,
+                     last_verified_at, status)
+                 VALUES
+                    (:device_id, :public_key, :public_key_sha256,
+                     UTC_TIMESTAMP(6), \'active\')',
+                [
+                    'device_id' => $deviceId,
+                    'public_key' => $verdict['public_key_base64'],
+                    'public_key_sha256' => $verdict['public_key_sha256'],
+                ]
+            );
+        } else {
+            $db->execute(
+                'UPDATE devices SET
+                    device_public_key = :public_key,
+                    device_public_key_sha256 = :public_key_sha256,
+                    last_verified_at = UTC_TIMESTAMP(6)
+                 WHERE device_id = :device_id',
+                [
+                    'device_id' => $deviceId,
+                    'public_key' => $verdict['public_key_base64'],
+                    'public_key_sha256' => $verdict['public_key_sha256'],
+                ]
+            );
+        }
+
+        $binding = $db->fetchOne(
+            'SELECT id FROM device_license_bindings
+             WHERE license_key_id = :license_key_id AND device_id = :device_id',
+            [
+                'license_key_id' => $licenseKey['id'],
+                'device_id' => $deviceId,
+            ]
+        );
+        if ($binding === null) {
+            $count = $db->fetchOne(
+                'SELECT COUNT(*) AS count FROM device_license_bindings
+                 WHERE license_key_id = :license_key_id',
+                ['license_key_id' => $licenseKey['id']]
+            );
+            if ((int) ($count['count'] ?? 0) >= (int) $licenseKey['max_devices']) {
+                throw new SelfHostedVerificationException(
+                    'Activation key device limit has been reached',
+                    403,
+                    'DEVICE_LIMIT_REACHED'
+                );
+            }
+            $db->execute(
+                'INSERT INTO device_license_bindings
+                    (license_key_id, device_id, last_verified_at)
+                 VALUES (:license_key_id, :device_id, UTC_TIMESTAMP(6))',
+                [
+                    'license_key_id' => $licenseKey['id'],
+                    'device_id' => $deviceId,
+                ]
+            );
+        } else {
+            $db->execute(
+                'UPDATE device_license_bindings SET last_verified_at = UTC_TIMESTAMP(6)
+                 WHERE id = :id',
+                ['id' => $binding['id']]
+            );
+        }
+        $db->execute(
+            'UPDATE license_keys SET last_used_at = UTC_TIMESTAMP(6) WHERE id = :id',
+            ['id' => $licenseKey['id']]
+        );
+    });
 }
 
 function normalizedConfiguredFingerprint(mixed $value): string
@@ -512,9 +763,6 @@ function validateServerConfig(array $config): void
             || str_starts_with(strtoupper($value), 'REPLACE_')) {
             throw new RuntimeException($key . ' is not securely configured');
         }
-    }
-    if (!preg_match('/^[0-9]{6,20}$/D', $config['google_cloud_project_number'])) {
-        throw new RuntimeException('GOOGLE_CLOUD_PROJECT_NUMBER is not configured');
     }
 }
 
@@ -574,7 +822,7 @@ function applyCors(array $config): void
     header('Access-Control-Max-Age: 600');
 }
 
-function plainBootstrapError(string $code, int $status): never
+function plainBootstrapError(string $code, int $status): void
 {
     http_response_code($status);
     echo json_encode(['error' => $code]);

@@ -30,6 +30,7 @@ import android.widget.TextView;
 
 import com.onecore.loader.R;
 import com.onecore.loader.security.SecurityThreatDetector;
+import com.onecore.loader.security.HostedLicenseClient;
 import com.onecore.loader.utils.CrashHandler;
 
 import java.util.ArrayList;
@@ -364,6 +365,10 @@ public class SplashActivity extends Activity {
 
         SecurityThreatDetector.Threat threat = SecurityThreatDetector.detect(this);
         if (threat != SecurityThreatDetector.Threat.NONE) {
+            new Thread(() -> new HostedLicenseClient(this).reportSecurityEvent(
+                    threat.name(),
+                    threat == SecurityThreatDetector.Threat.INVALID_SIGNATURE
+                            ? "critical" : "warning")).start();
             showSecurityWarning(threat);
             return;
         }
