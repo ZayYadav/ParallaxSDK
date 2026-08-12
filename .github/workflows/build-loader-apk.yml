@@ -22,13 +22,26 @@ jobs:
   backend:
     name: Validate PHP integrity backend
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: onecore_ci_root
+          MYSQL_DATABASE: onecore_integrity
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ponecore_ci_root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
     defaults:
       run:
         working-directory: backend-api
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Verify PHP and Composer
         run: |
@@ -48,13 +61,24 @@ jobs:
       - name: Test crypto, JWT, and request binding
         run: php tests/run.php
 
+      - name: Test account roles, referrals, balances, and key ownership
+        env:
+          TEST_DB_HOST: 127.0.0.1
+          TEST_DB_PORT: 3306
+          TEST_DB_NAME: onecore_integrity
+          TEST_DB_USER: root
+          TEST_DB_PASSWORD: onecore_ci_root
+        run: |
+          mysql -h 127.0.0.1 -uroot -ponecore_ci_root onecore_integrity < install.sql
+          php tests/account_integration.php
+
       - name: Package deployable PHP backend
         run: |
           zip -r ../onecore-integrity-backend.zip . \
             -x 'tests/*' 'config.local.php' 'runtime/*' '.gitignore'
 
       - name: Upload deployable PHP backend
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: onecore-integrity-backend
           path: onecore-integrity-backend.zip
@@ -82,16 +106,16 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Install Android packages
         run: |
@@ -112,6 +136,28 @@ jobs:
 
       - name: Prepare build log folder
         run: mkdir -p "${BUILD_LOG_DIR}"
+
+      - name: Validate loader licensing configuration
+        shell: python
+        run: |
+          import base64
+          import os
+          from urllib.parse import urlparse
+
+          base_url = os.environ.get("ONECORE_API_BASE_URL", "").strip()
+          parsed = urlparse(base_url)
+          if parsed.scheme != "https" or not parsed.netloc or parsed.query or parsed.fragment:
+              raise SystemExit("ONECORE_API_BASE_URL must be an absolute HTTPS URL")
+
+          encoded_key = os.environ.get("ONECORE_API_ENCRYPTION_KEY", "").strip()
+          try:
+              decoded_key = base64.b64decode(encoded_key, validate=True)
+          except Exception as exc:
+              raise SystemExit("ONECORE_API_ENCRYPTION_KEY is not valid base64") from exc
+          if len(decoded_key) != 32:
+              raise SystemExit("ONECORE_API_ENCRYPTION_KEY must decode to exactly 32 bytes")
+
+          print("Loader licensing configuration is valid")
 
       - name: Build SDK release AAR
         working-directory: ${{ env.SDK_PROJECT_DIR }}
@@ -170,28 +216,28 @@ jobs:
             | tee "${BUILD_LOG_DIR}/loader-signing-certificate.txt"
 
       - name: Upload SDK AAR
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: sdk-release-aar
           path: ${{ env.SDK_PROJECT_DIR }}/${{ env.SDK_MODULE_DIR }}/build/outputs/aar/*-release.aar
           if-no-files-found: error
 
       - name: Upload loader release APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: loader-release-apk
           path: ${{ env.LOADER_PROJECT_DIR }}/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
 
       - name: Upload loader debug APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: loader-debug-apk
           path: ${{ env.LOADER_PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
       - name: Upload release signing certificate
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: loader-signing-certificate
           path: ${{ env.BUILD_LOG_DIR }}/loader-signing-certificate.txt
@@ -199,7 +245,7 @@ jobs:
 
       - name: Upload build logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: build-logs
           path: ${{ env.BUILD_LOG_DIR }}/*.log

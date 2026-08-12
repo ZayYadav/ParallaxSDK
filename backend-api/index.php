@@ -129,7 +129,7 @@ try {
         if ($verificationMode === 'self_hosted') {
             $activationKey = $payload['activation_key'] ?? null;
             if (!is_string($activationKey)
-                || preg_match('/^OC-(?:[A-F0-9]{4}-){7}[A-F0-9]{4}$/D', strtoupper(trim($activationKey))) !== 1) {
+                || !SelfHostedVerifier::isActivationKeyFormat($activationKey)) {
                 throw new ApiException('A valid activation_key is required', 422, 'VALIDATION_ERROR');
             }
             $verifier = new SelfHostedVerifier($config);

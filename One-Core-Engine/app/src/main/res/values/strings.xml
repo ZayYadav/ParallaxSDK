@@ -22,7 +22,7 @@
     <string name="security_warning_title">Security warning</string>
     <string name="security_warning_signature">This installation failed signature verification. Install the official signed build.</string>
     <string name="security_warning_vpn">A VPN connection is active. Disable the VPN before continuing.</string>
-    <string name="key_portal_url" translatable="false">https://parallaxserver.online/connect</string>
+    <string name="key_portal_url" translatable="false">https://onintigirty.parallaxserver.online/admin_dashboard.php</string>
     <string name="copy">copy</string>
     <string name="app_version_code">4.2.1</string>
     <string name="update_available">Update is available, please download it</string>

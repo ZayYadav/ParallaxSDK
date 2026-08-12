@@ -6,6 +6,8 @@ require_once __DIR__ . '/../CryptoHelper.php';
 require_once __DIR__ . '/../JWTHelper.php';
 require_once __DIR__ . '/../IntegrityVerifier.php';
 require_once __DIR__ . '/../SelfHostedVerifier.php';
+require_once __DIR__ . '/../Database.php';
+require_once __DIR__ . '/../AccountManager.php';
 
 function assertTrue(bool $condition, string $message): void
 {
@@ -67,9 +69,26 @@ assertTrue(hash_equals($hashA, $hashB), 'Play Integrity request hash mismatch');
 
 $activationKey = SelfHostedVerifier::generateActivationKey();
 assertTrue(
-    preg_match('/^OC-(?:[A-F0-9]{4}-){7}[A-F0-9]{4}$/D', $activationKey) === 1,
+    preg_match('/^5OC-(?:[A-F0-9]{4}-){7}[A-F0-9]{4}$/D', $activationKey) === 1,
     'Activation key format is invalid'
 );
+assertTrue(
+    SelfHostedVerifier::isActivationKeyFormat(
+        SelfHostedVerifier::generateActivationKey('PARALLAX')
+    ),
+    'Custom activation-key prefix was rejected'
+);
+assertTrue(
+    AccountManager::normalizeUsername('  Key.Seller_1 ') === 'key.seller_1',
+    'Dashboard username normalization failed'
+);
+AccountManager::validatePassword('SecurePass123');
+try {
+    AccountManager::validatePassword('short');
+    throw new RuntimeException('Weak dashboard password was accepted');
+} catch (AccountException) {
+    // Expected.
+}
 $deviceKey = openssl_pkey_new([
     'private_key_type' => OPENSSL_KEYTYPE_EC,
     'curve_name' => 'prime256v1',

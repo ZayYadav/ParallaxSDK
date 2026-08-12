@@ -413,8 +413,16 @@ public class LoginActivity extends AppCompatActivity {
                 inputKey.requestFocus();
                 return;
             }
+            if (!HostedLicenseClient.isSupportedActivationKey(key)) {
+                inputKey.setError("Use a key created in OneCore Integrity");
+                inputKey.requestFocus();
+                return;
+            }
+            String normalizedKey = HostedLicenseClient.normalizeActivationKey(key);
+            inputKey.setText(normalizedKey);
+            inputKey.setSelection(normalizedKey.length());
             try {
-                securePreferences.putString(USER, key);
+                securePreferences.putString(USER, normalizedKey);
             } catch (IllegalStateException exception) {
                 inputKey.setError("Secure storage is unavailable");
                 return;
@@ -428,7 +436,7 @@ public class LoginActivity extends AppCompatActivity {
             showLoadingAnimation("✦ VERIFYING LICENSE ✦");
             
             // Start login verification
-            Login(this, key);
+            Login(this, normalizedKey);
         });
 
         ImageView showPwd = findViewById(R.id.show_pwd);
