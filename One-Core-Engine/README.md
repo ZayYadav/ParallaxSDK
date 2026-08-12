@@ -1,73 +1,38 @@
-# ★彡 [ ↻ DYNAMIC VIP ↺ ] 彡★
+# One Core Engine loader
 
-🔥 **Android Virtual Injector (Non-Root)** 🔥  
-An advanced injector to inject games and apps via Virtual Space without rooting your Android device.
+Android loader application for the RIYAZ-VIP SDK.
 
----
+## Compatibility
 
-## ⚡ What's Special About This Injector?
-- 🚀 **Supports Latest Android (9 to 17)**
-- 🌟 **Clean, Modular, Easy-to-maintain Code**
-- 🎯 **No Root Required**
-- 🌐 **Fully Open Source**
-- 🎨 **Easy & Stylish User Interface**
+| Area | Support |
+| --- | --- |
+| Android runtime | API 24 through API 36 |
+| Compile/target SDK | API 36 |
+| Loader ABIs | `armeabi-v7a`, `arm64-v8a` |
+| Native page sizes | 4 KB and 16 KB |
+| Build toolchain | AGP 8.11.1, Gradle 8.13, JDK 17, NDK 27.2 |
 
----
+The loader is intentionally limited to ARM because its checked-in curl and
+OpenSSL prebuilts are available only for 32-bit and 64-bit ARM. Add matching
+prebuilts before enabling x86 or x86_64.
 
-## 🚀 Features
-- [x] **Non-root injection** support.
-- [x] Compatibility with **Android 9 to 17**.
-- [ ] Upcoming support for **x86 and x86_64** architectures.
+## Native artifact contract
 
----
+The primary downloaded artifact is named `Parallax.so`. Downloads must use
+HTTPS and contain a valid ELF file with that exact name. The app stages accepted
+artifacts in its private no-backup directory, applies owner-only permissions,
+and commits copies atomically. Debug logs also remain in private app storage.
 
-## 🎯 How to Use?
-1. Open the Injector.
-2. Select your target App/Game.
-3. Choose the `.so` (shared library) file you want to inject.
-4. Click on **"Install"** to install inside virtual environment.
-5. Click on **"Inject"** to launch the application instantly.
+Android always records a loaded native library in process memory metadata. The
+project does not attempt to tamper with linker or process inspection APIs.
 
----
+## Build
 
-## 🌟 Credits
-**Full Credit & Developer:**  
-✨『 ↻ **DYNAMIC VIP** ↺ 』✨  
-Creator of [NewBlackbox]()
+Install JDK 17, Android SDK Platform 36, and NDK 27.2.12479018. Build the SDK
+AAR first, copy it to `app/libs/Bcore-release.aar`, and then run:
 
----
+```bash
+./gradlew :app:assembleRelease
+```
 
-## 🤝 Contributions
-Contributions and ideas are welcome.  
-Please open issues or submit pull requests to contribute.
-
----
-
-## ❗ Limitations
-Not compatible with games/apps protected by advanced anti-cheat mechanisms.
-
----
-
-## 📲 Connect & Support
-- 📢 **Telegram Channel:** [Join Here](https://t.me/DynamicOwnerTg)
-- 👤 **Telegram:** [Contact Me](https://t.me/DynamicOwnerTg)
-- 📩 **Email:** [dynamicvip007@gmail.com]()
-
----
-
-## ❤️ Support Development
-Consider supporting me on [Patreon](https://www.patreon.com/c/Reveny).
-
----
-
-## 📜 License
-Licensed under [GPLv3](LICENSE).
-
----
-
-## 🖼️ Preview
-![Preview](https://github.com/jagdishvip/Android-Virtual-Inject/blob/main/preview.jpg)
-
----
-
-**✨彡 ↻ DYNAMIC VIP ↺ 彡✨ © 2025**
+The CI workflow performs both stages automatically.

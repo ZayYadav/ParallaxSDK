@@ -34,6 +34,7 @@
 #include <android/log.h>
 #include <cstring>
 #include <errno.h>
+#include <unistd.h>
 
 #if defined(__aarch64__)
 
@@ -483,7 +484,7 @@ extern "C" {
 #define __intval(p)                reinterpret_cast<intptr_t>(p)
 #define __uintval(p)               reinterpret_cast<uintptr_t>(p)
 #define __ptr(p)                   reinterpret_cast<void *>(p)
-#define __page_size                4096
+#define __page_size                (static_cast<uintptr_t>(::sysconf(_SC_PAGESIZE)))
 #define __page_align(n)            __align_up(static_cast<uintptr_t>(n), __page_size)
 #define __ptr_align(x)             __ptr(__align_down(reinterpret_cast<uintptr_t>(x), __page_size))
 #define __align_up(x, n)           (((x) + ((n) - 1)) & ~((n) - 1))
@@ -498,7 +499,8 @@ extern "C" {
 
 //-------------------------------------------------------------------------
 
-static __attribute((aligned(__page_size))) uint32_t __insns_pool[A64_MAX_BACKUPS][
+// Align to 16 KB so the pool is safe on both legacy 4 KB and modern 16 KB devices.
+static __attribute((aligned(16384))) uint32_t __insns_pool[A64_MAX_BACKUPS][
         A64_MAX_INSTRUCTIONS * 10];
 
 //-------------------------------------------------------------------------

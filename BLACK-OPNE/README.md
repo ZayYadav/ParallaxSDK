@@ -13,10 +13,13 @@ runtime support back to Android 7.0 (API 24).
 | Native ABIs | `armeabi-v7a`, `arm64-v8a`, `x86`, `x86_64` |
 | Native page sizes | Flexible, including 16 KB devices |
 | Java toolchain | Java 17 |
+| Build toolchain | AGP 8.11.1 and Gradle 8.13 |
 
 The four native ABIs allow the AAR to run on physical 32-bit and 64-bit ARM
 devices as well as x86/x86_64 emulators. Consumers can still restrict packaged
 ABIs in their own application when they have architecture-specific native code.
+The native memory alignment logic uses the runtime page size instead of assuming
+4 KB pages.
 
 ## Build
 

@@ -7,6 +7,7 @@ plugins {
 android {
 
     compileSdk rootProject.ext.compileSdk
+    buildToolsVersion rootProject.ext.buildToolsVersion
 
     aidlPackagedList "android/app/IServiceConnection.aidl"
     aidlPackagedList "android/accounts/IAccountManagerResponse.aidl"
@@ -27,7 +28,7 @@ android {
     buildTypes {
     
         debug {
-            minifyEnabled true
+            minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     
@@ -56,6 +57,7 @@ android {
     buildFeatures {
         aidl true
         prefab true
+        buildConfig true
     }
 
     testOptions {
@@ -67,9 +69,8 @@ android {
         abortOnError false
         warningsAsErrors false
         disable "UnusedResources", 'RestrictedApi'
-        textOutput "stdout"
         textReport false
-        check 'NewApi', 'InlinedApi'
+        checkOnly += ['NewApi', 'InlinedApi']
     }
 
     namespace "top.niunaijun.blackbox"

@@ -1,6 +1,6 @@
 package com.onecore.loader.utils;
 
-import android.os.Environment;
+import android.content.Context;
 import android.util.Log;
 
 import com.onecore.loader.BuildConfig;
@@ -14,11 +14,15 @@ import java.util.Locale;
 
 public class FLog {
     public static final String TAG = FLog.class.getSimpleName();
-    private static final String LOG_DIR_NAME = "OneCoreEngine";
     private static final String LOG_FILE_NAME = "loader-debug.log";
     private static final Object FILE_LOCK = new Object();
     private static final SimpleDateFormat LOG_DATE_FORMAT =
             new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US);
+    private static volatile Context applicationContext;
+
+    public static void initialize(Context context) {
+        applicationContext = context.getApplicationContext();
+    }
 
     public static void debug(String msg) {
         if (!BuildConfig.DEBUG) {
@@ -64,7 +68,10 @@ public class FLog {
         synchronized (FILE_LOCK) {
             FileWriter writer = null;
             try {
-                File logFile = getDownloadLogFile();
+                File logFile = getLogFile();
+                if (logFile == null) {
+                    return;
+                }
                 File parent = logFile.getParentFile();
                 if (parent != null && !parent.exists() && !parent.mkdirs()) {
                     Log.w(TAG, "Unable to create log directory: " + parent.getAbsolutePath());
@@ -94,8 +101,8 @@ public class FLog {
         }
     }
 
-    public static File getDownloadLogFile() {
-        File downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-        return new File(new File(downloadDir, LOG_DIR_NAME), LOG_FILE_NAME);
+    public static File getLogFile() {
+        Context context = applicationContext;
+        return context == null ? null : new File(context.getNoBackupFilesDir(), LOG_FILE_NAME);
     }
 }

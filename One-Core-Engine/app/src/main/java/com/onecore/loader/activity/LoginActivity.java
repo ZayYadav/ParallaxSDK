@@ -594,7 +594,7 @@ public class LoginActivity extends AppCompatActivity {
             requestUnknownAppPermissionsDirect();
         } else {
             prefs.edit().putBoolean(PREF_PERMISSIONS_GRANTED, true).apply();
-            FLog.info("Storage permission granted; debug log file: " + FLog.getDownloadLogFile().getAbsolutePath());
+            FLog.info("Required permissions are available");
         }
     }
     

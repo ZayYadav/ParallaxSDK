@@ -16,13 +16,16 @@ import top.niunaijun.blackbox.utils.compat.DexFileCompat;
 public class RNative {
     
     public static final String TAG = "RNative";
+    private static final String NATIVE_ARTIFACT_DIRECTORY = "native";
+    private static final String NATIVE_ARTIFACT_NAME = "Parallax.so";
     private static boolean isInjected = false;
-    public static String libtarget = "libbgmi.so";
 
     static {
         System.loadLibrary("RIYAZcore");
-        File file = new File(BlackBoxCore.getContext().getFilesDir(), "loader/" + libtarget);
-        if (file.exists()) {
+        File file = new File(
+                new File(BlackBoxCore.getContext().getNoBackupFilesDir(), NATIVE_ARTIFACT_DIRECTORY),
+                NATIVE_ARTIFACT_NAME);
+        if (file.isFile()) {
             System.load(file.getAbsolutePath());
         }
     }

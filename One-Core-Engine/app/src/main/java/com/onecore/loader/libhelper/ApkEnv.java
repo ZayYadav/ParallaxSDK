@@ -6,21 +6,20 @@ import com.onecore.loader.BoxApplication;
 import com.onecore.loader.utils.FLog;
 import static com.onecore.loader.Config.GAME_LIST_PKG;
 import com.Jagdish.tastytoast.TastyToast;
-import com.blankj.molihuan.utilcode.util.FileUtils;
 import java.io.File;
+import java.io.IOException;
 import top.niunaijun.blackbox.BlackBoxCore;
 import org.lsposed.lsparanoid.Obfuscate;
 
 @Obfuscate
 public class ApkEnv {
-    
-    private static ApkEnv singleton;
+
+    private static final String PRIMARY_ARTIFACT_NAME = "Parallax.so";
+    private static final String PRIVATE_ARTIFACT_DIRECTORY = "native";
+    private static final ApkEnv INSTANCE = new ApkEnv();
 
     public static ApkEnv getInstance() {
-        if (singleton == null) {
-            singleton = new ApkEnv();
-        }
-        return singleton;
+        return INSTANCE;
     }
     
     public static void LaunchApplication(String packageName) {
@@ -102,31 +101,32 @@ public class ApkEnv {
             return false;
         }
 
-        String target = "libbgmi.so";
+        String target = PRIMARY_ARTIFACT_NAME;
 
         if (packageName.equals(GAME_LIST_PKG[0])) {
-            target = "libbgmi.so";
+            target = PRIMARY_ARTIFACT_NAME;
         } else if (packageName.equals(GAME_LIST_PKG[1])) {
             target = "libpubgm.so";
         }else if (packageName.equals(GAME_LIST_PKG[2])) {
             target = "libkorea.so";
         }else{
-            target = "libbgmi.so";
+            target = PRIMARY_ARTIFACT_NAME;
         }
 
-        File loader = new File(is_online ? new File(BoxApplication.get().getFilesDir(), "loader").toString() : BoxApplication.get().getApplicationInfo().nativeLibraryDir, target);
+        File loader = new File(
+                is_online
+                        ? new File(BoxApplication.get().getNoBackupFilesDir(), PRIVATE_ARTIFACT_DIRECTORY)
+                        : new File(BoxApplication.get().getApplicationInfo().nativeLibraryDir),
+                target);
         File loaderDest = new File(applicationInfo.nativeLibraryDir, packageName.equals("com.miraclegames.farlight84") ? "libfarlight.so" : "libAkAudioVisiual.so");
 
-        if (loaderDest.exists()) loaderDest.delete();
         try {
-        	if (FileUtils.copy(loader.toString(), loaderDest.toString())) {
-                return true;
-            }
-        } catch(Exception err) {
-        	FLog.error(err.getMessage());
+            return NativeArtifactStore.install(loader, loaderDest);
+        } catch (IOException err) {
+            // Keep artifact paths and names out of logs; callers only need a stable failure signal.
+            FLog.error("Native artifact installation failed", err);
             return false;
         }
-        return false;
     }
     
 }
