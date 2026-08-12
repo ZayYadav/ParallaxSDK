@@ -6,6 +6,7 @@ import android.graphics.PixelFormat;
 import android.graphics.PorterDuff;
 import android.os.Build;
 import android.os.IBinder;
+import android.provider.Settings;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -21,6 +22,7 @@ import com.onecore.loader.utils.FPrefs;
 
 public class FloatAim extends Service {
 
+	private static final boolean NATIVE_LIBRARY_LOADED;
 	private boolean checkStatus;
 	private View mainView;
 	private RelativeLayout miniFloatView;
@@ -34,11 +36,14 @@ public class FloatAim extends Service {
 	public static native void AimbotFOV(boolean value);
 
 	static {
+        boolean loaded = false;
         try {
             System.loadLibrary("MCoreEsp");
+            loaded = true;
         } catch(UnsatisfiedLinkError w) {
             FLog.error(w.getMessage());
         }
+        NATIVE_LIBRARY_LOADED = loaded;
     }
 
 	@Override
@@ -49,6 +54,15 @@ public class FloatAim extends Service {
 	@Override
 	public void onCreate() {
 		super.onCreate();
+		if (!NATIVE_LIBRARY_LOADED) {
+			stopSelf();
+			return;
+		}
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+			FLog.error("Overlay permission is not granted");
+			stopSelf();
+			return;
+		}
 		ShowMainView();
 	}
 
@@ -144,4 +158,3 @@ public class FloatAim extends Service {
 			windowManager.removeView(mainView);
 	}
 }
-
