@@ -326,7 +326,7 @@ public class LoginActivity extends AppCompatActivity {
             getKeyBtn.setBackgroundResource(R.drawable.premium_button_border);
             getKeyBtn.setOnClickListener(v -> {
                 Intent intent = new Intent(Intent.ACTION_VIEW);
-                intent.setData(Uri.parse("https://t.me/OneCoreEngine"));
+                intent.setData(Uri.parse(getString(R.string.key_portal_url)));
                 startActivity(intent);
             });
             
@@ -465,7 +465,7 @@ public class LoginActivity extends AppCompatActivity {
         TextView timg = findViewById(R.id.telegram);
         timg.setOnClickListener(view -> {
             Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.setData(Uri.parse("https://t.me/OneCoreEngine"));
+            intent.setData(Uri.parse(getString(R.string.key_portal_url)));
             startActivity(intent);
         });
     }
