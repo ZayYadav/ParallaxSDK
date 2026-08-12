@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">OneCore Loader</string>
+    <string name="app_name">OneCore Engine</string>
     <string name="GODL_NAME">Welcome</string>
     <string name="GODL_NAME1"> ONECORE ENGINE</string>
     <string name="welcome_to">Please Enter </string>

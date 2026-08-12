@@ -60,19 +60,10 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         
         ndk {
-            // These are the ABIs for which curl/OpenSSL prebuilts are present.
-            abiFilters "armeabi-v7a", "arm64-v8a"
+            // OneCore Engine APKs intentionally target modern 64-bit ARM devices only.
+            abiFilters "arm64-v8a"
         }
     
-    }
-    splits {
-        abi {
-            enable true
-            reset()
-            include 'armeabi-v7a', 'arm64-v8a'
-            // Smaller phone-specific APKs plus a universal compatibility APK.
-            universalApk true
-        }
     }
     
     buildTypes {

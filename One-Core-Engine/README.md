@@ -8,13 +8,13 @@ Android loader application for the RIYAZ-VIP SDK.
 | --- | --- |
 | Android runtime | API 24 through API 36 |
 | Compile/target SDK | API 36 |
-| Loader ABIs | `armeabi-v7a`, `arm64-v8a` |
+| Loader ABI | `arm64-v8a` only |
 | Native page sizes | 4 KB and 16 KB |
 | Build toolchain | AGP 8.11.1, Gradle 8.13, JDK 17, NDK 27.2 |
 
-The loader is intentionally limited to ARM because its checked-in curl and
-OpenSSL prebuilts are available only for 32-bit and 64-bit ARM. Add matching
-prebuilts before enabling x86 or x86_64.
+The OneCore Engine loader intentionally produces a single 64-bit ARM APK. Its
+SDK AAR can still contain additional architectures, but the installable loader
+does not package 32-bit ARM, x86, or x86_64 native libraries.
 
 ## Native artifact contract
 
@@ -52,8 +52,8 @@ The CI workflow performs both stages automatically.
   AndroidX manifests for modern Android compatibility.
 - Signature or VPN policy failures now stop at a non-cancelable warning in both
   the splash entry point and direct login flow.
-- APK builds produce smaller ARM32 and ARM64 packages alongside a universal ARM
-  compatibility APK. Install the matching ABI package when download size matters.
+- APK builds package only `arm64-v8a`, reducing native payload size and excluding
+  32-bit devices by design.
 
 These controls are defense in depth; no client-side Android application can be
 made impossible to inspect or modify. Server-side authorization should remain
