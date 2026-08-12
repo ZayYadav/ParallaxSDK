@@ -9,14 +9,57 @@ on:
     paths:
       - "BLACK-OPNE/**"
       - "One-Core-Engine/**"
+      - "backend-api/**"
       - ".github/workflows/build-loader-apk.yml"
   pull_request:
     paths:
       - "BLACK-OPNE/**"
       - "One-Core-Engine/**"
+      - "backend-api/**"
       - ".github/workflows/build-loader-apk.yml"
 
 jobs:
+  backend:
+    name: Validate PHP integrity backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend-api
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify PHP and Composer
+        run: |
+          php --version
+          composer --version
+          php -m | grep -E 'curl|json|openssl|PDO|pdo_mysql'
+
+      - name: Validate Composer and install locked dependencies
+        run: |
+          composer validate --strict
+          composer install --no-dev --optimize-autoloader --no-interaction
+          composer audit --no-dev
+
+      - name: Lint PHP sources
+        run: find . -path ./vendor -prune -o -name '*.php' -print0 | xargs -0 -n1 php -l
+
+      - name: Test crypto, JWT, and request binding
+        run: php tests/run.php
+
+      - name: Package deployable PHP backend
+        run: |
+          zip -r ../onecore-integrity-backend.zip . \
+            -x 'tests/*' 'config.local.php' 'runtime/*' '.gitignore'
+
+      - name: Upload deployable PHP backend
+        uses: actions/upload-artifact@v4
+        with:
+          name: onecore-integrity-backend
+          path: onecore-integrity-backend.zip
+          if-no-files-found: error
+
   build:
     name: Build SDK AAR and Loader APK
     runs-on: ubuntu-latest
