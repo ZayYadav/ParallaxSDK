@@ -53,6 +53,10 @@ public final class HostedLicenseClient {
 
     public String activate(String activationKey) {
         try {
+            AppIntegrity.Verification integrity = AppIntegrity.verify(context);
+            if (!integrity.isValid()) {
+                return "Application signature verification failed";
+            }
             String normalizedKey = activationKey.trim().toUpperCase(Locale.US);
             long timestamp = System.currentTimeMillis() / 1000L;
             String nonce = randomNonce();

@@ -21,8 +21,8 @@ LOCAL_MODULE := ParallaxLoader
 
 LOCAL_SRC_FILES :=  main.cpp \
 
-LOCAL_C_INCLUDES := backends/external/curl-android-$(TARGET_ARCH_ABI)/include
-LOCAL_C_INCLUDES += backends/external/openssl-android-$(TARGET_ARCH_ABI)/include
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/backends/external/curl-android-$(TARGET_ARCH_ABI)/include
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/backends/external/openssl-android-$(TARGET_ARCH_ABI)/include
 
 # Code optimization
 # -std=c++17 is required to support AIDE app with NDK support

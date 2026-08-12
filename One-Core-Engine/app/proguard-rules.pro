@@ -52,3 +52,8 @@
 # Keep SLF4J logging classes
 -keep class org.slf4j.** { *; }
 -dontwarn org.slf4j.**
+
+# JNI resolves this method by its exact class and member names.
+-keep class com.onecore.loader.security.NativeSigningVerifier {
+    private static native boolean verifySigningIdentity(byte[][], byte[][], java.lang.String, java.lang.String);
+}

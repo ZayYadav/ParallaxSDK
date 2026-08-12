@@ -78,6 +78,7 @@ jobs:
       STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      ONECORE_ALLOWED_SIGNING_SHA256: ${{ secrets.ONECORE_ALLOWED_SIGNING_SHA256 }}
 
     steps:
       - name: Checkout repository

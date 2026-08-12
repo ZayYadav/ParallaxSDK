@@ -15,6 +15,9 @@ def oneCoreApiBaseUrl = providers.gradleProperty('onecoreApiBaseUrl')
 def oneCoreApiEncryptionKey = providers.gradleProperty('onecoreApiEncryptionKey')
         .orElse(System.getenv('ONECORE_API_ENCRYPTION_KEY') ?: '')
         .get()
+def oneCoreAllowedSigningSha256 = providers.gradleProperty('onecoreAllowedSigningSha256')
+        .orElse(System.getenv('ONECORE_ALLOWED_SIGNING_SHA256') ?: '')
+        .get()
 def javaString = { String value -> '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"' }
 
 
@@ -83,7 +86,8 @@ android {
             shrinkResources false
             minifyEnabled false
             signingConfig signingConfigs.debug
-            buildConfigField "String", "EXPECTED_SIGNATURE_SHA256", "\"${getSigningCertificateSha256(signingConfigs.debug)}\""
+            def debugSigningSha256 = oneCoreAllowedSigningSha256 ?: getSigningCertificateSha256(signingConfigs.debug)
+            buildConfigField "String", "EXPECTED_SIGNATURE_SHA256", javaString(debugSigningSha256)
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
 
@@ -93,7 +97,8 @@ android {
             shrinkResources true
             minifyEnabled true
             signingConfig signingConfigs.release
-            buildConfigField "String", "EXPECTED_SIGNATURE_SHA256", "\"${getSigningCertificateSha256(signingConfigs.release)}\""
+            def releaseSigningSha256 = oneCoreAllowedSigningSha256 ?: getSigningCertificateSha256(signingConfigs.release)
+            buildConfigField "String", "EXPECTED_SIGNATURE_SHA256", javaString(releaseSigningSha256)
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
@@ -132,6 +137,7 @@ android {
 
 dependencies {
     implementation fileTree(dir: "libs", include: ["*.jar", "*.aar"])
+    implementation 'com.android.tools.build:apksig:8.11.1'
     implementation 'androidx.appcompat:appcompat:1.7.1'
     implementation 'com.google.android.material:material:1.14.0'
     implementation 'net.lingala.zip4j:zip4j:2.11.5'

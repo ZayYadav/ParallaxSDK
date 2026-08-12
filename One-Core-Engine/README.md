@@ -44,9 +44,21 @@ The CI workflow performs both stages automatically.
 - Runtime status shows the Android API level and the device ABI list.
 - License values are encrypted with AES-GCM using an app-scoped Android
   Keystore key. Existing plaintext values are migrated after the first launch.
-- Release builds validate the installed signing-certificate SHA-256 digest,
-  minify resources and code, remove verbose logs, and block screen capture on
-  sensitive activities.
+- Release builds validate the exact active signing-certificate set across three
+  independent paths: PackageManager metadata, a raw-file cryptographic APK
+  verification using Android `apksig`, and native SHA-256 hashing of the raw
+  signer certificates. Package/UID, canonical source path, APK structure,
+  signing-block, and archive signer mismatches all fail closed.
+- Signing identity is checked before SDK initialization and licensing, then
+  checked again whenever an activity returns to the foreground. Invalid builds
+  remain behind a non-cancelable security warning.
+- Configure the production certificate independently with Gradle property
+  `onecoreAllowedSigningSha256` or CI secret
+  `ONECORE_ALLOWED_SIGNING_SHA256`. Multiple approved rotation certificates
+  may be comma-separated. If omitted, the build derives the digest from its
+  configured keystore.
+- Release builds minify resources and code, remove verbose logs, and block
+  screen capture on sensitive activities.
 - Tapjacking protection rejects obscured touches on the license input, while
   WorkManager and notification registrations are delegated to their current
   AndroidX manifests for modern Android compatibility.
