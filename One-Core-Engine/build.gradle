@@ -6,8 +6,8 @@ buildscript {
         maven { url 'https://jitpack.io' }
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.1.0'
-        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22'
+        classpath 'com.android.tools.build:gradle:8.10.0'
+        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.20'
         classpath 'org.lsposed.lsparanoid:gradle-plugin:0.5.2'
         classpath "com.github.CodingGay:BlackObfuscator-ASPlugin:3.9"
     }
@@ -28,13 +28,12 @@ task clean(type: Delete) {
 
 ext {
     minSdk = 24
-    compileSdkVersion = 34
-    buildToolsVersion = '34.0.0'
-    targetSdkVersion = 28
+    compileSdkVersion = 35
+    targetSdkVersion = 35
 
     versionName = '1.0'
     versionCode = 1
     
     LoaderPkg = 'com.onecore.loader'
-    ndkVersion = "24.0.8215888"
+    ndkVersion = "27.2.12479018"
 }

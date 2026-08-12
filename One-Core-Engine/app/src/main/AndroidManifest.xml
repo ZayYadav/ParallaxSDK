@@ -17,6 +17,7 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Display notifications as full screen activities on a locked device -->
     <uses-permission android:name="${applicationId}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
     
@@ -139,8 +140,8 @@
             </intent-filter>
         </receiver>
 
-        <service android:name=".floating.FloatingService" android:stopWithTask="true" />
-        <service android:name=".floating.Overlay" android:stopWithTask="true" />
+        <service android:name=".floating.FloatingService" android:exported="false" android:stopWithTask="true" />
+        <service android:name=".floating.Overlay" android:exported="false" android:stopWithTask="true" />
 
     </application>
 </manifest>

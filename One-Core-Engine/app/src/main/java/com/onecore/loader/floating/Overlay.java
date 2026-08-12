@@ -9,6 +9,7 @@ import android.graphics.Canvas;
 import android.graphics.PixelFormat;
 import android.os.Build;
 import android.os.IBinder;
+import android.provider.Settings;
 import android.view.Gravity;
 import android.view.ViewConfiguration;
 import android.view.WindowManager;
@@ -21,12 +22,17 @@ import java.io.IOException;
 
 public class Overlay extends Service {
 
+    private static final boolean NATIVE_LIBRARY_LOADED;
+
     static {
+        boolean loaded = false;
         try {
             System.loadLibrary("client");
+            loaded = true;
         } catch(UnsatisfiedLinkError w) {
             FLog.error(w.getMessage());
         }
+        NATIVE_LIBRARY_LOADED = loaded;
     }
     
     public FPrefs getPref() {
@@ -53,6 +59,15 @@ public class Overlay extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        if (!NATIVE_LIBRARY_LOADED) {
+            stopSelf();
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            FLog.error("Overlay permission is not granted");
+            stopSelf();
+            return;
+        }
         ctx = this;
 		Start();
         windowManager = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
@@ -63,8 +78,10 @@ public class Overlay extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        Close();
-        if (overlayView != null) {
+        if (NATIVE_LIBRARY_LOADED) {
+            Close();
+        }
+        if (overlayView != null && windowManager != null) {
             windowManager.removeView(overlayView);
             overlayView = null;
         }

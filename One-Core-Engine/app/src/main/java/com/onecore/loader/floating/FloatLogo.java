@@ -10,6 +10,7 @@ import android.graphics.PixelFormat;
 import android.os.Build;
 import android.os.Vibrator;
 import android.os.IBinder;
+import android.provider.Settings;
 import android.view.GestureDetector;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -36,6 +37,7 @@ import java.io.InputStream;
 
 public class FloatLogo extends Service {
 
+    private static final boolean NATIVE_LIBRARY_LOADED;
     private WindowManager mWindowManager;
     private View mFloatingView;
 
@@ -43,11 +45,14 @@ public class FloatLogo extends Service {
     }
 
     static {
+        boolean loaded = false;
         try {
             System.loadLibrary("MCoreEsp");
+            loaded = true;
         } catch(UnsatisfiedLinkError w) {
             FLog.error(w.getMessage());
         }
+        NATIVE_LIBRARY_LOADED = loaded;
     }
 
 	public native void SettingMemory(int code, boolean value);
@@ -72,6 +77,15 @@ public class FloatLogo extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        if (!NATIVE_LIBRARY_LOADED) {
+            stopSelf();
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            FLog.error("Overlay permission is not granted");
+            stopSelf();
+            return;
+        }
         createOver();
         logoView = mFloatingView.findViewById(R.id.relativeLayoutParent);
         espView = mFloatingView.findViewById(R.id.espView);
