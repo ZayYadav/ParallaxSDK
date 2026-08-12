@@ -1,7 +1,11 @@
 #include <jni.h>
 #include <string>
+#include <vector>
+#include <cstring>
 #include <obfuscate.h>
 #include <sys/stat.h>
+#include <openssl/crypto.h>
+#include <openssl/sha.h>
 #include "backends/ModsLoader.h"
 #include "ESP.h"
 #include "Hacks.h"
@@ -15,6 +19,108 @@ extern "C"
 JNIEXPORT jstring JNICALL
 com_onecore_loader_activity_LoginActivity_GetKey(JNIEnv *env, jclass clazz) {
     return env->NewStringUTF(OBFUSCATE("https://t.me/ParallaxOwner")); //telegram link
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_onecore_loader_security_NativeSigningVerifier_verifySigningIdentity(
+        JNIEnv *env,
+        jclass,
+        jobjectArray allowedDigests,
+        jobjectArray certificates,
+        jstring actualPackage,
+        jstring expectedPackage) {
+    if (allowedDigests == nullptr || certificates == nullptr
+            || actualPackage == nullptr || expectedPackage == nullptr) {
+        return JNI_FALSE;
+    }
+
+    const char *actual = env->GetStringUTFChars(actualPackage, nullptr);
+    const char *expected = env->GetStringUTFChars(expectedPackage, nullptr);
+    if (actual == nullptr || expected == nullptr) {
+        if (actual != nullptr) env->ReleaseStringUTFChars(actualPackage, actual);
+        if (expected != nullptr) env->ReleaseStringUTFChars(expectedPackage, expected);
+        return JNI_FALSE;
+    }
+    const bool packageMatches = std::strcmp(actual, expected) == 0;
+    env->ReleaseStringUTFChars(actualPackage, actual);
+    env->ReleaseStringUTFChars(expectedPackage, expected);
+    if (!packageMatches) {
+        return JNI_FALSE;
+    }
+
+    const jsize allowedCount = env->GetArrayLength(allowedDigests);
+    const jsize certificateCount = env->GetArrayLength(certificates);
+    if (allowedCount <= 0 || certificateCount <= 0) {
+        return JNI_FALSE;
+    }
+
+    std::vector<std::vector<unsigned char>> allowed;
+    allowed.reserve(static_cast<size_t>(allowedCount));
+    for (jsize index = 0; index < allowedCount; ++index) {
+        auto digestArray = static_cast<jbyteArray>(
+                env->GetObjectArrayElement(allowedDigests, index));
+        if (digestArray == nullptr || env->GetArrayLength(digestArray) != SHA256_DIGEST_LENGTH) {
+            if (digestArray != nullptr) env->DeleteLocalRef(digestArray);
+            return JNI_FALSE;
+        }
+        std::vector<unsigned char> digest(SHA256_DIGEST_LENGTH);
+        env->GetByteArrayRegion(
+                digestArray,
+                0,
+                SHA256_DIGEST_LENGTH,
+                reinterpret_cast<jbyte *>(digest.data()));
+        env->DeleteLocalRef(digestArray);
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            return JNI_FALSE;
+        }
+        allowed.push_back(std::move(digest));
+    }
+
+    for (jsize index = 0; index < certificateCount; ++index) {
+        auto certificateArray = static_cast<jbyteArray>(
+                env->GetObjectArrayElement(certificates, index));
+        if (certificateArray == nullptr) {
+            return JNI_FALSE;
+        }
+        const jsize certificateLength = env->GetArrayLength(certificateArray);
+        if (certificateLength <= 0) {
+            env->DeleteLocalRef(certificateArray);
+            return JNI_FALSE;
+        }
+
+        std::vector<unsigned char> certificate(static_cast<size_t>(certificateLength));
+        env->GetByteArrayRegion(
+                certificateArray,
+                0,
+                certificateLength,
+                reinterpret_cast<jbyte *>(certificate.data()));
+        env->DeleteLocalRef(certificateArray);
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            return JNI_FALSE;
+        }
+
+        unsigned char actualDigest[SHA256_DIGEST_LENGTH];
+        if (SHA256(certificate.data(), certificate.size(), actualDigest) == nullptr) {
+            return JNI_FALSE;
+        }
+
+        bool signerAllowed = false;
+        for (const auto &allowedDigest : allowed) {
+            signerAllowed |= CRYPTO_memcmp(
+                    actualDigest,
+                    allowedDigest.data(),
+                    SHA256_DIGEST_LENGTH) == 0;
+        }
+        OPENSSL_cleanse(actualDigest, sizeof(actualDigest));
+        OPENSSL_cleanse(certificate.data(), certificate.size());
+        if (!signerAllowed) {
+            return JNI_FALSE;
+        }
+    }
+
+    return JNI_TRUE;
 }
 
 extern "C" JNIEXPORT void JNICALL

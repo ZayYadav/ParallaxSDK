@@ -10,6 +10,7 @@ import com.onecore.loader.utils.FLog;
 import com.onecore.loader.utils.NetworkConnection;
 import com.onecore.loader.utils.FPrefs;
 import com.onecore.loader.security.SecurityThreatDetector;
+import com.onecore.loader.security.IntegrityEnforcer;
 import com.google.android.material.color.DynamicColors;
 import com.topjohnwu.superuser.Shell;
 import java.io.IOException;
@@ -81,6 +82,10 @@ public class BoxApplication extends Application {
     public void onCreate() {
         super.onCreate();
         gApp = this;
+        if (!IntegrityEnforcer.install(this)) {
+            FLog.error("Application signing identity validation failed");
+            return;
+        }
         if (SecurityThreatDetector.detect(this) != SecurityThreatDetector.Threat.NONE) {
             FLog.error("Application security policy validation failed");
             return;
