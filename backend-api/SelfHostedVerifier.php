@@ -175,10 +175,28 @@ final class SelfHostedVerifier
         return hash('sha256', self::normalizeActivationKey($key));
     }
 
-    public static function generateActivationKey(): string
+    public static function normalizeActivationPrefix(string $prefix): string
     {
+        $normalized = strtoupper(trim($prefix));
+        if (preg_match('/^[A-Z0-9]{2,8}$/D', $normalized) !== 1) {
+            throw new InvalidArgumentException('Key prefix must be 2-8 letters or digits');
+        }
+        return $normalized;
+    }
+
+    public static function isActivationKeyFormat(string $key): bool
+    {
+        return preg_match(
+            '/^[A-Z0-9]{2,8}-(?:[A-F0-9]{4}-){7}[A-F0-9]{4}$/D',
+            self::normalizeActivationKey($key)
+        ) === 1;
+    }
+
+    public static function generateActivationKey(string $prefix = '5OC'): string
+    {
+        $prefix = self::normalizeActivationPrefix($prefix);
         $hex = strtoupper(bin2hex(random_bytes(16)));
-        return 'OC-' . implode('-', str_split($hex, 4));
+        return $prefix . '-' . implode('-', str_split($hex, 4));
     }
 
     public static function deviceIdForPublicKey(string $publicKeyDer): string

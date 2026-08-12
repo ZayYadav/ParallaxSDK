@@ -52,13 +52,15 @@ does not claim to be equivalent to Google-signed Play app recognition.
 ## Files
 
 - `install.sql` - complete schema for a fresh database
-- `migrate_self_hosted.sql` - one-time upgrade for an existing deployment
+- `migrate_self_hosted.sql` - one-time self-hosted licensing upgrade
+- `migrate_rbac.sql` - one-time owner/admin/user and balance upgrade
 - `config.php` - environment/local configuration loader
 - `Database.php` - strict PDO wrapper and DB-backed replay/rate limiting
 - `CryptoHelper.php` - AES-256-GCM envelopes and freshness validation
 - `JWTHelper.php` - HS256 license issue/verification
 - `IntegrityVerifier.php` - service-account OAuth and Google token decoding
 - `SelfHostedVerifier.php` - device public-key proof and release-signing checks
+- `AccountManager.php` - role authorization, referrals, balances, and key ownership
 - `index.php` - encrypted REST router
 - `admin_dashboard.php` - session/CSRF-protected admin UI
 - `generate_secrets.php` - CLI-only cryptographic secret generator
@@ -81,15 +83,15 @@ generated `vendor/` folder with the PHP files.
 Import `install.sql` from phpMyAdmin, or run:
 
 ```bash
-mysql -u root -p < install.sql
+mysql -u root -p onecore_integrity < install.sql
 ```
 
 Create a dedicated least-privilege MySQL user for this database. Do not use the
 hosting root account in `config.local.php`.
 
 For a database that was already created from an older ZIP, select that database
-in phpMyAdmin and import `migrate_self_hosted.sql` once. Do not re-import
-`install.sql` over a live deployment.
+in phpMyAdmin and import `migrate_self_hosted.sql`, then `migrate_rbac.sql`, once
+each. Do not re-import `install.sql` over a live deployment.
 
 ## 3. Generate secrets
 
@@ -127,11 +129,13 @@ account, D-U-N-S number, or Play Console fee.
    changes on a fresh runner.
 3. Build the signed release APK and obtain its signing SHA-256. Gradle derives
    the same fingerprint into `BuildConfig.EXPECTED_SIGNATURE_SHA256`.
-4. Open `admin_dashboard.php`, enter the release SHA-256 under **Signing
-   certificate**, and keep **Verification mode** set to **Self-hosted**.
-5. Create an activation key in the dashboard. The plaintext key is shown once;
+4. Open `admin_dashboard.php`. On first run, prove server control with
+   `ADMIN_API_KEY` and create the initial owner username/password.
+5. Enter the release SHA-256 under **Signing certificate**, and keep
+   **Verification mode** set to **Self-hosted**.
+6. Create a unique `5OC-…` activation key. The plaintext key is shown once;
    only its SHA-256 hash remains in MySQL.
-6. Enter that activation key in the Android loader. The dashboard will show the
+7. Enter that activation key in the Android loader. The dashboard will show the
    bound device, request result, IP address, token expiry, and revocation state.
 
 The Android API URL is already configured as:
@@ -139,6 +143,20 @@ The Android API URL is already configured as:
 ```text
 https://onintigirty.parallaxserver.online
 ```
+
+## Dashboard roles, referrals, and balances
+
+- **Owner** has full policy, account, referral, balance, key, and device control.
+  Owner key generation does not consume balance.
+- **Admin** can monitor activity and manage keys, devices, certificates, and
+  policy, but cannot create referrals or change account balances.
+- **User** can generate, view, and revoke only their own activation keys.
+- Registration is closed by default. An owner creates an expiring referral URL
+  with an assigned role, starting balance, maximum uses, and expiry.
+- Each non-owner key generation atomically debits `key_cost_credits`. Only an
+  owner can add/remove credits, and every balance change is recorded.
+- Owners may use a 2-8 character alphanumeric branded key prefix. Keys remain
+  independently random and are stored only as SHA-256 hashes.
 
 ## 5. Configure Google Play Integrity (optional)
 
@@ -229,7 +247,7 @@ Decrypted `/verify` payload:
 
 ```json
 {
-  "activation_key": "OC-....",
+  "activation_key": "5OC-....",
   "device_id": "base64url-sha256-of-device-public-key",
   "timestamp": 1786500000,
   "nonce": "4eG5B9R2uLh2M4HPA8zqgQ",

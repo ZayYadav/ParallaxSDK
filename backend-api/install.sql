@@ -1,8 +1,5 @@
-CREATE DATABASE IF NOT EXISTS onecore_integrity
-  CHARACTER SET utf8mb4
-  COLLATE utf8mb4_unicode_ci;
-
-USE onecore_integrity;
+-- Import into the database selected in phpMyAdmin/cPanel. This file does not
+-- create or switch databases so it works with hosting-prefixed database names.
 
 CREATE TABLE IF NOT EXISTS devices (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -24,8 +21,72 @@ CREATE TABLE IF NOT EXISTS devices (
     KEY idx_devices_public_key_sha256 (device_public_key_sha256)
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS dashboard_users (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    username VARCHAR(32) NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    role ENUM('owner', 'admin', 'user') NOT NULL DEFAULT 'user',
+    balance_credits INT UNSIGNED NOT NULL DEFAULT 0,
+    referral_code CHAR(16) NOT NULL,
+    referred_by_user_id BIGINT UNSIGNED NULL,
+    status ENUM('active', 'suspended') NOT NULL DEFAULT 'active',
+    last_login_at DATETIME(6) NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
+        ON UPDATE CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_dashboard_users_username (username),
+    UNIQUE KEY uq_dashboard_users_referral (referral_code),
+    KEY idx_dashboard_users_role_status (role, status),
+    KEY idx_dashboard_users_referrer (referred_by_user_id),
+    CONSTRAINT fk_dashboard_users_referrer
+        FOREIGN KEY (referred_by_user_id) REFERENCES dashboard_users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS registration_invites (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    token_hash CHAR(64) NOT NULL,
+    token_prefix VARCHAR(16) NOT NULL,
+    created_by_user_id BIGINT UNSIGNED NOT NULL,
+    assigned_role ENUM('owner', 'admin', 'user') NOT NULL DEFAULT 'user',
+    initial_balance INT UNSIGNED NOT NULL DEFAULT 0,
+    max_uses SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+    use_count SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    expires_at DATETIME(6) NOT NULL,
+    status ENUM('active', 'revoked') NOT NULL DEFAULT 'active',
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_registration_invites_hash (token_hash),
+    KEY idx_registration_invites_status_expiry (status, expires_at),
+    KEY idx_registration_invites_creator (created_by_user_id),
+    CONSTRAINT fk_registration_invites_creator
+        FOREIGN KEY (created_by_user_id) REFERENCES dashboard_users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS balance_transactions (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id BIGINT UNSIGNED NOT NULL,
+    delta_credits INT NOT NULL,
+    balance_after INT UNSIGNED NOT NULL,
+    reason VARCHAR(200) NOT NULL,
+    actor_user_id BIGINT UNSIGNED NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    KEY idx_balance_transactions_user_time (user_id, created_at),
+    KEY idx_balance_transactions_actor (actor_user_id),
+    CONSTRAINT fk_balance_transactions_user
+        FOREIGN KEY (user_id) REFERENCES dashboard_users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_balance_transactions_actor
+        FOREIGN KEY (actor_user_id) REFERENCES dashboard_users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS license_keys (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    created_by_user_id BIGINT UNSIGNED NULL,
     key_hash CHAR(64) NOT NULL,
     key_prefix VARCHAR(16) NOT NULL,
     label VARCHAR(100) NOT NULL,
@@ -38,7 +99,11 @@ CREATE TABLE IF NOT EXISTS license_keys (
         ON UPDATE CURRENT_TIMESTAMP(6),
     PRIMARY KEY (id),
     UNIQUE KEY uq_license_keys_hash (key_hash),
-    KEY idx_license_keys_status_expiry (status, expires_at)
+    KEY idx_license_keys_status_expiry (status, expires_at),
+    KEY idx_license_keys_creator (created_by_user_id),
+    CONSTRAINT fk_license_keys_creator
+        FOREIGN KEY (created_by_user_id) REFERENCES dashboard_users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS integrity_logs (
@@ -133,6 +198,8 @@ INSERT INTO app_config (setting_key, setting_value) VALUES
     ('rate_limit_per_minute', '10'),
     ('allowed_cert_fingerprint', '"REPLACE_WITH_RELEASE_SIGNING_SHA256"'),
     ('verification_mode', '"self_hosted"'),
+    ('default_key_prefix', '"5OC"'),
+    ('key_cost_credits', '1'),
     ('required_device_verdict', '"MEETS_DEVICE_INTEGRITY"'),
     ('require_licensed', 'false')
 ON DUPLICATE KEY UPDATE setting_key = VALUES(setting_key);

@@ -33,7 +33,7 @@ public final class HostedLicenseClient {
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final Pattern ACTIVATION_KEY_PATTERN = Pattern.compile(
-            "^OC-(?:[A-F0-9]{4}-){7}[A-F0-9]{4}$");
+            "^[A-Z0-9]{2,8}-(?:[A-F0-9]{4}-){7}[A-F0-9]{4}$");
     private static final String LICENSE_TOKEN = "HOSTED_LICENSE_TOKEN";
     public static final String LICENSE_EXPIRES_AT = "HOSTED_LICENSE_EXPIRES_AT";
 
@@ -62,7 +62,7 @@ public final class HostedLicenseClient {
             }
             String normalizedKey = normalizeActivationKey(activationKey);
             if (!isSupportedActivationKey(normalizedKey)) {
-                return "Use an OC- activation key created in OneCore Integrity";
+                return "Use an activation key created in OneCore Integrity";
             }
             long timestamp = System.currentTimeMillis() / 1000L;
             String nonce = randomNonce();

@@ -414,7 +414,7 @@ public class LoginActivity extends AppCompatActivity {
                 return;
             }
             if (!HostedLicenseClient.isSupportedActivationKey(key)) {
-                inputKey.setError("Use an OC- key created in OneCore Integrity");
+                inputKey.setError("Use a key created in OneCore Integrity");
                 inputKey.requestFocus();
                 return;
             }

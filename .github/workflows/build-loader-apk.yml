@@ -22,6 +22,19 @@ jobs:
   backend:
     name: Validate PHP integrity backend
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: onecore_ci_root
+          MYSQL_DATABASE: onecore_integrity
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ponecore_ci_root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
     defaults:
       run:
         working-directory: backend-api
@@ -47,6 +60,17 @@ jobs:
 
       - name: Test crypto, JWT, and request binding
         run: php tests/run.php
+
+      - name: Test account roles, referrals, balances, and key ownership
+        env:
+          TEST_DB_HOST: 127.0.0.1
+          TEST_DB_PORT: 3306
+          TEST_DB_NAME: onecore_integrity
+          TEST_DB_USER: root
+          TEST_DB_PASSWORD: onecore_ci_root
+        run: |
+          mysql -h 127.0.0.1 -uroot -ponecore_ci_root onecore_integrity < install.sql
+          php tests/account_integration.php
 
       - name: Package deployable PHP backend
         run: |
