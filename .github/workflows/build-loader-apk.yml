@@ -41,7 +41,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Verify PHP and Composer
         run: |
@@ -78,7 +78,7 @@ jobs:
             -x 'tests/*' 'config.local.php' 'runtime/*' '.gitignore'
 
       - name: Upload deployable PHP backend
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: onecore-integrity-backend
           path: onecore-integrity-backend.zip
@@ -106,16 +106,16 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Install Android packages
         run: |
@@ -216,28 +216,28 @@ jobs:
             | tee "${BUILD_LOG_DIR}/loader-signing-certificate.txt"
 
       - name: Upload SDK AAR
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: sdk-release-aar
           path: ${{ env.SDK_PROJECT_DIR }}/${{ env.SDK_MODULE_DIR }}/build/outputs/aar/*-release.aar
           if-no-files-found: error
 
       - name: Upload loader release APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: loader-release-apk
           path: ${{ env.LOADER_PROJECT_DIR }}/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
 
       - name: Upload loader debug APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: loader-debug-apk
           path: ${{ env.LOADER_PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
       - name: Upload release signing certificate
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: loader-signing-certificate
           path: ${{ env.BUILD_LOG_DIR }}/loader-signing-certificate.txt
@@ -245,7 +245,7 @@ jobs:
 
       - name: Upload build logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: build-logs
           path: ${{ env.BUILD_LOG_DIR }}/*.log
