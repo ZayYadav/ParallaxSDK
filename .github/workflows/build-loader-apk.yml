@@ -26,7 +26,7 @@ jobs:
       SDK_MODULE: RIYAZ-VIP
       LOADER_PROJECT_DIR: One-Core-Engine
       LOADER_AAR_PATH: One-Core-Engine/app/libs/Bcore-release.aar
-      NDK_VERSION: 24.0.8215888
+      NDK_VERSION: 27.2.12479018
       BUILD_LOG_DIR: build-logs
 
     steps:
@@ -45,8 +45,8 @@ jobs:
       - name: Install Android packages
         run: |
           sdkmanager --install \
-            "platforms;android-34" \
-            "build-tools;34.0.0" \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
             "ndk;${NDK_VERSION}"
 
       - name: Configure local Android SDK paths
