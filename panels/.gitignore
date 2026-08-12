@@ -1,0 +1,24 @@
+# Private configuration
+**/.env
+**/.env.local
+**/.env.production
+**/config.local.php
+**/sdk-panel-config.php
+
+# Runtime and generated data
+**/writable/session/*
+**/writable/cache/*
+**/writable/logs/*
+**/writable/uploads/*
+**/uploads/*
+**/cache/*
+**/logs/*
+**/*.log
+**/hit.txt
+**/Newkeys.txt
+
+# Local dependencies and editor files
+**/vendor/
+**/.idea/
+**/.vscode/
+**/.DS_Store
