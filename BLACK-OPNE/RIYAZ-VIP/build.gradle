@@ -6,28 +6,29 @@ plugins {
 
 android {
 
-    compileSdkVersion 34
-    buildToolsVersion '34.0.0'
+    compileSdk rootProject.ext.compileSdk
+    buildToolsVersion rootProject.ext.buildToolsVersion
 
     aidlPackagedList "android/app/IServiceConnection.aidl"
     aidlPackagedList "android/accounts/IAccountManagerResponse.aidl"
 
     defaultConfig {
-        minSdkVersion 24
-        targetSdkVersion 28
-        versionCode 1
-        versionName "1.0"
+        minSdk rootProject.ext.minSdk
+        targetSdk rootProject.ext.targetSdk
+        versionCode rootProject.ext.versionCode
+        versionName rootProject.ext.versionName
         consumerProguardFiles 'proguard.txt'
 
         ndk {
-            abiFilters "arm64-v8a"//, "armeabi-v7a"
+            // Ship every ABI supported by current Android devices and emulators.
+            abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
         }
     }
     
     buildTypes {
     
         debug {
-            minifyEnabled true
+            minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     
@@ -45,38 +46,35 @@ android {
     
     compileOptions {
         encoding "UTF-8"
-    }
-    
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
     
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "17"
     }
 
     buildFeatures {
         aidl true
         prefab true
+        buildConfig true
     }
 
     testOptions {
         unitTests.returnDefaultValues = true
     }
 
-    lintOptions {
+    lint {
         checkReleaseBuilds false
         abortOnError false
         warningsAsErrors false
         disable "UnusedResources", 'RestrictedApi'
-        textOutput "stdout"
         textReport false
-        check 'NewApi', 'InlinedApi'
+        checkOnly += ['NewApi', 'InlinedApi']
     }
 
     namespace "top.niunaijun.blackbox"
-    ndkVersion '24.0.8215888'
+    ndkVersion rootProject.ext.ndkVersion
     
     
 }
@@ -88,7 +86,7 @@ tasks.withType(Javadoc) {
 }
 
 dependencies {
-    implementation 'androidx.appcompat:appcompat:1.2.0'
+    implementation 'androidx.appcompat:appcompat:1.7.1'
     //implementation 'com.android.tools.build:apksig:4.2.0'
     //implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:6.1'
     implementation 'com.github.tiann:FreeReflection:3.2.2'

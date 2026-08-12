@@ -52,12 +52,6 @@ public class CrashActivity extends AppCompatActivity {
     }
 
     @Override
-    public void onBackPressed() {
-        super.onBackPressed();
-        finish();
-    }
-
-    @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         MenuItem close = menu.add(getString(R.string.close));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">OneCore Loader</string>
+    <string name="app_name">OneCore Engine</string>
     <string name="GODL_NAME">Welcome</string>
     <string name="GODL_NAME1"> ONECORE ENGINE</string>
     <string name="welcome_to">Please Enter </string>
@@ -18,6 +18,10 @@
     <string name="title_hint">Title</string>
     <string name="exit">Exit</string>
     <string name="close">Close</string>
+    <string name="close_app">Close app</string>
+    <string name="security_warning_title">Security warning</string>
+    <string name="security_warning_signature">This installation failed signature verification. Install the official signed build.</string>
+    <string name="security_warning_vpn">A VPN connection is active. Disable the VPN before continuing.</string>
     <string name="copy">copy</string>
     <string name="app_version_code">4.2.1</string>
     <string name="update_available">Update is available, please download it</string>

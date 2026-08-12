@@ -1,389 +1,326 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:gravity="center_horizontal"
-    android:orientation="vertical"
-    android:background="#ff0c0f15"
-    android:padding="7.0dip"
-    android:layout_width="fill_parent"
-    android:layout_height="fill_parent">
-    
-    <!-- Settings Icon -->
-    <ImageView
-        android:id="@+id/btn_settings"
-        android:layout_width="80.0dip"
-        android:layout_height="80.0dip"
-        android:src="@drawable/ic_launcher"
-        android:layout_marginTop="5dp"
-        android:layout_marginBottom="5dp"
-        android:scaleType="centerCrop"
-        android:background="@drawable/ios_icon_bg"
-        android:padding="8dp"/>
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/premium_background"
+    android:clipToPadding="false"
+    android:fillViewport="true">
 
-
-    <!-- Premium Header with Timer -->
     <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:background="@drawable/ios_header_bg"
-        android:padding="8.0dip"
-        android:layout_width="fill_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="8dp">
-
-        <TextView
-            android:textSize="20.0sp"
-            android:textColor="#ffffd700"
-            android:gravity="center"
-            android:layout_gravity="center"
-            android:id="@+id/PremiumFileManager"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Your Premium Subscription Ends On"
-            android:fontFamily="@font/acme"
-            android:letterSpacing="0.05"
-            android:shadowColor="#33FFD700"
-            android:shadowDx="1"
-            android:shadowDy="1"
-            android:shadowRadius="3"/>
-
-        <!-- iOS Style Timer - Clean Design -->
-        <LinearLayout
-            android:gravity="center"
-            android:orientation="horizontal"
-            android:layout_width="fill_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:padding="8dp">
-
-            <LinearLayout
-                android:gravity="center"
-                android:orientation="vertical"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1">
-
-                <TextView
-                    android:textSize="28.0sp"
-                    android:textColor="#ffffd700"
-                    android:gravity="center"
-                    android:id="@+id/tv_d"
-                    android:layout_width="fill_parent"
-                    android:layout_height="wrap_content"
-                    android:text="00"
-                    android:fontFamily="@font/acme"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.05"/>
-
-                <TextView
-                    android:textSize="10.0sp"
-                    android:textColor="#ffb0bec5"
-                    android:gravity="center"
-                    android:layout_width="fill_parent"
-                    android:layout_height="wrap_content"
-                    android:text="DAY"
-                    android:textAllCaps="true"
-                    android:fontFamily="@font/acme"/>
-
-            </LinearLayout>
-
-            <TextView
-                android:textSize="28.0sp"
-                android:textStyle="bold"
-                android:textColor="#ffffd700"
-                android:padding="2.0dip"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text=":"
-                android:fontFamily="@font/acme"/>
-
-            <LinearLayout
-                android:gravity="center"
-                android:orientation="vertical"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1">
-
-                <TextView
-                    android:textSize="28.0sp"
-                    android:textColor="#ffffd700"
-                    android:gravity="center"
-                    android:id="@+id/tv_h"
-                    android:layout_width="fill_parent"
-                    android:layout_height="wrap_content"
-                    android:text="00"
-                    android:fontFamily="@font/acme"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.05"/>
-
-                <TextView
-                    android:textSize="10.0sp"
-                    android:textColor="#ffb0bec5"
-                    android:gravity="center"
-                    android:layout_width="fill_parent"
-                    android:layout_height="wrap_content"
-                    android:text="HOURS"
-                    android:textAllCaps="true"
-                    android:fontFamily="@font/acme"/>
-
-            </LinearLayout>
-
-            <TextView
-                android:textSize="28.0sp"
-                android:textStyle="bold"
-                android:textColor="#ffffd700"
-                android:padding="2.0dip"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text=":"
-                android:fontFamily="@font/acme"/>
-
-            <LinearLayout
-                android:gravity="center"
-                android:orientation="vertical"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1">
-
-                <TextView
-                    android:textSize="28.0sp"
-                    android:textColor="#ffffd700"
-                    android:gravity="center"
-                    android:id="@+id/tv_m"
-                    android:layout_width="fill_parent"
-                    android:layout_height="wrap_content"
-                    android:text="00"
-                    android:fontFamily="@font/acme"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.05"/>
-
-                <TextView
-                    android:textSize="10.0sp"
-                    android:textColor="#ffb0bec5"
-                    android:gravity="center"
-                    android:layout_width="fill_parent"
-                    android:layout_height="wrap_content"
-                    android:text="MINUTE"
-                    android:textAllCaps="true"
-                    android:fontFamily="@font/acme"/>
-
-            </LinearLayout>
-
-            <TextView
-                android:textSize="28.0sp"
-                android:textStyle="bold"
-                android:textColor="#ffffd700"
-                android:padding="2.0dip"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text=":"
-                android:fontFamily="@font/acme"/>
-
-            <LinearLayout
-                android:gravity="center"
-                android:orientation="vertical"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1">
-
-                <TextView
-                    android:textSize="28.0sp"
-                    android:textColor="#ffffd700"
-                    android:gravity="center"
-                    android:id="@+id/tv_s"
-                    android:layout_width="fill_parent"
-                    android:layout_height="wrap_content"
-                    android:text="00"
-                    android:fontFamily="@font/acme"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.05"/>
-
-                <TextView
-                    android:textSize="10.0sp"
-                    android:textColor="#ffb0bec5"
-                    android:gravity="center"
-                    android:layout_width="fill_parent"
-                    android:layout_height="wrap_content"
-                    android:text="SECOND"
-                    android:textAllCaps="true"
-                    android:fontFamily="@font/acme"/>
-
-            </LinearLayout>
-
-        </LinearLayout>
-
-    </LinearLayout>
-
-
-    <!-- Game Selection Section -->
-    <LinearLayout
-        android:orientation="vertical"
-        android:background="@drawable/ios_card_bg"
-        android:layout_width="fill_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="15.0dip"
-        android:padding="12dp">
-
-        <!-- REMOVED android:checkedButton from RadioGroup -->
-        <RadioGroup
-            android:gravity="center"
-            android:orientation="horizontal"
-            android:id="@+id/radio_group_games"
-            android:layout_width="fill_parent"
-            android:layout_height="wrap_content">
-
-            <RadioButton
-                android:textColor="#ffffd700"
-                android:id="@+id/radio_india"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="India"
-                android:textSize="18sp"
-                android:fontFamily="@font/acme"
-                android:layout_marginStart="10.0dip"
-                android:layout_marginEnd="10.0dip"
-                android:buttonTint="#ffffd700"
-                android:clickable="true"
-                android:focusable="true"
-                android:checked="false"/>
-
-        </RadioGroup>
+        android:paddingStart="18dp"
+        android:paddingTop="22dp"
+        android:paddingEnd="18dp"
+        android:paddingBottom="30dp">
 
         <LinearLayout
-            android:gravity="center"
-            android:orientation="vertical"
-            android:layout_width="fill_parent"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp">
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-            <RadioButton
-                android:textSize="13.0sp"
-                android:textStyle="bold"
-                android:textColor="#ff00ffaa"
-                android:gravity="center_vertical"
-                android:id="@+id/tv_hide_esp"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="Hide ESP While Screen Recording"
-                android:fontFamily="@font/acme"
-                android:buttonTint="#ff00ffaa"/>
+                android:layout_weight="1"
+                android:orientation="vertical">
 
-    <!-- Game Info Card -->
-    <LinearLayout
-        android:gravity="center"
-        android:orientation="horizontal"
-        android:background="@drawable/ios_card_bg"
-        android:layout_width="fill_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10.0dip"
-        android:padding="16dp">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="0.12"
+                    android:text="PARALLAX CONTROL"
+                    android:textColor="@color/premium_gold"
+                    android:textSize="11sp" />
 
-        <LinearLayout
-            android:gravity="center"
-            android:orientation="vertical"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="sans-serif-black"
+                    android:text="Command Center"
+                    android:textColor="@color/white"
+                    android:textSize="26sp" />
+            </LinearLayout>
 
             <ImageView
-                android:layout_width="65.0dip"
-                android:layout_height="65.0dip"
-                android:src="@drawable/pubg_india"
-                android:scaleType="fitCenter"/>
-
-            <TextView
-                android:textSize="16.0sp"
-                android:textColor="#ffffffff"
-                android:gravity="center"
-                android:id="@+id/IndiaName"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10.0dip"
-                android:text="Battlegrounds"
-                android:fontFamily="@font/acme"
-                android:textStyle="bold"/>
-
-            <TextView
-                android:textSize="11.0sp"
-                android:textColor="#ffb0bec5"
-                android:gravity="center"
-                android:id="@+id/IndiaVersion"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4.0dip"
-                android:text="Version: 4.2.0"
-                android:fontFamily="@font/acme"/>
-
-            <TextView
-                android:textSize="13.0sp"
-                android:textColor="#ffffd700"
-                android:gravity="center"
-                android:id="@+id/installIndia"
-                android:background="@drawable/ios_install_button"
-                android:layout_width="100.0dip"
-                android:layout_height="34.0dip"
-                android:text="INSTALL"
-                android:fontFamily="@font/acme"
-                android:paddingTop="7dp"
-                android:paddingBottom="7dp"
-                android:layout_marginTop="12dp"/>
-
+                android:id="@+id/btn_settings"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/ios_icon_bg"
+                android:contentDescription="Application settings"
+                android:padding="7dp"
+                android:src="@drawable/ic_launcher" />
         </LinearLayout>
 
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="22dp"
+            app:cardBackgroundColor="@color/premium_surface"
+            app:cardCornerRadius="26dp"
+            app:cardElevation="8dp"
+            app:strokeColor="@color/premium_stroke_gold"
+            app:strokeWidth="1dp">
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/PremiumFileManager"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-black"
+                            android:text="Premium session"
+                            android:textColor="@color/white"
+                            android:textSize="20sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="Time remaining on this license"
+                            android:textColor="@color/premium_text_secondary"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="30dp"
+                        android:background="@drawable/premium_badge_bg"
+                        android:fontFamily="sans-serif-medium"
+                        android:gravity="center"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:text="ACTIVE"
+                        android:textColor="@color/premium_success"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="18dp"
+                    android:baselineAligned="false"
+                    android:gravity="center"
+                    android:orientation="horizontal">
+
+                    <include layout="@layout/item_countdown_day" />
+
+                    <include layout="@layout/item_countdown_hour" />
+
+                    <include layout="@layout/item_countdown_minute" />
+
+                    <include layout="@layout/item_countdown_second" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:fontFamily="sans-serif-black"
+            android:text="Runtime profile"
+            android:textColor="@color/white"
+            android:textSize="19sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Select a supported application and prepare its private environment."
+            android:textColor="@color/premium_text_secondary"
+            android:textSize="12sp" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            app:cardBackgroundColor="@color/premium_surface"
+            app:cardCornerRadius="24dp"
+            app:strokeColor="@color/premium_stroke"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="18dp">
+
+                <RadioGroup
+                    android:id="@+id/radio_group_games"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                    <RadioButton
+                        android:id="@+id/radio_india"
+                        android:layout_width="match_parent"
+                        android:layout_height="54dp"
+                        android:buttonTint="@color/premium_gold"
+                        android:fontFamily="sans-serif-medium"
+                        android:gravity="center_vertical"
+                        android:minHeight="48dp"
+                        android:paddingStart="4dp"
+                        android:text="Battlegrounds India"
+                        android:textColor="@color/white"
+                        android:textSize="15sp" />
+                </RadioGroup>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="16dp"
+                    android:background="@color/premium_stroke" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:layout_width="68dp"
+                        android:layout_height="68dp"
+                        android:background="@drawable/ios_icon_bg"
+                        android:contentDescription="Selected game icon"
+                        android:padding="8dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/pubg_india" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="14dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/IndiaName"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-black"
+                            android:text="Battlegrounds"
+                            android:textColor="@color/white"
+                            android:textSize="17sp" />
+
+                        <TextView
+                            android:id="@+id/IndiaVersion"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="Version 4.2.0"
+                            android:textColor="@color/premium_text_secondary"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/installIndia"
+                        android:layout_width="100dp"
+                        android:layout_height="44dp"
+                        android:background="@drawable/premium_outline_button"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:fontFamily="sans-serif-black"
+                        android:gravity="center"
+                        android:text="INSTALL"
+                        android:textColor="@color/premium_gold"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <RadioButton
+                    android:id="@+id/tv_hide_esp"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="14dp"
+                    android:buttonTint="@color/premium_success"
+                    android:fontFamily="sans-serif-medium"
+                    android:gravity="center_vertical"
+                    android:text="Privacy mode during screen recording"
+                    android:textColor="@color/premium_text_secondary"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/btn_start_game"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:layout_marginTop="14dp"
+                    android:background="@drawable/premium_primary_button"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="sans-serif-black"
+                    android:gravity="center"
+                    android:letterSpacing="0.08"
+                    android:text="START SECURE SESSION"
+                    android:textColor="@color/premium_ink"
+                    android:textSize="14sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/premium_status_panel"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:id="@+id/tv_announcement"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-black"
+                android:text="Security status"
+                android:textColor="@color/white"
+                android:textSize="16sp" />
+
+            <TextView
+                android:id="@+id/tv_announcement2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:lineSpacingExtra="3dp"
+                android:text="● Signature verified   ● Encrypted vault   ● HTTPS transport"
+                android:textColor="@color/premium_success"
+                android:textSize="12sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Optimized for Android 7–16, ARM32/ARM64, cutouts, tablets, and 16 KB page-size devices."
+                android:textColor="@color/premium_text_secondary"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/tv_device_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:fontFamily="monospace"
+                android:text="Checking device compatibility…"
+                android:textColor="@color/premium_text_muted"
+                android:textSize="11sp" />
         </LinearLayout>
-
-        <!-- iOS Style Start Game Button -->
-        <TextView
-            android:textSize="18.0sp"
-            android:textStyle="bold"
-            android:textColor="#000000"
-            android:gravity="center"
-            android:id="@+id/btn_start_game"
-            android:background="@drawable/ios_start_button"
-            android:layout_width="fill_parent"
-            android:layout_height="48.0dip"
-            android:layout_marginTop="20.0dip"
-            android:text="START GAME"
-            android:fontFamily="@font/acme"
-            android:letterSpacing="0.1"/>
-
     </LinearLayout>
-
-    </LinearLayout>
-
-    <!-- Announcement Section -->
-    <LinearLayout
-        android:gravity="center"
-        android:orientation="vertical"
-        android:background="@drawable/ios_card_bg"
-        android:layout_width="fill_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10.0dip"
-        android:padding="14dp">
-
-        <TextView
-            android:textSize="18.0sp"
-            android:textStyle="bold"
-            android:textColor="#ffffd700"
-            android:gravity="center"
-            android:id="@+id/tv_announcement"
-            android:layout_width="fill_parent"
-            android:layout_height="wrap_content"
-            android:text="Premium Announcement"
-            android:fontFamily="@font/acme"
-            android:letterSpacing="0.08"/>
-
-        <TextView
-            android:textSize="15.0sp"
-            android:textColor="#ffffffff"
-            android:gravity="center"
-            android:id="@+id/tv_announcement2"
-            android:layout_width="fill_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8.0dip"
-            android:text="Play Safe Avoid Report | Kill Limit 10"
-            android:fontFamily="@font/acme"/>
-
-    </LinearLayout>
-</LinearLayout>
+</androidx.core.widget.NestedScrollView>

@@ -6,6 +6,7 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ArgbEvaluator;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -18,6 +19,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.view.WindowInsets;
+import android.view.WindowManager;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.Animation;
 import android.view.animation.ScaleAnimation;
@@ -27,6 +29,8 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import com.onecore.loader.R;
+import com.onecore.loader.security.SecurityThreatDetector;
+import com.onecore.loader.security.HostedLicenseClient;
 import com.onecore.loader.utils.CrashHandler;
 
 import java.util.ArrayList;
@@ -243,6 +247,18 @@ public class SplashActivity extends Activity {
         overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
     }
 
+    private void showSecurityWarning(SecurityThreatDetector.Threat threat) {
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.security_warning_title)
+                .setMessage(threat.messageResource())
+                .setCancelable(false)
+                .setPositiveButton(R.string.close_app, (dialog, which) -> {
+                    dialog.dismiss();
+                    finishAffinity();
+                })
+                .show();
+    }
+
     private void hideSystemUI() {
         if (Build.VERSION.SDK_INT >= 30) {
             getWindow().getDecorView().getWindowInsetsController().hide(
@@ -342,9 +358,20 @@ public class SplashActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         hideSystemUI();
         Thread.setDefaultUncaughtExceptionHandler(new CrashHandler(this));
         setContentView(R.layout.activity_splash);
+
+        SecurityThreatDetector.Threat threat = SecurityThreatDetector.detect(this);
+        if (threat != SecurityThreatDetector.Threat.NONE) {
+            new Thread(() -> new HostedLicenseClient(this).reportSecurityEvent(
+                    threat.name(),
+                    threat == SecurityThreatDetector.Threat.INVALID_SIGNATURE
+                            ? "critical" : "warning")).start();
+            showSecurityWarning(threat);
+            return;
+        }
 
         // Initialize views
         progressBar = findViewById(R.id.progressBar);

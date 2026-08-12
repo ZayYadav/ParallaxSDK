@@ -8,7 +8,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
-import android.icu.text.SimpleDateFormat;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -16,6 +15,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.view.View;
+import android.view.WindowManager;
+import android.text.TextUtils;
 import android.view.animation.Animation;
 import android.view.animation.LinearInterpolator;
 import android.view.animation.RotateAnimation;
@@ -38,8 +39,9 @@ import com.onecore.loader.libhelper.ApkEnv;
 import com.onecore.loader.libhelper.FileCopyTask;
 import com.onecore.loader.utils.Constants;
 import com.onecore.loader.utils.FLog;
+import com.onecore.loader.security.HostedLicenseClient;
+import com.onecore.loader.security.SecurePreferences;
 import java.io.InputStream;
-import java.util.Date;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import top.niunaijun.blackbox.BlackBoxCore;
@@ -55,7 +57,6 @@ public class MainActivity extends Activity {
     private BlackBoxCore blackBoxCore;
     private InstallResult installResult;
     private SharedPreferences sharedPreferences;
-    public static native String TimeExpired();
     public static native String FixCrash();
     public String CURRENT_PACKAGE;
     private TextView installIndia, btnStartGame;
@@ -66,6 +67,8 @@ public class MainActivity extends Activity {
     private boolean isGameLaunched = false;
     private String selectedGamePkg = "";
     private boolean isIndiaSelected = false;
+    private final Handler countdownHandler = new Handler(Looper.getMainLooper());
+    private Runnable countdownRunnable;
     
     public static MainActivity get() {
         return instance;
@@ -80,12 +83,12 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         setContentView(R.layout.activity_main);
         Thread.setDefaultUncaughtExceptionHandler(new CrashHandler(this));
         instance = this;
         blackBoxCore = BlackBoxCore.get();
         blackBoxCore.doCreate();
-        countDownStart();
         GameJsonMods();
         sharedPreferences = getSharedPreferences(getPackageName(), Activity.MODE_PRIVATE);
         
@@ -99,6 +102,9 @@ public class MainActivity extends Activity {
         gameSelection = findViewById(R.id.radio_group_games);
         radioIndia = findViewById(R.id.radio_india);
         tvHideEsp = findViewById(R.id.tv_hide_esp);
+        TextView deviceStatus = findViewById(R.id.tv_device_status);
+        deviceStatus.setText("Android API " + Build.VERSION.SDK_INT
+                + "  •  " + TextUtils.join(", ", Build.SUPPORTED_ABIS));
 
         // Make sure radio button is unchecked initially
         if (radioIndia != null) {
@@ -293,16 +299,18 @@ public class MainActivity extends Activity {
     }
     
     private void countDownStart() {
-        Handler handler = new Handler();
-        Runnable runnable = new Runnable() {
+        if (countdownRunnable != null) {
+            countdownHandler.removeCallbacks(countdownRunnable);
+        }
+        countdownRunnable = new Runnable() {
             @Override
             public void run() {
                 try {
-                    handler.postDelayed(this, 1000);
-                    SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-                    Date expiryDate = dateFormat.parse(TimeExpired());
                     long now = System.currentTimeMillis();
-                    long distance = expiryDate.getTime() - now;
+                    String storedExpiry = new SecurePreferences(MainActivity.this)
+                            .getString(HostedLicenseClient.LICENSE_EXPIRES_AT, "0");
+                    long expiryMillis = Long.parseLong(storedExpiry) * 1000L;
+                    long distance = expiryMillis - now;
                     long days = distance / (24 * 60 * 60 * 1000);
                     long hours = distance / (60 * 60 * 1000) % 24;
                     long minutes = distance / (60 * 1000) % 60;
@@ -318,11 +326,12 @@ public class MainActivity extends Activity {
                     Menit.setText(String.format("%02d", Math.max(0, minutes)));
                     Detik.setText(String.format("%02d", Math.max(0, seconds)));
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    FLog.warning("Unable to update subscription countdown");
                 }
+                countdownHandler.postDelayed(this, 1000);
             }
         };
-        handler.postDelayed(runnable, 0);
+        countdownHandler.post(countdownRunnable);
     }
     
     private void GameJsonMods() {
@@ -395,12 +404,23 @@ public class MainActivity extends Activity {
         super.onResume();
         countDownStart();
     }
+
+    @Override
+    protected void onPause() {
+        if (countdownRunnable != null) {
+            countdownHandler.removeCallbacks(countdownRunnable);
+        }
+        super.onPause();
+    }
     
     @Override
     public void onDestroy() {
-        super.onDestroy();
+        if (countdownRunnable != null) {
+            countdownHandler.removeCallbacks(countdownRunnable);
+        }
         stopService(new Intent(MainActivity.get(), FloatLogo.class));
         stopService(new Intent(MainActivity.get(), Overlay.class));
         stopService(new Intent(MainActivity.get(), FloatAim.class));
+        super.onDestroy();
     }
 }

@@ -13,8 +13,6 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
-import android.content.pm.Signature;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
@@ -29,9 +27,6 @@ import android.graphics.Shader;
 import android.graphics.SweepGradient;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
-import android.net.ConnectivityManager;
-import android.net.NetworkCapabilities;
-import android.net.NetworkInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -44,6 +39,7 @@ import android.text.method.HideReturnsTransformationMethod;
 import android.text.method.PasswordTransformationMethod;
 import android.view.View;
 import android.view.WindowInsets;
+import android.view.WindowManager;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.Animation;
 import android.view.animation.ScaleAnimation;
@@ -58,14 +54,13 @@ import android.graphics.PixelFormat;
 import android.widget.LinearLayout;
 import android.view.ViewGroup;
 
-import com.onecore.loader.BuildConfig;
 import com.onecore.loader.R;
 import com.onecore.loader.utils.CrashHandler;
 import com.onecore.loader.utils.FLog;
-import com.onecore.loader.utils.FPrefs;
+import com.onecore.loader.security.SecurePreferences;
+import com.onecore.loader.security.HostedLicenseClient;
+import com.onecore.loader.security.SecurityThreatDetector;
 import com.Jagdish.tastytoast.TastyToast;
-
-import java.security.MessageDigest;
 
 public class LoginActivity extends AppCompatActivity {
 
@@ -74,8 +69,6 @@ public class LoginActivity extends AppCompatActivity {
     private static final int REQUEST_MANAGE_STORAGE_PERMISSION = 100;
     private static final int REQUEST_MANAGE_UNKNOWN_APP_SOURCES = 200;
     private static final String USER = "USER";
-    public static String USERKEY = null;
-    private static final String VALID_SIGNATURE_HASH = BuildConfig.EXPECTED_SIGNATURE_SHA256;
 
     private TextView btnSignIn;
     private FrameLayout logo;
@@ -195,8 +188,6 @@ public class LoginActivity extends AppCompatActivity {
             FLog.error("Native library not loaded: " + e.getMessage());
         }
     }
-
-    private static native String Check(Context context, String key);
 
     private void showLoadingAnimation(String message) {
         runOnUiThread(() -> {
@@ -397,9 +388,21 @@ public class LoginActivity extends AppCompatActivity {
     }
 
     private void InitView() {
-        FPrefs prefs = new FPrefs(this);
+        SecurePreferences securePreferences = new SecurePreferences(this);
         final EditText inputKey = findViewById(R.id.textUsername);
-        String savedKey = prefs.read(USER, "");
+        inputKey.setFilterTouchesWhenObscured(true);
+        String savedKey = securePreferences.getString(USER, "");
+        SharedPreferences legacyPreferences = getSharedPreferences("settings", MODE_PRIVATE);
+        String legacyKey = legacyPreferences.getString(USER, "");
+        if ((savedKey == null || savedKey.isEmpty()) && legacyKey != null && !legacyKey.isEmpty()) {
+            try {
+                securePreferences.putString(USER, legacyKey);
+                savedKey = legacyKey;
+                legacyPreferences.edit().remove(USER).apply();
+            } catch (IllegalStateException ignored) {
+                // Leave the legacy value intact until secure storage becomes available.
+            }
+        }
         if (savedKey != null) inputKey.setText(savedKey);
 
         btnSignIn = findViewById(R.id.btnSignIn);
@@ -410,9 +413,12 @@ public class LoginActivity extends AppCompatActivity {
                 inputKey.requestFocus();
                 return;
             }
-            prefs.write(USER, key);
-            USERKEY = key;
-            
+            try {
+                securePreferences.putString(USER, key);
+            } catch (IllegalStateException exception) {
+                inputKey.setError("Secure storage is unavailable");
+                return;
+            }
             // Hide denied overlay if showing
             if (isShowingDenied) {
                 hideAccessDeniedAnimation();
@@ -486,7 +492,7 @@ public class LoginActivity extends AppCompatActivity {
         new Thread(() -> {
             Message msg = new Message();
             try {
-                String result = Check(activity, key);
+                String result = new HostedLicenseClient(activity).activate(key);
                 if ("OK".equals(result)) {
                     msg.what = 0;
                 } else {
@@ -494,8 +500,9 @@ public class LoginActivity extends AppCompatActivity {
                     msg.obj = result != null && !result.isEmpty() ? result : "USER OR GAME NOT REGISTERED";
                 }
             } catch (Throwable t) {
+                FLog.error("License verification failed", t);
                 msg.what = 1;
-                msg.obj = "Native crash: " + t.getMessage();
+                msg.obj = "Verification is temporarily unavailable";
             }
             responseHandler.sendMessage(msg);
         }).start();
@@ -594,7 +601,7 @@ public class LoginActivity extends AppCompatActivity {
             requestUnknownAppPermissionsDirect();
         } else {
             prefs.edit().putBoolean(PREF_PERMISSIONS_GRANTED, true).apply();
-            FLog.info("Storage permission granted; debug log file: " + FLog.getDownloadLogFile().getAbsolutePath());
+            FLog.info("Required permissions are available");
         }
     }
     
@@ -636,44 +643,33 @@ public class LoginActivity extends AppCompatActivity {
         }
     }
 
-    private boolean isVpnActive() {
-        ConnectivityManager cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
-        if (Build.VERSION.SDK_INT >= 23) {
-            NetworkCapabilities nc = cm.getNetworkCapabilities(cm.getActiveNetwork());
-            return nc != null && nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN);
-        } else {
-            NetworkInfo info = cm.getActiveNetworkInfo();
-            return info != null && info.getType() == ConnectivityManager.TYPE_VPN;
-        }
-    }
-
-    private boolean isSignatureValid() {
-        try {
-            if (VALID_SIGNATURE_HASH == null || VALID_SIGNATURE_HASH.trim().isEmpty()) {
-                FLog.warning("Signature hash is not configured for this build");
-                return true;
-            }
-
-            Signature[] sigs = getPackageManager()
-                    .getPackageInfo(getPackageName(), PackageManager.GET_SIGNING_CERTIFICATES)
-                    .signingInfo.getApkContentsSigners();
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            for (Signature sig : sigs) {
-                byte[] digest = md.digest(sig.toByteArray());
-                StringBuilder hex = new StringBuilder();
-                for (byte b : digest) hex.append(String.format("%02X", b));
-                if (hex.toString().equals(VALID_SIGNATURE_HASH)) return true;
-            }
-        } catch (Exception e) {
-            FLog.error("Signature check failed: " + e.getMessage());
-        }
-        return false;
+    private void showSecurityWarning(SecurityThreatDetector.Threat threat) {
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.security_warning_title)
+                .setMessage(threat.messageResource())
+                .setCancelable(false)
+                .setPositiveButton(R.string.close_app, (dialog, which) -> {
+                    dialog.dismiss();
+                    finishAffinity();
+                })
+                .show();
     }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         setContentView(R.layout.activity_login);
+
+        SecurityThreatDetector.Threat threat = SecurityThreatDetector.detect(this);
+        if (threat != SecurityThreatDetector.Threat.NONE) {
+            new Thread(() -> new HostedLicenseClient(this).reportSecurityEvent(
+                    threat.name(),
+                    threat == SecurityThreatDetector.Threat.INVALID_SIGNATURE
+                            ? "critical" : "warning")).start();
+            showSecurityWarning(threat);
+            return;
+        }
 
         this.logo = findViewById(R.id.logoAnimator);
         this.particlesContainer = findViewById(R.id.particles_container);
@@ -688,13 +684,6 @@ public class LoginActivity extends AppCompatActivity {
         InitView();
         hideSystemUI();
 
-        if (!isSignatureValid()) {
-            TastyToast.makeText(this, "✗ Invalid Signature! ✗", TastyToast.LENGTH_LONG, TastyToast.ERROR);
-            finish();
-        } else if (isVpnActive()) {
-            TastyToast.makeText(this, "⚠ VPN Detected! Please disable VPN ⚠", TastyToast.LENGTH_LONG, TastyToast.WARNING);
-            finish();
-        }
     }
     
     private void hideSystemUI() {

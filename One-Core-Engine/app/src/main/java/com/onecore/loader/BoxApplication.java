@@ -9,6 +9,7 @@ import com.Jagdish.tastytoast.TastyToast;
 import com.onecore.loader.utils.FLog;
 import com.onecore.loader.utils.NetworkConnection;
 import com.onecore.loader.utils.FPrefs;
+import com.onecore.loader.security.SecurityThreatDetector;
 import com.google.android.material.color.DynamicColors;
 import com.topjohnwu.superuser.Shell;
 import java.io.IOException;
@@ -47,6 +48,7 @@ public class BoxApplication extends Application {
     @Override
     protected void attachBaseContext(Context base) {
         super.attachBaseContext(base);
+        FLog.initialize(base);
         Thread.setDefaultUncaughtExceptionHandler(new CrashHandler(base));
         try {
             BlackBoxCore.get().doAttachBaseContext(base, new ClientConfiguration() {
@@ -79,7 +81,10 @@ public class BoxApplication extends Application {
     public void onCreate() {
         super.onCreate();
         gApp = this;
-        FLog.info("Debug log file: " + FLog.getDownloadLogFile().getAbsolutePath());
+        if (SecurityThreatDetector.detect(this) != SecurityThreatDetector.Threat.NONE) {
+            FLog.error("Application security policy validation failed");
+            return;
+        }
         BlackBoxCore.get().doCreate();
         try {
             MetaActivationManager.activateSdk(BoxApp());

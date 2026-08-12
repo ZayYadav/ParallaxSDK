@@ -28,16 +28,29 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Locale;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class DownloadZip {
 
+    private static final String ZIP_FILE_NAME = "native-artifacts.zip";
+    private static final String PRIVATE_ARTIFACT_DIRECTORY = "native";
+    private static final long MAX_DOWNLOAD_BYTES = 128L * 1024L * 1024L;
+    private static final int CONNECT_TIMEOUT_MILLIS = 15_000;
+    private static final int READ_TIMEOUT_MILLIS = 30_000;
+    private static final Set<String> ALLOWED_ARTIFACTS = new HashSet<>(Arrays.asList(
+            "Parallax.so",
+            "libpubgm.so",
+            "libkorea.so"));
+
     private final Context context;
     private final ExecutorService executor;
     private final Handler handler;
-    private String ZIP_FILE_NAME = "Saved.zip";
     
     // Animation views
     private static LinearLayout downloadOverlay = null;
@@ -344,13 +357,13 @@ public class DownloadZip {
                 if (success) {
                     updateDownloadProgress(100, "Extracting files...", downloadedBytes, downloadedBytes);
                     
-                    String zipPath = new File(context.getFilesDir(), ZIP_FILE_NAME).getAbsolutePath();
-                    String outputDir = context.getFilesDir().getAbsolutePath();
+                    File zipFile = new File(context.getCacheDir(), ZIP_FILE_NAME);
+                    File stagingDirectory = new File(
+                            context.getCacheDir(), "native-staging-" + UUID.randomUUID());
                     String password = PASSJKPAPA();
 
-                    if (unzipEncrypted(zipPath, outputDir, password)) {
-                        moveSoFiles(new File(outputDir, "loader"));
-                        new File(context.getFilesDir(), ZIP_FILE_NAME).delete();
+                    if (unzipEncrypted(zipFile, stagingDirectory, password)
+                            && moveSoFiles(stagingDirectory)) {
                         
                         hideDownloadAnimation(true, "✓ Download Complete!\n✓ Files extracted successfully!");
                         
@@ -363,6 +376,8 @@ public class DownloadZip {
                             callback.onError("Failed to extract ZIP");
                         }
                     }
+                    deleteRecursively(stagingDirectory);
+                    zipFile.delete();
                 } else {
                     hideDownloadAnimation(false, "✗ Download failed!\n✗ Check your internet connection");
                     if (callback != null) {
@@ -374,90 +389,122 @@ public class DownloadZip {
     }
 
     private boolean downloadFile(String downloadUrl, DownloadCallback callback) {
-        File outputZip = new File(context.getFilesDir(), ZIP_FILE_NAME);
-        try (InputStream input = new URL(downloadUrl).openStream();
-             OutputStream output = new FileOutputStream(outputZip)) {
-
-            HttpURLConnection connection = (HttpURLConnection) new URL(downloadUrl).openConnection();
-            connection.connect();
-            int lengthOfFile = connection.getContentLength();
-            
-            long totalBytes = lengthOfFile;
-            downloadedBytes = 0;
-
-            byte[] data = new byte[4096];
-            int count;
-            while ((count = input.read(data)) != -1) {
-                downloadedBytes += count;
-                int progress = (int) ((downloadedBytes * 100) / totalBytes);
-                
-                // Update progress
-                final int finalProgress = progress;
-                handler.post(() -> {
-                    if (downloadProgressBar != null && isDownloading) {
-                        updateDownloadProgress(finalProgress, "Downloading...", downloadedBytes, totalBytes);
-                    }
-                    if (callback != null) {
-                        callback.onProgress(finalProgress);
-                    }
-                });
-                
-                output.write(data, 0, count);
+        File outputZip = new File(context.getCacheDir(), ZIP_FILE_NAME);
+        HttpURLConnection connection = null;
+        try {
+            URL url = new URL(downloadUrl);
+            if (!"https".equalsIgnoreCase(url.getProtocol())) {
+                throw new java.io.IOException("Only HTTPS artifact downloads are allowed");
             }
 
-            return outputZip.exists();
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setConnectTimeout(CONNECT_TIMEOUT_MILLIS);
+            connection.setReadTimeout(READ_TIMEOUT_MILLIS);
+            connection.setInstanceFollowRedirects(true);
+            connection.connect();
+            int responseCode = connection.getResponseCode();
+            if (responseCode < 200 || responseCode >= 300) {
+                throw new java.io.IOException("Artifact server returned HTTP " + responseCode);
+            }
+
+            long totalBytes = connection.getContentLengthLong();
+            if (totalBytes > MAX_DOWNLOAD_BYTES) {
+                throw new java.io.IOException("Artifact download is too large");
+            }
+
+            downloadedBytes = 0;
+
+            try (InputStream input = connection.getInputStream();
+                 OutputStream output = new FileOutputStream(outputZip)) {
+                byte[] data = new byte[32 * 1024];
+                int count;
+                while ((count = input.read(data)) != -1) {
+                    downloadedBytes += count;
+                    if (downloadedBytes > MAX_DOWNLOAD_BYTES) {
+                        throw new java.io.IOException("Artifact download exceeded its size limit");
+                    }
+
+                    int progress = totalBytes > 0
+                            ? (int) Math.min(100, (downloadedBytes * 100) / totalBytes)
+                            : 0;
+                    final int finalProgress = progress;
+                    final long progressBytes = downloadedBytes;
+                    handler.post(() -> {
+                        if (downloadProgressBar != null && isDownloading) {
+                            updateDownloadProgress(finalProgress, "Downloading...", progressBytes, totalBytes);
+                        }
+                        if (callback != null) {
+                            callback.onProgress(finalProgress);
+                        }
+                    });
+
+                    output.write(data, 0, count);
+                }
+            }
+
+            return outputZip.isFile() && outputZip.length() > 0;
 
         } catch (Exception e) {
-            e.printStackTrace();
+            outputZip.delete();
             return false;
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
         }
     }
 
-    private boolean unzipEncrypted(String zipPath, String outputDir, String password) {
+    private boolean unzipEncrypted(File zipPath, File outputDir, String password) {
         try {
+            if (!outputDir.mkdirs()) {
+                return false;
+            }
             ZipFile zipFile = new ZipFile(zipPath, password.toCharArray());
-            zipFile.extractAll(outputDir);
-            setPermissions(new File(outputDir));
+            zipFile.extractAll(outputDir.getAbsolutePath());
             return true;
         } catch (Exception e) {
-            e.printStackTrace();
             return false;
         }
     }
 
-    private void moveSoFiles(File loaderFolder) {
-        File outputDir = context.getFilesDir();
-        if (!loaderFolder.exists()) loaderFolder.mkdirs();
+    private boolean moveSoFiles(File stagingDirectory) {
+        File artifactDirectory = new File(context.getNoBackupFilesDir(), PRIVATE_ARTIFACT_DIRECTORY);
+        if (!artifactDirectory.isDirectory() && !artifactDirectory.mkdirs()) {
+            return false;
+        }
 
-        File[] files = outputDir.listFiles((dir, name) -> name.endsWith(".so"));
-        if (files != null) {
-            for (File soFile : files) {
+        File[] files = stagingDirectory.listFiles();
+        boolean installedAny = false;
+        if (files == null) {
+            return false;
+        }
+        for (File file : files) {
+            if (file.isDirectory()) {
+                installedAny = moveSoFiles(file) || installedAny;
+            } else if (ALLOWED_ARTIFACTS.contains(file.getName())) {
                 try {
-                    java.nio.file.Files.move(soFile.toPath(), 
-                        new File(loaderFolder, soFile.getName()).toPath(), 
-                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                } catch (Exception e) {
-                    e.printStackTrace();
+                    NativeArtifactStore.install(file, new File(artifactDirectory, file.getName()));
+                    installedAny = true;
+                } catch (java.io.IOException ignored) {
+                    // Report only a generic failure to avoid logging internal artifact details.
                 }
             }
         }
+        return installedAny;
     }
 
-    private void setPermissions(File fileOrDir) {
+    private void deleteRecursively(File fileOrDir) {
+        if (fileOrDir == null || !fileOrDir.exists()) {
+            return;
+        }
         if (fileOrDir.isDirectory()) {
             File[] files = fileOrDir.listFiles();
             if (files != null) {
                 for (File file : files) {
-                    setPermissions(file);
+                    deleteRecursively(file);
                 }
             }
         }
-        try {
-            fileOrDir.setExecutable(true, false);
-            fileOrDir.setReadable(true, false);
-            fileOrDir.setWritable(true, false);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        fileOrDir.delete();
     }
 }
