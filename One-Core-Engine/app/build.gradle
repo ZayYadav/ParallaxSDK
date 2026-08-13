@@ -9,11 +9,8 @@ plugins {
 
 apply from: '../signing.gradle'
 
-def oneCoreApiBaseUrl = providers.gradleProperty('onecoreApiBaseUrl')
-        .orElse(System.getenv('ONECORE_API_BASE_URL') ?: 'https://onintigirty.parallaxserver.online')
-        .get()
-def oneCoreApiEncryptionKey = providers.gradleProperty('onecoreApiEncryptionKey')
-        .orElse(System.getenv('ONECORE_API_ENCRYPTION_KEY') ?: '')
+def parallaxLegacyTokenSecret = providers.gradleProperty('parallaxLegacyTokenSecret')
+        .orElse(System.getenv('ONECORE_LEGACY_TOKEN_SECRET') ?: '')
         .get()
 def oneCoreAllowedSigningSha256 = providers.gradleProperty('onecoreAllowedSigningSha256')
         .orElse(System.getenv('ONECORE_ALLOWED_SIGNING_SHA256') ?: '')
@@ -69,8 +66,7 @@ android {
         versionName rootProject.ext.versionName
         vectorDrawables.useSupportLibrary = true
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField "String", "ONECORE_API_BASE_URL", javaString(oneCoreApiBaseUrl)
-        buildConfigField "String", "ONECORE_API_ENCRYPTION_KEY", javaString(oneCoreApiEncryptionKey)
+        buildConfigField "String", "PARALLAX_LEGACY_TOKEN_SECRET", javaString(parallaxLegacyTokenSecret)
         
         ndk {
             // Parallax Loader APKs intentionally target modern 64-bit ARM devices only.
@@ -151,4 +147,5 @@ dependencies {
     implementation 'com.github.CodingGay.BlackReflection:core:1.1.4'
     annotationProcessor 'com.github.CodingGay.BlackReflection:compiler:1.1.4'
     testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
 }

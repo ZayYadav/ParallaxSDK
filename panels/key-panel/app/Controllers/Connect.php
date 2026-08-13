@@ -107,7 +107,6 @@ class Connect extends BaseController
             ->setJSON([
                 'status' => true,
                 'data' => [
-                    'real' => $real,
                     // Kept for backwards compatibility with existing legacy clients.
                     'token' => md5($real),
                     'modname' => (string) ($server['modname'] ?? ''),

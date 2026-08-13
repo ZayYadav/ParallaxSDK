@@ -10,12 +10,14 @@ on:
       - "BLACK-OPNE/**"
       - "One-Core-Engine/**"
       - "backend-api/**"
+      - "panels/key-panel/**"
       - ".github/workflows/build-loader-apk.yml"
   pull_request:
     paths:
       - "BLACK-OPNE/**"
       - "One-Core-Engine/**"
       - "backend-api/**"
+      - "panels/key-panel/**"
       - ".github/workflows/build-loader-apk.yml"
 
 jobs:
@@ -56,7 +58,9 @@ jobs:
           composer audit --no-dev
 
       - name: Lint PHP sources
-        run: find . -path ./vendor -prune -o -name '*.php' -print0 | xargs -0 -n1 php -l
+        run: |
+          find . -path ./vendor -prune -o -name '*.php' -print0 | xargs -0 -n1 php -l
+          find ../panels/key-panel -name '*.php' -print0 | xargs -0 -n1 php -l
 
       - name: Test crypto, JWT, and request binding
         run: php tests/run.php
@@ -96,8 +100,7 @@ jobs:
       LOADER_AAR_PATH: One-Core-Engine/app/libs/ParallaxCore-release.aar
       NDK_VERSION: 27.2.12479018
       BUILD_LOG_DIR: build-logs
-      ONECORE_API_BASE_URL: https://onintigirty.parallaxserver.online
-      ONECORE_API_ENCRYPTION_KEY: ${{ secrets.ONECORE_API_ENCRYPTION_KEY }}
+      ONECORE_LEGACY_TOKEN_SECRET: ${{ secrets.ONECORE_LEGACY_TOKEN_SECRET }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -140,24 +143,15 @@ jobs:
       - name: Validate loader licensing configuration
         shell: python
         run: |
-          import base64
           import os
-          from urllib.parse import urlparse
 
-          base_url = os.environ.get("ONECORE_API_BASE_URL", "").strip()
-          parsed = urlparse(base_url)
-          if parsed.scheme != "https" or not parsed.netloc or parsed.query or parsed.fragment:
-              raise SystemExit("ONECORE_API_BASE_URL must be an absolute HTTPS URL")
+          secret = os.environ.get("ONECORE_LEGACY_TOKEN_SECRET", "")
+          if len(secret) < 32 or len(secret) > 256:
+              raise SystemExit(
+                  "ONECORE_LEGACY_TOKEN_SECRET must contain 32-256 characters"
+              )
 
-          encoded_key = os.environ.get("ONECORE_API_ENCRYPTION_KEY", "").strip()
-          try:
-              decoded_key = base64.b64decode(encoded_key, validate=True)
-          except Exception as exc:
-              raise SystemExit("ONECORE_API_ENCRYPTION_KEY is not valid base64") from exc
-          if len(decoded_key) != 32:
-              raise SystemExit("ONECORE_API_ENCRYPTION_KEY must decode to exactly 32 bytes")
-
-          print("Loader licensing configuration is valid")
+          print("Pinned Parallax licensing configuration is valid")
 
       - name: Build SDK release AAR
         working-directory: ${{ env.SDK_PROJECT_DIR }}

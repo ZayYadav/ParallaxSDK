@@ -18,6 +18,8 @@ a dedicated OneCore activation-key inventory for the current Android APK.
 - Revoking a OneCore key also revokes devices bound to that license.
 - `/connect` now has a public activation portal while preserving its legacy
   POST response for older clients.
+- `/connect` no longer returns the token secret inside the obsolete `real`
+  response field. Supported clients validate the signed `token` field.
 - Database credentials were removed from `app/Config/Database.php`; both
   connections are loaded from the private `.env` file.
 - Raw SQL was removed from the upgraded dashboard and `/connect` flow.
