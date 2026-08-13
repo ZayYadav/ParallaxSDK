@@ -137,6 +137,21 @@ jobs:
       - name: Prepare build log folder
         run: mkdir -p "${BUILD_LOG_DIR}"
 
+      - name: Configure loader licensing for CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${ONECORE_LEGACY_TOKEN_SECRET:-}" ]; then
+            echo "ONECORE_HAS_REAL_LICENSE_SECRET=true" >> "$GITHUB_ENV"
+          elif [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            echo "ONECORE_LEGACY_TOKEN_SECRET=ci-only-${GITHUB_SHA}-not-for-release" >> "$GITHUB_ENV"
+            echo "ONECORE_HAS_REAL_LICENSE_SECRET=false" >> "$GITHUB_ENV"
+            echo "Using a non-production licensing secret for PR compile checks."
+          else
+            echo "ONECORE_LEGACY_TOKEN_SECRET must be configured for release builds" >&2
+            exit 1
+          fi
+
       - name: Validate loader licensing configuration
         shell: python
         run: |
@@ -223,6 +238,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload loader release APK
+        if: env.ONECORE_HAS_REAL_LICENSE_SECRET == 'true'
         uses: actions/upload-artifact@v6
         with:
           name: loader-release-apk
@@ -230,6 +246,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload loader debug APK
+        if: env.ONECORE_HAS_REAL_LICENSE_SECRET == 'true'
         uses: actions/upload-artifact@v6
         with:
           name: loader-debug-apk
