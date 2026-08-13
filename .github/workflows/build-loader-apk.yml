@@ -62,6 +62,20 @@ jobs:
           find . -path ./vendor -prune -o -name '*.php' -print0 | xargs -0 -n1 php -l
           find ../panels/key-panel -name '*.php' -print0 | xargs -0 -n1 php -l
 
+      - name: Test standalone key panel
+        run: php ../panels/key-panel/tests/run.php
+
+      - name: Test standalone key panel with MySQL
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_NAME: parallax_panel_ci
+          DB_USER: root
+          DB_PASSWORD: onecore_ci_root
+        run: |
+          mysql -h 127.0.0.1 -uroot -ponecore_ci_root -e 'CREATE DATABASE parallax_panel_ci CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'
+          php ../panels/key-panel/tests/integration.php
+
       - name: Test crypto, JWT, and request binding
         run: php tests/run.php
 
@@ -86,6 +100,19 @@ jobs:
         with:
           name: onecore-integrity-backend
           path: onecore-integrity-backend.zip
+          if-no-files-found: error
+
+      - name: Package standalone key panel
+        working-directory: panels/key-panel
+        run: |
+          zip -r ../../parallax-standalone-key-panel.zip . \
+            -x '.env' 'runtime/*' 'tests/*' '.gitignore'
+
+      - name: Upload standalone key panel
+        uses: actions/upload-artifact@v6
+        with:
+          name: parallax-standalone-key-panel
+          path: parallax-standalone-key-panel.zip
           if-no-files-found: error
 
   build:

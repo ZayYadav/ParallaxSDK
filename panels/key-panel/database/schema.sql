@@ -1,0 +1,143 @@
+SET NAMES utf8mb4;
+
+CREATE TABLE IF NOT EXISTS panel_users (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    username VARCHAR(32) NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    role ENUM('owner','admin','reseller') NOT NULL DEFAULT 'reseller',
+    balance_credits INT UNSIGNED NOT NULL DEFAULT 0,
+    status ENUM('active','suspended') NOT NULL DEFAULT 'active',
+    last_login_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_panel_users_username (username),
+    KEY idx_panel_users_role_status (role,status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS keys_code (
+    id_keys BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    game VARCHAR(64) NOT NULL,
+    user_key VARCHAR(128) NOT NULL,
+    duration INT UNSIGNED NOT NULL,
+    expired_date DATETIME NULL,
+    max_devices SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+    devices TEXT NULL,
+    status TINYINT(1) NOT NULL DEFAULT 1,
+    registrator VARCHAR(32) NOT NULL,
+    admin_id BIGINT UNSIGNED NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id_keys),
+    UNIQUE KEY uq_keys_code_user_key (user_key),
+    KEY idx_keys_game_status_expiry (game,status,expired_date),
+    KEY idx_keys_registrator (registrator)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS devices (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    device_id VARCHAR(191) NOT NULL,
+    last_verified_at DATETIME NULL,
+    status ENUM('active','revoked') NOT NULL DEFAULT 'active',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_devices_device_id (device_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS license_keys (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    created_by_user_id BIGINT UNSIGNED NULL,
+    key_hash CHAR(64) NOT NULL,
+    key_prefix VARCHAR(16) NOT NULL,
+    label VARCHAR(100) NOT NULL,
+    status ENUM('active','revoked') NOT NULL DEFAULT 'active',
+    max_devices SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+    expires_at DATETIME NULL,
+    last_used_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_license_keys_hash (key_hash),
+    KEY idx_license_keys_status_expiry (status,expires_at),
+    KEY idx_license_keys_creator (created_by_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS device_license_bindings (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    license_key_id BIGINT UNSIGNED NOT NULL,
+    device_id VARCHAR(191) NOT NULL,
+    bound_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_verified_at DATETIME NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_license_device (license_key_id,device_id),
+    KEY idx_bindings_device (device_id),
+    CONSTRAINT fk_panel_binding_license FOREIGN KEY (license_key_id) REFERENCES license_keys(id)
+        ON UPDATE CASCADE ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS onoff (
+    id TINYINT UNSIGNED NOT NULL,
+    status ENUM('on','off') NOT NULL DEFAULT 'off',
+    myinput VARCHAR(255) NOT NULL DEFAULT 'Maintenance in progress',
+    PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS modname (
+    id TINYINT UNSIGNED NOT NULL,
+    modname VARCHAR(100) NOT NULL DEFAULT 'Parallax',
+    PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `_ftext` (
+    id TINYINT UNSIGNED NOT NULL,
+    `_status` VARCHAR(32) NOT NULL DEFAULT 'on',
+    `_ftext` VARCHAR(255) NOT NULL DEFAULT 'Parallax',
+    PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `Feature` (
+    id TINYINT UNSIGNED NOT NULL,
+    ESP ENUM('on','off') NOT NULL DEFAULT 'off',
+    Item ENUM('on','off') NOT NULL DEFAULT 'off',
+    AIM ENUM('on','off') NOT NULL DEFAULT 'off',
+    SilentAim ENUM('on','off') NOT NULL DEFAULT 'off',
+    BulletTrack ENUM('on','off') NOT NULL DEFAULT 'off',
+    Floating ENUM('on','off') NOT NULL DEFAULT 'off',
+    Memory ENUM('on','off') NOT NULL DEFAULT 'off',
+    Setting ENUM('on','off') NOT NULL DEFAULT 'off',
+    PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS connect_rate_limits (
+    rate_key CHAR(64) NOT NULL,
+    window_started_at DATETIME NOT NULL,
+    request_count SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+    PRIMARY KEY (rate_key,window_started_at),
+    KEY idx_connect_rate_expiry (window_started_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS login_rate_limits (
+    rate_key CHAR(64) NOT NULL,
+    window_started_at DATETIME NOT NULL,
+    attempt_count SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+    PRIMARY KEY (rate_key,window_started_at),
+    KEY idx_login_rate_expiry (window_started_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS audit_log (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    actor_user_id BIGINT UNSIGNED NULL,
+    action_name VARCHAR(64) NOT NULL,
+    target_value VARCHAR(191) NOT NULL DEFAULT '',
+    ip_address VARCHAR(45) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_audit_actor_time (actor_user_id,created_at),
+    KEY idx_audit_time (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO onoff (id,status,myinput) VALUES (1,'off','Maintenance in progress')
+    ON DUPLICATE KEY UPDATE id=VALUES(id);
+INSERT INTO modname (id,modname) VALUES (1,'Parallax') ON DUPLICATE KEY UPDATE id=VALUES(id);
+INSERT INTO `_ftext` (id,`_status`,`_ftext`) VALUES (1,'on','Parallax') ON DUPLICATE KEY UPDATE id=VALUES(id);
+INSERT INTO `Feature` (id) VALUES (1) ON DUPLICATE KEY UPDATE id=VALUES(id);
