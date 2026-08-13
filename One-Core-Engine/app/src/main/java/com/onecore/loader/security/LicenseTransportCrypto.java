@@ -1,6 +1,7 @@
 package com.onecore.loader.security;
 
 import org.json.JSONObject;
+import org.lsposed.lsparanoid.Obfuscate;
 
 import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
@@ -16,6 +17,7 @@ import javax.crypto.spec.SecretKeySpec;
 import okio.ByteString;
 
 /** Application-layer encryption and request/response binding for the licensing API. */
+@Obfuscate
 final class LicenseTransportCrypto {
     static final int VERSION = 2;
     static final String REQUEST_AAD = "parallax-license-v2-request";

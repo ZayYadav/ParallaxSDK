@@ -249,11 +249,54 @@ jobs:
               -dname "CN=CI,O=SdkLodaLasan,C=US"
           fi
 
-      - name: Build signed loader release and debug APKs
+      - name: Build signed and flattened loader release APK
         working-directory: ${{ env.LOADER_PROJECT_DIR }}
         run: |
           set -o pipefail
-          ./gradlew :app:assembleRelease :app:assembleDebug --stacktrace 2>&1 | tee "../${BUILD_LOG_DIR}/loader-apks.log"
+          ./gradlew :app:assembleRelease \
+            -PblackObfuscatorEnabled=true \
+            -PblackObfuscatorDepth=2 \
+            --stacktrace 2>&1 | tee "../${BUILD_LOG_DIR}/loader-apks.log"
+
+      - name: Verify BlackObfuscator and packaged DEX
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG="${BUILD_LOG_DIR}/loader-apks.log"
+          RELEASE_APK=$(find "${LOADER_PROJECT_DIR}/app/build/outputs/apk/release" -name '*.apk' -print -quit)
+          test -n "$RELEASE_APK"
+          TRANSFORMED=$(grep -c '^BlackObf Class:' "$LOG" || true)
+          if [ "$TRANSFORMED" -lt 50 ]; then
+            echo "BlackObfuscator transformed only ${TRANSFORMED} methods; refusing unobfuscated release" >&2
+            exit 1
+          fi
+          if grep -Eq 'Obfuscator Class not found|No classes found|^[A-Za-z0-9_.]+(Exception|Error):|^[[:space:]]+at [A-Za-z0-9_.$]+\(' "$LOG"; then
+            echo "BlackObfuscator reported a conversion failure" >&2
+            exit 1
+          fi
+          DEX_DIR=$(mktemp -d)
+          unzip -qq "$RELEASE_APK" 'classes*.dex' -d "$DEX_DIR"
+          DEX_COUNT=0
+          for dex in "$DEX_DIR"/classes*.dex; do
+            "${ANDROID_HOME}/build-tools/36.0.0/dexdump" -f "$dex" >/dev/null
+            for forbidden in \
+              'https://parallaxserver.online/api/v2/connect' \
+              'parallax-license-v2-request' \
+              'parallax-license-v2-response:' \
+              'Licensing TLS pins are not configured'; do
+              if grep -aFq "$forbidden" "$dex"; then
+                echo "Sensitive loader string remained in plaintext DEX: ${forbidden}" >&2
+                exit 1
+              fi
+            done
+            DEX_COUNT=$((DEX_COUNT + 1))
+          done
+          test "$DEX_COUNT" -gt 0
+          "${ANDROID_HOME}/build-tools/36.0.0/apksigner" verify --verbose "$RELEASE_APK"
+          "${ANDROID_HOME}/build-tools/36.0.0/zipalign" -c -v 4 "$RELEASE_APK" >/dev/null
+          printf 'black_obfuscator_commit=%s\ndepth=%s\ntransformed_methods=%s\ndex_files=%s\n' \
+            '67aec4c457be0d2644224100fa85aed7eac87cb6' '2' "$TRANSFORMED" "$DEX_COUNT" \
+            | tee "${BUILD_LOG_DIR}/black-obfuscator-report.txt"
 
       - name: Record release signing certificate SHA-256
         run: |
@@ -278,14 +321,6 @@ jobs:
           path: ${{ env.LOADER_PROJECT_DIR }}/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
 
-      - name: Upload loader debug APK
-        if: env.PARALLAX_HAS_RELEASE_TRANSPORT == 'true'
-        uses: actions/upload-artifact@v6
-        with:
-          name: loader-debug-apk
-          path: ${{ env.LOADER_PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
-
       - name: Upload release signing certificate
         uses: actions/upload-artifact@v6
         with:
@@ -298,5 +333,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: build-logs
-          path: ${{ env.BUILD_LOG_DIR }}/*.log
+          path: |
+            ${{ env.BUILD_LOG_DIR }}/*.log
+            ${{ env.BUILD_LOG_DIR }}/black-obfuscator-report.txt
           if-no-files-found: warn

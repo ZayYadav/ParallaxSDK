@@ -6,6 +6,7 @@ import android.os.SystemClock;
 import com.onecore.loader.BuildConfig;
 
 import org.json.JSONObject;
+import org.lsposed.lsparanoid.Obfuscate;
 
 import java.net.Proxy;
 import java.nio.charset.StandardCharsets;
@@ -30,6 +31,7 @@ import okhttp3.ResponseBody;
 import okio.BufferedSource;
 
 /** Fail-closed encrypted client for the pinned Parallax licensing API. */
+@Obfuscate
 public final class HostedLicenseClient {
     static final String CONNECT_URL = "https://parallaxserver.online/api/v2/connect";
     static final String CONNECT_HOST = "parallaxserver.online";

@@ -76,6 +76,22 @@ The CI workflow performs both stages automatically.
   configured keystore.
 - Release builds minify resources and code, remove verbose logs, and block
   screen capture on sensitive activities.
+- Production release APKs additionally run BlackObfuscator control-flow
+  flattening at depth 2 over first-party security, license, download, and
+  activity code after R8. Generated binding/resource classes, the exact native
+  signing entrypoint, and third-party libraries are excluded for runtime
+  compatibility, as recommended by BlackObfuscator upstream.
+- High-value license transport classes are also marked for the existing
+  LSParanoid release string transformation; this conceals fixed endpoint,
+  algorithm, binding, and parser strings in the packaged DEX without pretending
+  that the whole DEX is cryptographically sealed at runtime.
+- BlackObfuscator is disabled unless the release task explicitly sets
+  `-PblackObfuscatorEnabled=true`. CI pins upstream commit
+  `67aec4c457be0d2644224100fa85aed7eac87cb6`, rejects fewer than 50 transformed
+  methods or conversion stack traces, validates every packaged DEX with
+  `dexdump`, rejects plaintext high-value license strings, and verifies APK
+  signing plus ZIP alignment. Debug APKs are no longer published as production
+  artifacts.
 - Tapjacking protection rejects obscured touches on the license input, while
   WorkManager and notification registrations are delegated to their current
   AndroidX manifests for modern Android compatibility.
