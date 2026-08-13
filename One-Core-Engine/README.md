@@ -90,8 +90,10 @@ The CI workflow performs both stages automatically.
   `67aec4c457be0d2644224100fa85aed7eac87cb6`, rejects fewer than 50 transformed
   methods or conversion stack traces, validates every packaged DEX with
   `dexdump`, rejects plaintext high-value license strings, and verifies APK
-  signing plus ZIP alignment. Debug APKs are no longer published as production
-  artifacts.
+  signing plus ZIP alignment. CI builds and uploads both release and debug APKs.
+  When production transport variables or signing secrets are missing, artifact
+  names contain `ci-nonproduction`; only fully configured artifacts are labeled
+  `production`. BlackObfuscator remains enabled only for the release APK.
 - Tapjacking protection rejects obscured touches on the license input, while
   WorkManager and notification registrations are delegated to their current
   AndroidX manifests for modern Android compatibility.

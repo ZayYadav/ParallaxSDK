@@ -174,17 +174,33 @@ jobs:
           set -euo pipefail
           if [ -n "${PARALLAX_API_PUBLIC_KEY_B64:-}" ] && [ -n "${PARALLAX_TLS_PINS:-}" ]; then
             echo "PARALLAX_HAS_RELEASE_TRANSPORT=true" >> "$GITHUB_ENV"
-          elif [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+          else
             openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/parallax-ci-private.pem 2>/dev/null
             PUBLIC_KEY=$(openssl pkey -in /tmp/parallax-ci-private.pem -pubout -outform DER 2>/dev/null | base64 -w0)
             rm -f /tmp/parallax-ci-private.pem
             echo "PARALLAX_API_PUBLIC_KEY_B64=${PUBLIC_KEY}" >> "$GITHUB_ENV"
             echo "PARALLAX_TLS_PINS=sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" >> "$GITHUB_ENV"
             echo "PARALLAX_HAS_RELEASE_TRANSPORT=false" >> "$GITHUB_ENV"
-            echo "Using non-production transport configuration for PR compile checks."
+            echo "WARNING: using non-production transport configuration for this CI build."
+          fi
+          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ] \
+            && [ -n "${STORE_PASSWORD:-}" ] \
+            && [ -n "${KEY_ALIAS:-}" ] \
+            && [ -n "${KEY_PASSWORD:-}" ]; then
+            echo "PARALLAX_HAS_RELEASE_SIGNING=true" >> "$GITHUB_ENV"
           else
-            echo "PARALLAX_API_PUBLIC_KEY_B64 and PARALLAX_TLS_PINS repository variables are required for release builds" >&2
-            exit 1
+            echo "PARALLAX_HAS_RELEASE_SIGNING=false" >> "$GITHUB_ENV"
+            echo "WARNING: using the throwaway CI signing certificate for this build."
+          fi
+          if [ -n "${PARALLAX_API_PUBLIC_KEY_B64:-}" ] \
+            && [ -n "${PARALLAX_TLS_PINS:-}" ] \
+            && [ -n "${ANDROID_KEYSTORE_BASE64:-}" ] \
+            && [ -n "${STORE_PASSWORD:-}" ] \
+            && [ -n "${KEY_ALIAS:-}" ] \
+            && [ -n "${KEY_PASSWORD:-}" ]; then
+            echo "PARALLAX_ARTIFACT_TIER=production" >> "$GITHUB_ENV"
+          else
+            echo "PARALLAX_ARTIFACT_TIER=ci-nonproduction" >> "$GITHUB_ENV"
           fi
 
       - name: Validate encrypted loader transport
@@ -256,13 +272,13 @@ jobs:
           ./gradlew :app:assembleRelease \
             -PblackObfuscatorEnabled=true \
             -PblackObfuscatorDepth=2 \
-            --stacktrace 2>&1 | tee "../${BUILD_LOG_DIR}/loader-apks.log"
+            --no-daemon --stacktrace 2>&1 | tee "../${BUILD_LOG_DIR}/loader-release-apk.log"
 
       - name: Verify BlackObfuscator and packaged DEX
         shell: bash
         run: |
           set -euo pipefail
-          LOG="${BUILD_LOG_DIR}/loader-apks.log"
+          LOG="${BUILD_LOG_DIR}/loader-release-apk.log"
           RELEASE_APK=$(find "${LOADER_PROJECT_DIR}/app/build/outputs/apk/release" -name '*.apk' -print -quit)
           test -n "$RELEASE_APK"
           TRANSFORMED=$(grep -c '^BlackObf Class:' "$LOG" || true)
@@ -298,6 +314,23 @@ jobs:
             '67aec4c457be0d2644224100fa85aed7eac87cb6' '2' "$TRANSFORMED" "$DEX_COUNT" \
             | tee "${BUILD_LOG_DIR}/black-obfuscator-report.txt"
 
+      - name: Build loader debug APK
+        working-directory: ${{ env.LOADER_PROJECT_DIR }}
+        run: |
+          set -o pipefail
+          ./gradlew :app:assembleDebug \
+            -PblackObfuscatorEnabled=false \
+            --no-daemon --stacktrace 2>&1 | tee "../${BUILD_LOG_DIR}/loader-debug-apk.log"
+
+      - name: Verify debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEBUG_APK=$(find "${LOADER_PROJECT_DIR}/app/build/outputs/apk/debug" -name '*.apk' -print -quit)
+          test -n "$DEBUG_APK"
+          "${ANDROID_HOME}/build-tools/36.0.0/apksigner" verify --verbose "$DEBUG_APK"
+          "${ANDROID_HOME}/build-tools/36.0.0/zipalign" -c -v 4 "$DEBUG_APK" >/dev/null
+
       - name: Record release signing certificate SHA-256
         run: |
           set -euo pipefail
@@ -305,6 +338,23 @@ jobs:
           test -n "$RELEASE_APK"
           "${ANDROID_HOME}/build-tools/36.0.0/apksigner" verify --print-certs "$RELEASE_APK" \
             | tee "${BUILD_LOG_DIR}/loader-signing-certificate.txt"
+
+      - name: Record APK artifact information
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_APK=$(find "${LOADER_PROJECT_DIR}/app/build/outputs/apk/release" -name '*.apk' -print -quit)
+          DEBUG_APK=$(find "${LOADER_PROJECT_DIR}/app/build/outputs/apk/debug" -name '*.apk' -print -quit)
+          {
+            printf 'artifact_tier=%s\n' "${PARALLAX_ARTIFACT_TIER}"
+            printf 'production_transport=%s\n' "${PARALLAX_HAS_RELEASE_TRANSPORT}"
+            printf 'production_signing=%s\n' "${PARALLAX_HAS_RELEASE_SIGNING}"
+            printf 'commit=%s\n' "${GITHUB_SHA}"
+            if [ "${PARALLAX_ARTIFACT_TIER}" != 'production' ]; then
+              printf 'warning=CI verification build only; configure production transport and signing before distribution.\n'
+            fi
+            sha256sum "$RELEASE_APK" "$DEBUG_APK"
+          } | tee "${BUILD_LOG_DIR}/apk-artifact-info.txt"
 
       - name: Upload SDK AAR
         uses: actions/upload-artifact@v6
@@ -314,11 +364,17 @@ jobs:
           if-no-files-found: error
 
       - name: Upload loader release APK
-        if: env.PARALLAX_HAS_RELEASE_TRANSPORT == 'true'
         uses: actions/upload-artifact@v6
         with:
-          name: loader-release-apk
+          name: loader-${{ env.PARALLAX_ARTIFACT_TIER }}-release-apk
           path: ${{ env.LOADER_PROJECT_DIR }}/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+      - name: Upload loader debug APK
+        uses: actions/upload-artifact@v6
+        with:
+          name: loader-${{ env.PARALLAX_ARTIFACT_TIER }}-debug-apk
+          path: ${{ env.LOADER_PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
       - name: Upload release signing certificate
@@ -336,4 +392,5 @@ jobs:
           path: |
             ${{ env.BUILD_LOG_DIR }}/*.log
             ${{ env.BUILD_LOG_DIR }}/black-obfuscator-report.txt
+            ${{ env.BUILD_LOG_DIR }}/apk-artifact-info.txt
           if-no-files-found: warn
