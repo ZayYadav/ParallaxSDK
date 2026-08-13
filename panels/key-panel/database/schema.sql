@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS panel_users (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     username VARCHAR(32) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
+    telegram_user_id BIGINT NULL,
     role ENUM('owner','admin','reseller') NOT NULL DEFAULT 'reseller',
     balance_credits INT UNSIGNED NOT NULL DEFAULT 0,
     status ENUM('active','suspended') NOT NULL DEFAULT 'active',
@@ -12,6 +13,7 @@ CREATE TABLE IF NOT EXISTS panel_users (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_panel_users_username (username),
+    UNIQUE KEY uq_panel_users_telegram (telegram_user_id),
     KEY idx_panel_users_role_status (role,status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -122,6 +124,21 @@ CREATE TABLE IF NOT EXISTS login_rate_limits (
     attempt_count SMALLINT UNSIGNED NOT NULL DEFAULT 1,
     PRIMARY KEY (rate_key,window_started_at),
     KEY idx_login_rate_expiry (window_started_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS api_nonces (
+    nonce_hash CHAR(64) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME NOT NULL,
+    PRIMARY KEY (nonce_hash),
+    KEY idx_api_nonces_expiry (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS telegram_updates (
+    update_id BIGINT NOT NULL,
+    processed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (update_id),
+    KEY idx_telegram_updates_time (processed_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS audit_log (

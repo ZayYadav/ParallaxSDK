@@ -127,7 +127,8 @@ jobs:
       LOADER_AAR_PATH: One-Core-Engine/app/libs/ParallaxCore-release.aar
       NDK_VERSION: 27.2.12479018
       BUILD_LOG_DIR: build-logs
-      ONECORE_LEGACY_TOKEN_SECRET: ${{ secrets.ONECORE_LEGACY_TOKEN_SECRET }}
+      PARALLAX_API_PUBLIC_KEY_B64: ${{ vars.PARALLAX_API_PUBLIC_KEY_B64 }}
+      PARALLAX_TLS_PINS: ${{ vars.PARALLAX_TLS_PINS }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -167,33 +168,44 @@ jobs:
       - name: Prepare build log folder
         run: mkdir -p "${BUILD_LOG_DIR}"
 
-      - name: Configure loader licensing for CI
+      - name: Configure encrypted loader transport
         shell: bash
         run: |
           set -euo pipefail
-          if [ -n "${ONECORE_LEGACY_TOKEN_SECRET:-}" ]; then
-            echo "ONECORE_HAS_REAL_LICENSE_SECRET=true" >> "$GITHUB_ENV"
+          if [ -n "${PARALLAX_API_PUBLIC_KEY_B64:-}" ] && [ -n "${PARALLAX_TLS_PINS:-}" ]; then
+            echo "PARALLAX_HAS_RELEASE_TRANSPORT=true" >> "$GITHUB_ENV"
           elif [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            echo "ONECORE_LEGACY_TOKEN_SECRET=ci-only-${GITHUB_SHA}-not-for-release" >> "$GITHUB_ENV"
-            echo "ONECORE_HAS_REAL_LICENSE_SECRET=false" >> "$GITHUB_ENV"
-            echo "Using a non-production licensing secret for PR compile checks."
+            openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/parallax-ci-private.pem 2>/dev/null
+            PUBLIC_KEY=$(openssl pkey -in /tmp/parallax-ci-private.pem -pubout -outform DER 2>/dev/null | base64 -w0)
+            rm -f /tmp/parallax-ci-private.pem
+            echo "PARALLAX_API_PUBLIC_KEY_B64=${PUBLIC_KEY}" >> "$GITHUB_ENV"
+            echo "PARALLAX_TLS_PINS=sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" >> "$GITHUB_ENV"
+            echo "PARALLAX_HAS_RELEASE_TRANSPORT=false" >> "$GITHUB_ENV"
+            echo "Using non-production transport configuration for PR compile checks."
           else
-            echo "ONECORE_LEGACY_TOKEN_SECRET must be configured for release builds" >&2
+            echo "PARALLAX_API_PUBLIC_KEY_B64 and PARALLAX_TLS_PINS repository variables are required for release builds" >&2
             exit 1
           fi
 
-      - name: Validate loader licensing configuration
+      - name: Validate encrypted loader transport
         shell: python
         run: |
+          import base64
           import os
+          import re
 
-          secret = os.environ.get("ONECORE_LEGACY_TOKEN_SECRET", "")
-          if len(secret) < 32 or len(secret) > 256:
-              raise SystemExit(
-                  "ONECORE_LEGACY_TOKEN_SECRET must contain 32-256 characters"
+          try:
+              public_key = base64.b64decode(
+                  os.environ.get("PARALLAX_API_PUBLIC_KEY_B64", ""), validate=True
               )
-
-          print("Pinned Parallax licensing configuration is valid")
+          except Exception as error:
+              raise SystemExit("PARALLAX_API_PUBLIC_KEY_B64 is invalid") from error
+          if len(public_key) < 256 or len(public_key) > 1024:
+              raise SystemExit("PARALLAX_API_PUBLIC_KEY_B64 has an invalid DER size")
+          pins = [item.strip() for item in os.environ.get("PARALLAX_TLS_PINS", "").split(",") if item.strip()]
+          if not pins or any(not re.fullmatch(r"sha256/[A-Za-z0-9+/]{43}=", item) for item in pins):
+              raise SystemExit("PARALLAX_TLS_PINS must contain valid OkHttp SHA-256 pins")
+          print("Encrypted and pinned Parallax transport configuration is valid")
 
       - name: Build SDK release AAR
         working-directory: ${{ env.SDK_PROJECT_DIR }}
@@ -259,7 +271,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload loader release APK
-        if: env.ONECORE_HAS_REAL_LICENSE_SECRET == 'true'
+        if: env.PARALLAX_HAS_RELEASE_TRANSPORT == 'true'
         uses: actions/upload-artifact@v6
         with:
           name: loader-release-apk
@@ -267,7 +279,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload loader debug APK
-        if: env.ONECORE_HAS_REAL_LICENSE_SECRET == 'true'
+        if: env.PARALLAX_HAS_RELEASE_TRANSPORT == 'true'
         uses: actions/upload-artifact@v6
         with:
           name: loader-debug-apk

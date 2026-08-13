@@ -54,5 +54,16 @@ final class Database
             throw new \RuntimeException('Database schema is missing.');
         }
         self::connection()->exec($sql);
+        // Safe upgrades for installations created by the first standalone release.
+        try {
+            self::connection()->exec('ALTER TABLE panel_users ADD COLUMN telegram_user_id BIGINT NULL AFTER password_hash');
+        } catch (\Throwable) {
+            // Column already exists.
+        }
+        try {
+            self::connection()->exec('CREATE UNIQUE INDEX uq_panel_users_telegram ON panel_users (telegram_user_id)');
+        } catch (\Throwable) {
+            // Index already exists.
+        }
     }
 }

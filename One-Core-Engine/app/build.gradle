@@ -9,8 +9,11 @@ plugins {
 
 apply from: '../signing.gradle'
 
-def parallaxLegacyTokenSecret = providers.gradleProperty('parallaxLegacyTokenSecret')
-        .orElse(System.getenv('ONECORE_LEGACY_TOKEN_SECRET') ?: '')
+def parallaxApiPublicKey = providers.gradleProperty('parallaxApiPublicKey')
+        .orElse(System.getenv('PARALLAX_API_PUBLIC_KEY_B64') ?: '')
+        .get()
+def parallaxTlsPins = providers.gradleProperty('parallaxTlsPins')
+        .orElse(System.getenv('PARALLAX_TLS_PINS') ?: '')
         .get()
 def oneCoreAllowedSigningSha256 = providers.gradleProperty('onecoreAllowedSigningSha256')
         .orElse(System.getenv('ONECORE_ALLOWED_SIGNING_SHA256') ?: '')
@@ -66,7 +69,8 @@ android {
         versionName rootProject.ext.versionName
         vectorDrawables.useSupportLibrary = true
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField "String", "PARALLAX_LEGACY_TOKEN_SECRET", javaString(parallaxLegacyTokenSecret)
+        buildConfigField "String", "PARALLAX_API_PUBLIC_KEY_B64", javaString(parallaxApiPublicKey)
+        buildConfigField "String", "PARALLAX_TLS_PINS", javaString(parallaxTlsPins)
         
         ndk {
             // Parallax Loader APKs intentionally target modern 64-bit ARM devices only.

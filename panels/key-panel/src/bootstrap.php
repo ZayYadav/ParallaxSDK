@@ -39,5 +39,7 @@ header("Content-Security-Policy: default-src 'self'; style-src 'self'; form-acti
 
 require PANEL_ROOT . '/src/Database.php';
 require PANEL_ROOT . '/src/Security.php';
+require PANEL_ROOT . '/src/ApiCrypto.php';
+require PANEL_ROOT . '/src/TelegramBot.php';
 require PANEL_ROOT . '/src/View.php';
 require PANEL_ROOT . '/src/App.php';

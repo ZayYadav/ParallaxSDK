@@ -9,3 +9,4 @@ if (PHP_SAPI !== 'cli') {
 
 echo 'SETUP_TOKEN=' . bin2hex(random_bytes(32)) . PHP_EOL;
 echo 'ONECORE_LEGACY_TOKEN_SECRET=' . bin2hex(random_bytes(32)) . PHP_EOL;
+echo 'TELEGRAM_WEBHOOK_SECRET=' . bin2hex(random_bytes(32)) . PHP_EOL;

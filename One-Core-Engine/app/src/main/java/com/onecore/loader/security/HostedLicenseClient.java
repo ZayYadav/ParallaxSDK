@@ -7,6 +7,7 @@ import com.onecore.loader.BuildConfig;
 
 import org.json.JSONObject;
 
+import java.net.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.text.ParsePosition;
@@ -18,23 +19,28 @@ import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
+import okhttp3.CertificatePinner;
 import okhttp3.ConnectionSpec;
-import okhttp3.FormBody;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
+import okhttp3.RequestBody;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 import okio.BufferedSource;
 
-/** Fail-closed client for the pinned Parallax legacy key checker. */
+/** Fail-closed encrypted client for the pinned Parallax licensing API. */
 public final class HostedLicenseClient {
-    static final String CONNECT_URL = "https://parallaxserver.online/connect";
+    static final String CONNECT_URL = "https://parallaxserver.online/api/v2/connect";
+    static final String CONNECT_HOST = "parallaxserver.online";
     static final String GAME_ID = "PUBG";
+    private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
     private static final long MAX_RESPONSE_BYTES = 64L * 1024L;
     private static final long MAX_CLOCK_SKEW_SECONDS = 60L;
     private static final Pattern ACTIVATION_KEY_PATTERN =
             Pattern.compile("^[A-Za-z0-9_-]{4,64}$");
+    private static final Pattern RECEIPT_PATTERN =
+            Pattern.compile("^[A-Za-z0-9_-]{32,64}$");
 
     private static final String LICENSE_KEY = "PARALLAX_LICENSE_KEY";
     private static final String LICENSE_TOKEN = "PARALLAX_LICENSE_TOKEN";
@@ -47,8 +53,19 @@ public final class HostedLicenseClient {
 
     public HostedLicenseClient(Context context) {
         this.context = context.getApplicationContext();
+        CertificatePinner.Builder pins = new CertificatePinner.Builder();
+        int pinCount = 0;
+        for (String pin : configuredPins()) {
+            pins.add(CONNECT_HOST, pin);
+            pinCount++;
+        }
+        if (pinCount == 0) {
+            throw new IllegalStateException("Licensing TLS pins are not configured");
+        }
         this.httpClient = new OkHttpClient.Builder()
+                .certificatePinner(pins.build())
                 .connectionSpecs(Arrays.asList(ConnectionSpec.MODERN_TLS))
+                .proxy(Proxy.NO_PROXY)
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .readTimeout(20, TimeUnit.SECONDS)
                 .writeTimeout(15, TimeUnit.SECONDS)
@@ -58,7 +75,7 @@ public final class HostedLicenseClient {
                 .build();
     }
 
-    /** Activates or revalidates a key and persists only a cryptographically checked response. */
+    /** Activates or revalidates a key and persists only a cryptographically bound response. */
     public String activate(String activationKey) {
         try {
             AppIntegrity.Verification integrity = AppIntegrity.verify(context);
@@ -66,42 +83,43 @@ public final class HostedLicenseClient {
                 clearLicense();
                 return "Application signature verification failed";
             }
-
             String normalizedKey = normalizeActivationKey(activationKey);
             if (!isSupportedActivationKey(normalizedKey)) {
                 clearLicense();
-                return "Use a key created in OneCore Integrity";
+                return "Use a key created in Parallax Control";
             }
-
-            String secret = configuredTokenSecret();
             String serial = DeviceIdentity.deviceId();
-            FormBody requestBody = new FormBody.Builder(StandardCharsets.UTF_8)
-                    .add("game", GAME_ID)
-                    .add("user_key", normalizedKey)
-                    .add("serial", serial)
-                    .build();
+            JSONObject payload = new JSONObject();
+            payload.put("game", GAME_ID);
+            payload.put("user_key", normalizedKey);
+            payload.put("serial", serial);
+            payload.put("package_name", context.getPackageName());
+            payload.put("certificate_sha256",
+                    AppIntegrity.currentSigningCertificateSha256(context));
+            payload.put("version_code", BuildConfig.VERSION_CODE);
+            LicenseTransportCrypto.RequestEnvelope encrypted =
+                    LicenseTransportCrypto.encryptRequest(payload, configuredPublicKey());
             Request request = new Request.Builder()
                     .url(CONNECT_URL)
                     .header("Accept", "application/json")
                     .header("Cache-Control", "no-store")
-                    .post(requestBody)
+                    .post(RequestBody.create(encrypted.json, JSON))
                     .build();
-
             try (Response response = httpClient.newCall(request).execute()) {
                 if (!CONNECT_URL.equals(response.request().url().toString())) {
                     throw new IllegalStateException("Licensing server redirected unexpectedly");
                 }
                 String body = readBoundedJson(response);
-                if (!response.isSuccessful()) {
-                    throw new IllegalStateException("Licensing server rejected the request");
-                }
-
+                JSONObject decrypted = LicenseTransportCrypto.decryptResponse(body, encrypted);
                 long receivedAt = System.currentTimeMillis() / 1000L;
-                ParsedLicense license = parseResponse(
-                        body, normalizedKey, serial, secret, receivedAt);
+                ParsedLicense license = parseDecryptedResponse(
+                        decrypted, encrypted.nonce, encrypted.canary, receivedAt);
+                if (!response.isSuccessful()) {
+                    throw new LicenseRejectedException("Licensing server rejected the request");
+                }
                 SecurePreferences preferences = new SecurePreferences(context);
                 preferences.putString(LICENSE_KEY, normalizedKey);
-                preferences.putString(LICENSE_TOKEN, license.token);
+                preferences.putString(LICENSE_TOKEN, license.receipt);
                 preferences.putString(LICENSE_EXPIRES_AT, Long.toString(license.expiresAt));
                 preferences.putString(VERIFIED_SERVER_TIME, Long.toString(license.serverTime));
                 preferences.putString(
@@ -118,7 +136,6 @@ public final class HostedLicenseClient {
         }
     }
 
-    /** Rechecks the securely stored key against the server. */
     public String revalidateStoredLicense() {
         String key = new SecurePreferences(context).getString(LICENSE_KEY, "");
         if (key.isEmpty()) {
@@ -128,7 +145,6 @@ public final class HostedLicenseClient {
         return activate(key);
     }
 
-    /** Uses a monotonic server-time anchor and fails closed after reboot or clock rollback. */
     public boolean hasActiveLicense() {
         long expiresAt = readLong(LICENSE_EXPIRES_AT);
         long serverTime = readLong(VERIFIED_SERVER_TIME);
@@ -167,9 +183,8 @@ public final class HostedLicenseClient {
                 || elapsedNow - verifiedElapsed >= maximumAgeMillis;
     }
 
-    /** The legacy checker has no authenticated telemetry route. */
     public void reportSecurityEvent(String eventType, String severity) {
-        // Local integrity enforcement remains fail-closed without transmitting to another API.
+        // Security failures remain local and fail closed; no unauthenticated telemetry path.
     }
 
     public void clearLicense() {
@@ -223,43 +238,38 @@ public final class HostedLicenseClient {
         return body;
     }
 
-    static ParsedLicense parseResponse(
-            String body,
-            String activationKey,
-            String serial,
-            String secret,
+    static ParsedLicense parseDecryptedResponse(
+            JSONObject response,
+            String requestNonce,
+            String requestCanary,
             long receivedAtEpochSeconds) throws Exception {
-        JSONObject response = new JSONObject(body);
+        if (!constantTimeEquals(requestNonce, response.optString("request_nonce", ""))
+                || !constantTimeEquals(requestCanary, response.optString("canary", ""))) {
+            throw new LicenseRejectedException("Licensing response canary validation failed");
+        }
         if (!response.optBoolean("status", false)) {
             String reason = response.optString("reason", "License was rejected").trim();
-            throw new LicenseRejectedException(
-                    reason.isEmpty() ? "License was rejected" : reason);
+            throw new LicenseRejectedException(reason.isEmpty() ? "License was rejected" : reason);
         }
-        JSONObject data = response.optJSONObject("data");
-        if (data == null) {
-            throw new LicenseRejectedException(
-                    response.optString("reason", "Licensing server is under maintenance"));
-        }
-
-        String token = data.optString("token", "").trim().toLowerCase(Locale.US);
-        long serverTime = data.optLong("rng", 0L);
-        String expiry = data.optString("expired_date", data.optString("EXP", "")).trim();
-        long expiresAt = parseUtcExpiry(expiry);
+        long serverTime = response.optLong("server_time", 0L);
         if (serverTime <= 0L
                 || serverTime < receivedAtEpochSeconds - MAX_CLOCK_SKEW_SECONDS
                 || serverTime > receivedAtEpochSeconds + MAX_CLOCK_SKEW_SECONDS) {
             throw new LicenseRejectedException("Licensing server timestamp validation failed");
         }
+        String receipt = response.optString("receipt", "");
+        if (!RECEIPT_PATTERN.matcher(receipt).matches()) {
+            throw new LicenseRejectedException("Licensing receipt is invalid");
+        }
+        JSONObject data = response.optJSONObject("data");
+        if (data == null) {
+            throw new LicenseRejectedException("Licensing server payload is missing");
+        }
+        long expiresAt = parseUtcExpiry(data.optString("expired_date", "").trim());
         if (expiresAt <= serverTime) {
             throw new LicenseRejectedException("EXPIRED KEY");
         }
-
-        String expectedToken = md5Hex(
-                GAME_ID + "-" + activationKey + "-" + serial + "-" + secret);
-        if (!constantTimeEquals(expectedToken, token)) {
-            throw new LicenseRejectedException("Licensing server integrity validation failed");
-        }
-        return new ParsedLicense(token, expiresAt, serverTime);
+        return new ParsedLicense(receipt, expiresAt, serverTime);
     }
 
     static long parseUtcExpiry(String value) throws LicenseRejectedException {
@@ -285,37 +295,40 @@ public final class HostedLicenseClient {
         return ACTIVATION_KEY_PATTERN.matcher(normalizeActivationKey(activationKey)).matches();
     }
 
-    static String md5Hex(String value) throws Exception {
-        byte[] digest = MessageDigest.getInstance("MD5")
-                .digest(value.getBytes(StandardCharsets.UTF_8));
-        StringBuilder result = new StringBuilder(digest.length * 2);
-        for (byte item : digest) {
-            result.append(String.format(Locale.US, "%02x", item & 0xff));
-        }
-        return result.toString();
-    }
-
     private static boolean constantTimeEquals(String expected, String actual) {
         return MessageDigest.isEqual(
                 expected.getBytes(StandardCharsets.US_ASCII),
                 actual.getBytes(StandardCharsets.US_ASCII));
     }
 
-    private static String configuredTokenSecret() {
-        String secret = BuildConfig.PARALLAX_LEGACY_TOKEN_SECRET;
-        if (secret == null || secret.length() < 32) {
-            throw new IllegalStateException("Licensing integrity secret is not configured");
+    private static String configuredPublicKey() {
+        String value = BuildConfig.PARALLAX_API_PUBLIC_KEY_B64;
+        if (value == null || value.length() < 256) {
+            throw new IllegalStateException("Licensing public key is not configured");
         }
-        return secret;
+        return value;
+    }
+
+    private static String[] configuredPins() {
+        String value = BuildConfig.PARALLAX_TLS_PINS;
+        if (value == null || value.trim().isEmpty()) {
+            return new String[0];
+        }
+        return Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(pin -> pin.startsWith("sha256/") && pin.length() == 51)
+                .toArray(String[]::new);
     }
 
     private static String userFacingError(Exception exception) {
         String message = exception.getMessage();
         String normalized = message == null ? "" : message.toLowerCase(Locale.US);
-        if (normalized.contains("configured")
-                || normalized.contains("unsupported response")
-                || normalized.contains("redirected")
-                || normalized.contains("too large")) {
+        if (normalized.contains("certificate pinning") || normalized.contains("peer not authenticated")) {
+            return "Secure server identity validation failed";
+        }
+        if (normalized.contains("configured") || normalized.contains("encryption")
+                || normalized.contains("canary") || normalized.contains("unsupported response")
+                || normalized.contains("redirected") || normalized.contains("too large")) {
             return message;
         }
         if (normalized.contains("timeout") || normalized.contains("timed out")) {
@@ -329,12 +342,12 @@ public final class HostedLicenseClient {
     }
 
     static final class ParsedLicense {
-        final String token;
+        final String receipt;
         final long expiresAt;
         final long serverTime;
 
-        ParsedLicense(String token, long expiresAt, long serverTime) {
-            this.token = token;
+        ParsedLicense(String receipt, long expiresAt, long serverTime) {
+            this.receipt = receipt;
             this.expiresAt = expiresAt;
             this.serverTime = serverTime;
         }
