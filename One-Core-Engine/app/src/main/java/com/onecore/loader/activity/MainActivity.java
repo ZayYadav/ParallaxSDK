@@ -41,7 +41,6 @@ import com.onecore.loader.libhelper.FileCopyTask;
 import com.onecore.loader.utils.Constants;
 import com.onecore.loader.utils.FLog;
 import com.onecore.loader.security.HostedLicenseClient;
-import com.onecore.loader.security.SecurePreferences;
 import java.io.InputStream;
 import java.text.DateFormat;
 import java.util.Date;
@@ -56,6 +55,8 @@ import org.lsposed.lsparanoid.Obfuscate;
 
 @Obfuscate
 public class MainActivity extends Activity {
+
+    private static final long ONLINE_REVALIDATION_INTERVAL_MS = 5L * 60L * 1000L;
 
     public static MainActivity instance;
     private BlackBoxCore blackBoxCore;
@@ -73,6 +74,9 @@ public class MainActivity extends Activity {
     private boolean isIndiaSelected = false;
     private final Handler countdownHandler = new Handler(Looper.getMainLooper());
     private Runnable countdownRunnable;
+    private HostedLicenseClient licenseClient;
+    private boolean accessClosed;
+    private boolean revalidationInProgress;
     
     public static MainActivity get() {
         return instance;
@@ -91,6 +95,11 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
         Thread.setDefaultUncaughtExceptionHandler(new CrashHandler(this));
         instance = this;
+        licenseClient = new HostedLicenseClient(this);
+        if (!licenseClient.hasActiveLicense()) {
+            closeExpiredAccess();
+            return;
+        }
         blackBoxCore = BlackBoxCore.get();
         blackBoxCore.doCreate();
         GameJsonMods();
@@ -163,10 +172,17 @@ public class MainActivity extends Activity {
         updateButtonState(0, installIndia);
         
         // Install button click listener
-        installIndia.setOnClickListener(view -> handleInstallUninstall(0, installIndia));
+        installIndia.setOnClickListener(view -> {
+            if (ensureLicenseActive()) {
+                handleInstallUninstall(0, installIndia);
+            }
+        });
 
         // Start Game button click listener
         btnStartGame.setOnClickListener(v -> {
+            if (!ensureLicenseActive()) {
+                return;
+            }
             if (!isIndiaSelected || selectedGamePkg == null || selectedGamePkg.isEmpty()) {
                 BoxApplication.get().showToastWithImage("⚠ Please select India game first! ⚠", TastyToast.WARNING);
                 if (radioIndia != null) {
@@ -231,6 +247,9 @@ public class MainActivity extends Activity {
     }
     
     public void do_Lib_And_Run(String packageName) {
+        if (!ensureLicenseActive()) {
+            return;
+        }
         CURRENT_PACKAGE = packageName;
         Handler handler = new Handler(Looper.getMainLooper());
         handler.post(() -> {
@@ -241,6 +260,9 @@ public class MainActivity extends Activity {
     }
     
     private void handleInstallUninstall(final int gameIndex, final TextView installButton) {
+        if (!ensureLicenseActive()) {
+            return;
+        }
         final String packageName = GAME_LIST_PKG[gameIndex];
         final FileCopyTask fileCopyTask = new FileCopyTask(MainActivity.get());
 
@@ -265,6 +287,9 @@ public class MainActivity extends Activity {
                 fileCopyTask.copyObbFolderAsync(packageName, new FileCopyTask.CopyCallback() {
                     @Override
                     public void onCopyCompleted(boolean copySuccess) {
+                        if (!ensureLicenseActive()) {
+                            return;
+                        }
                         if (copySuccess) {
                             if (ApkEnv.getInstance().installByPackage(packageName)) {
                                 installButton.setText("UNINSTALL");
@@ -310,11 +335,8 @@ public class MainActivity extends Activity {
             @Override
             public void run() {
                 try {
-                    long now = System.currentTimeMillis();
-                    String storedExpiry = new SecurePreferences(MainActivity.this)
-                            .getString(HostedLicenseClient.LICENSE_EXPIRES_AT, "0");
-                    long expiryMillis = Long.parseLong(storedExpiry) * 1000L;
-                    long distance = Math.max(0L, expiryMillis - now);
+                    long expiryMillis = licenseClient.expiresAtEpochSeconds() * 1000L;
+                    long distance = licenseClient.remainingMillis();
                     long days = distance / (24 * 60 * 60 * 1000L);
                     long hours = distance / (60 * 60 * 1000L) % 24;
                     long minutes = distance / (60 * 1000L) % 60;
@@ -334,7 +356,15 @@ public class MainActivity extends Activity {
                     secondView.setScaleY(0.92f);
                     secondView.animate().scaleX(1f).scaleY(1f).setDuration(180L).start();
 
-                    renderLicenseState(expiryMillis, expiryMillis - now);
+                    renderLicenseState(expiryMillis, distance);
+                    if (distance <= 0L) {
+                        closeExpiredAccess();
+                        return;
+                    }
+                    if (licenseClient.needsOnlineRevalidation(
+                            ONLINE_REVALIDATION_INTERVAL_MS)) {
+                        revalidateLicenseAsync();
+                    }
                 } catch (Exception e) {
                     FLog.warning("Unable to update subscription countdown");
                     renderLicenseUnavailable();
@@ -371,7 +401,7 @@ public class MainActivity extends Activity {
         title.setText(expiringSoon ? "Renew soon" : "Protected session");
         subtitle.setText(expiringSoon
                 ? "Less than 24 hours remain on this key."
-                : "Live encrypted access is active.");
+                : "Live verified access is active.");
         badge.setText(expiringSoon ? "EXPIRING" : "ACTIVE");
 
         int accent = Color.parseColor(expiringSoon ? "#FFF4BE5E" : "#FF5DE2B1");
@@ -455,6 +485,9 @@ public class MainActivity extends Activity {
     }
 
     private void startPatcher() {
+        if (!ensureLicenseActive()) {
+            return;
+        }
         if (!Settings.canDrawOverlays(MainActivity.get())) {
             Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()));
             startActivityForResult(intent, 123);
@@ -474,14 +507,20 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        countDownStart();
+        if (licenseClient != null && licenseClient.hasActiveLicense()) {
+            countDownStart();
+            if (licenseClient.needsOnlineRevalidation(
+                    ONLINE_REVALIDATION_INTERVAL_MS)) {
+                revalidateLicenseAsync();
+            }
+        } else if (licenseClient != null) {
+            closeExpiredAccess();
+        }
     }
 
     @Override
     protected void onPause() {
-        if (countdownRunnable != null) {
-            countdownHandler.removeCallbacks(countdownRunnable);
-        }
+        // Keep the monotonic expiry gate alive while the game/overlay is foregrounded.
         super.onPause();
     }
     
@@ -494,5 +533,46 @@ public class MainActivity extends Activity {
         stopService(new Intent(MainActivity.get(), Overlay.class));
         stopService(new Intent(MainActivity.get(), FloatAim.class));
         super.onDestroy();
+    }
+
+    private boolean ensureLicenseActive() {
+        if (accessClosed || licenseClient == null || !licenseClient.hasActiveLicense()) {
+            closeExpiredAccess();
+            return false;
+        }
+        return true;
+    }
+
+    private void revalidateLicenseAsync() {
+        if (revalidationInProgress || accessClosed || licenseClient == null) {
+            return;
+        }
+        revalidationInProgress = true;
+        new Thread(() -> {
+            String result = licenseClient.revalidateStoredLicense();
+            runOnUiThread(() -> {
+                revalidationInProgress = false;
+                if (!"OK".equals(result)) {
+                    closeExpiredAccess();
+                }
+            });
+        }, "LicenseRevalidation").start();
+    }
+
+    private void closeExpiredAccess() {
+        if (accessClosed || isFinishing()) {
+            return;
+        }
+        accessClosed = true;
+        if (countdownRunnable != null) {
+            countdownHandler.removeCallbacks(countdownRunnable);
+        }
+        if (licenseClient != null) {
+            licenseClient.clearLicense();
+        }
+        Intent intent = new Intent(this, LoginActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(intent);
+        finish();
     }
 }
