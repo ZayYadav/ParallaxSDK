@@ -24,7 +24,13 @@ final class App
             if (!Database::installed()) {
                 redirect('setup');
             }
-            if ($path === '/connect') {
+            if ($path === '/telegram/webhook') {
+                (new TelegramBot($this->db))->handleWebhook();
+            }
+            if ($path === '/api/v2/connect') {
+                $this->connectV2();
+            }
+            if ($path === '/connect' && Env::get('ENABLE_LEGACY_CONNECT', 'false') === 'true') {
                 $this->connect();
             }
             if ($path === '/' || $path === '/login') {
@@ -57,7 +63,7 @@ final class App
             View::page('Not found', '<div class="card"><h1>404</h1><p>Page not found.</p></div>', Security::user());
         } catch (Throwable $error) {
             error_log((string) $error);
-            if ($path === '/connect') {
+            if ($path === '/connect' || $path === '/api/v2/connect') {
                 $this->json(['status' => false, 'reason' => 'SERVER ERROR'], 500);
             }
             $message = Env::get('APP_ENV') === 'development'
@@ -98,19 +104,22 @@ final class App
             $provided = (string) ($_POST['setup_token'] ?? '');
             $username = trim((string) ($_POST['username'] ?? ''));
             $password = (string) ($_POST['password'] ?? '');
+            $telegramUserId = trim((string) ($_POST['telegram_user_id'] ?? ''));
             if (strlen($setupToken) < 32 || !hash_equals($setupToken, $provided)) {
                 flash('danger', 'Invalid setup token.');
                 redirect('setup');
             }
-            if (preg_match('/^[A-Za-z0-9_]{4,32}$/D', $username) !== 1 || strlen($password) < 12) {
-                flash('danger', 'Username must be 4-32 safe characters and password at least 12 characters.');
+            if (preg_match('/^[A-Za-z0-9_]{4,32}$/D', $username) !== 1 || strlen($password) < 12
+                || preg_match('/^[1-9][0-9]{4,19}$/D', $telegramUserId) !== 1) {
+                flash('danger', 'Username, 12-character password, and numeric Telegram user ID are required.');
                 redirect('setup');
             }
             Database::install();
+            ApiCrypto::ensureKeyPair();
             $statement = $this->db->prepare(
-                "INSERT INTO panel_users (username,password_hash,role,status) VALUES (?,?,'owner','active')"
+                "INSERT INTO panel_users (username,password_hash,telegram_user_id,role,status) VALUES (?,?,?,'owner','active')"
             );
-            $statement->execute([$username, password_hash($password, PASSWORD_DEFAULT)]);
+            $statement->execute([$username, password_hash($password, PASSWORD_DEFAULT), $telegramUserId]);
             flash('success', 'Owner created. Delete or rotate SETUP_TOKEN, then sign in.');
             redirect('login');
         }
@@ -120,6 +129,7 @@ final class App
             . View::input('setup_token', 'SETUP_TOKEN from .env', 'password', '', 'required autocomplete="off"')
             . View::input('username', 'Owner username', 'text', '', 'required minlength="4" maxlength="32"')
             . View::input('password', 'Owner password', 'password', '', 'required minlength="12" autocomplete="new-password"')
+            . View::input('telegram_user_id', 'Telegram numeric user ID', 'text', '', 'required inputmode="numeric" pattern="[1-9][0-9]{4,19}"')
             . '<button type="submit">Install panel</button></form></div></section>';
         View::page('Setup', $body);
     }
@@ -135,7 +145,15 @@ final class App
                 flash('danger', 'Too many login attempts. Wait 15 minutes and try again.');
                 redirect('login');
             }
-            if (Security::login(trim((string) ($_POST['username'] ?? '')), (string) ($_POST['password'] ?? ''))) {
+            if (!Security::verifyCaptcha((string) ($_POST['captcha'] ?? ''))) {
+                flash('danger', 'CAPTCHA answer is incorrect or expired.');
+                redirect('login');
+            }
+            if (Security::login(
+                trim((string) ($_POST['username'] ?? '')),
+                (string) ($_POST['password'] ?? ''),
+                trim((string) ($_POST['telegram_user_id'] ?? ''))
+            )) {
                 $this->db->prepare('DELETE FROM login_rate_limits WHERE rate_key=?')
                     ->execute([hash('sha256', Security::clientIp())]);
                 redirect('dashboard');
@@ -148,6 +166,8 @@ final class App
             . Security::csrfField()
             . View::input('username', 'Username', 'text', '', 'required autocomplete="username"')
             . View::input('password', 'Password', 'password', '', 'required autocomplete="current-password"')
+            . View::input('telegram_user_id', 'Linked Telegram ID (if configured)', 'text', '', 'inputmode="numeric" pattern="[0-9]{5,20}" autocomplete="off"')
+            . View::input('captcha', 'CAPTCHA: ' . Security::captchaQuestion() . ' = ?', 'number', '', 'required inputmode="numeric" autocomplete="off"')
             . '<button type="submit">Sign in</button></form></div></section>';
         View::page('Sign in', $body);
     }
@@ -417,6 +437,10 @@ final class App
                 . (($features[$feature] ?? 'off') === 'on' ? 'checked' : '') . '> ' . h($feature) . '</label>';
         }
         $disabled = $user['role'] === 'reseller' ? ' disabled' : '';
+        $publicKey = ApiCrypto::publicKeyBase64();
+        $telegramReady = Env::get('TELEGRAM_BOT_TOKEN') !== ''
+            && strlen(Env::get('TELEGRAM_WEBHOOK_SECRET')) >= 32
+            && Env::get('TELEGRAM_ALLOWED_USER_IDS') !== '';
         $body = '<h1>Server settings</h1><p class="lead">Values returned by the legacy checker.</p><section class="card">'
             . '<form method="post"><fieldset' . $disabled . '><div class="form-grid">' . Security::csrfField()
             . View::input('modname', 'Mod name', 'text', (string) $server['modname'], 'required maxlength="100"')
@@ -424,7 +448,14 @@ final class App
             . View::input('message', 'Maintenance message', 'text', (string) $server['myinput'], 'maxlength="255"')
             . '</div><p><label><input type="checkbox" name="maintenance" value="on" '
             . ($server['status'] === 'on' ? 'checked' : '') . '> Maintenance mode</label></p>'
-            . '<div class="grid">' . $checks . '</div><p><button type="submit">Save settings</button></p></fieldset></form></section>';
+            . '<div class="grid">' . $checks . '</div><p><button type="submit">Save settings</button></p></fieldset></form></section>'
+            . '<section class="card"><h2>Encrypted loader API</h2><p>Copy this public key to the GitHub repository variable '
+            . '<code>PARALLAX_API_PUBLIC_KEY_B64</code>. The private key remains protected in <code>runtime/</code>.</p>'
+            . '<textarea class="mono" rows="6" readonly>' . h($publicKey) . '</textarea></section>'
+            . '<section class="card"><h2>Telegram control bot</h2><p>Status: <span class="pill '
+            . ($telegramReady ? 'active">configured' : 'blocked">not configured') . '</span></p>'
+            . '<p>Webhook URL: <code>' . h(rtrim(Env::get('APP_URL'), '/') . url('telegram/webhook'))
+            . '</code></p><p>Use <code>php tools/configure-telegram.php</code> after filling the Telegram values in <code>.env</code>.</p></section>';
         View::page('Settings', $body, $user);
     }
 
@@ -432,9 +463,9 @@ final class App
     {
         $user = Security::requireUser(true);
         $rows = '';
-        foreach ($this->db->query('SELECT id,username,role,balance_credits,status,last_login_at,created_at FROM panel_users ORDER BY id')->fetchAll() as $account) {
+        foreach ($this->db->query('SELECT id,username,telegram_user_id,role,balance_credits,status,last_login_at,created_at FROM panel_users ORDER BY id')->fetchAll() as $account) {
             $rows .= '<tr><td>#' . h($account['id']) . '</td><td>' . h($account['username']) . '</td><td>' . h($account['role'])
-                . '</td><td>' . h($account['balance_credits']) . '</td><td><span class="pill ' . h($account['status']) . '">' . h($account['status'])
+                . '</td><td class="mono">' . h($account['telegram_user_id'] ?: 'not linked') . '</td><td>' . h($account['balance_credits']) . '</td><td><span class="pill ' . h($account['status']) . '">' . h($account['status'])
                 . '</span></td><td>' . h($account['last_login_at'] ?: 'never') . '</td><td>'
                 . ((int) $account['id'] !== (int) $user['id']
                     ? $this->postButton('users/action', 'toggle', (int) $account['id'], $account['status'] === 'active' ? 'Suspend' : 'Activate', 'secondary') : '')
@@ -444,10 +475,11 @@ final class App
             . '<section class="card"><h2>Create user</h2><form method="post" action="' . url('users/create') . '"><div class="form-grid">'
             . Security::csrfField() . View::input('username', 'Username', 'text', '', 'required minlength="4" maxlength="32"')
             . View::input('password', 'Temporary password', 'password', '', 'required minlength="12"')
+            . View::input('telegram_user_id', 'Telegram user ID (optional)', 'text', '', 'inputmode="numeric" pattern="[1-9][0-9]{4,19}"')
             . View::select('role', 'Role', ['admin'=>'Admin','reseller'=>'Reseller'], 'reseller')
             . View::input('balance', 'Credits', 'number', '0', 'min="0" max="100000000"')
             . '<button type="submit">Create user</button></div></form></section><section class="card"><div class="table-wrap"><table>'
-            . '<thead><tr><th>ID</th><th>Username</th><th>Role</th><th>Credits</th><th>Status</th><th>Last login</th><th>Action</th></tr></thead><tbody>'
+            . '<thead><tr><th>ID</th><th>Username</th><th>Role</th><th>Telegram ID</th><th>Credits</th><th>Status</th><th>Last login</th><th>Action</th></tr></thead><tbody>'
             . $rows . '</tbody></table></div></section>';
         View::page('Users', $body, $user);
     }
@@ -460,14 +492,16 @@ final class App
         $password = (string) ($_POST['password'] ?? '');
         $role = (string) ($_POST['role'] ?? 'reseller');
         $balance = (int) ($_POST['balance'] ?? 0);
+        $telegramUserId = trim((string) ($_POST['telegram_user_id'] ?? ''));
         if (preg_match('/^[A-Za-z0-9_]{4,32}$/D', $username) !== 1 || strlen($password) < 12
-            || !in_array($role, ['admin','reseller'], true) || $balance < 0 || $balance > 100000000) {
+            || !in_array($role, ['admin','reseller'], true) || $balance < 0 || $balance > 100000000
+            || ($telegramUserId !== '' && preg_match('/^[1-9][0-9]{4,19}$/D', $telegramUserId) !== 1)) {
             flash('danger', 'Invalid user fields.');
             redirect('users');
         }
         try {
-            $statement = $this->db->prepare('INSERT INTO panel_users (username,password_hash,role,balance_credits) VALUES (?,?,?,?)');
-            $statement->execute([$username, password_hash($password, PASSWORD_DEFAULT), $role, $balance]);
+            $statement = $this->db->prepare('INSERT INTO panel_users (username,password_hash,telegram_user_id,role,balance_credits) VALUES (?,?,?,?,?)');
+            $statement->execute([$username, password_hash($password, PASSWORD_DEFAULT), $telegramUserId === '' ? null : $telegramUserId, $role, $balance]);
             Security::audit($this->db, (int) $user['id'], 'panel_user_created', $username);
             flash('success', 'Panel user created.');
         } catch (Throwable) {
@@ -616,6 +650,168 @@ final class App
             }
             throw $error;
         }
+    }
+
+    private function connectV2(): never
+    {
+        if (!$this->isPost()) {
+            http_response_code(405);
+            $this->json(['status' => false, 'reason' => 'METHOD NOT ALLOWED'], 405);
+        }
+        header('Cache-Control: no-store, max-age=0');
+        $contentType = strtolower(trim(explode(';', (string) ($_SERVER['CONTENT_TYPE'] ?? ''))[0]));
+        if ($contentType !== 'application/json') {
+            $this->json(['status' => false, 'reason' => 'UNSUPPORTED CONTENT TYPE'], 415);
+        }
+        $rawRequest = (string) file_get_contents('php://input', false, null, 0, 32769);
+        if (strlen($rawRequest) > 32768) {
+            $this->json(['status' => false, 'reason' => 'REQUEST TOO LARGE'], 413);
+        }
+        $decrypted = ApiCrypto::decryptRequest($rawRequest);
+        $payload = $decrypted['payload'];
+        $sessionKey = $decrypted['key'];
+        $nonce = $decrypted['nonce'];
+        $game = trim((string) ($payload['game'] ?? ''));
+        $userKey = trim((string) ($payload['user_key'] ?? ''));
+        $serial = trim((string) ($payload['serial'] ?? ''));
+        $canary = (string) ($payload['canary'] ?? '');
+        $timestamp = (int) ($payload['timestamp'] ?? 0);
+        $packageName = (string) ($payload['package_name'] ?? '');
+        $certificateSha256 = strtoupper(str_replace(':', '', (string) ($payload['certificate_sha256'] ?? '')));
+        if ($game === '' || $userKey === '' || $serial === '' || strlen($game) > 64
+            || strlen($userKey) > 128 || strlen($serial) > 256 || str_contains($serial, ',')
+            || preg_match('/^[A-Za-z0-9_-]{22,64}$/D', $canary) !== 1
+            || abs(time() - $timestamp) > 60
+            || preg_match('/^[A-Za-z][A-Za-z0-9_.]{2,127}$/D', $packageName) !== 1
+            || preg_match('/^[A-F0-9]{64}$/D', $certificateSha256) !== 1) {
+            $this->encryptedJson(
+                ['status' => false, 'reason' => 'REQUEST BINDING FAILED', 'request_nonce' => $nonce, 'canary' => $canary],
+                $sessionKey,
+                $nonce,
+                400
+            );
+        }
+        $expectedPackage = Env::get('EXPECTED_ANDROID_PACKAGE');
+        $expectedCertificates = array_values(array_filter(array_map(
+            static fn (string $value): string => strtoupper(str_replace(':', '', trim($value))),
+            preg_split('/[,;]/', Env::get('EXPECTED_ANDROID_CERT_SHA256')) ?: []
+        ), static fn (string $value): bool => preg_match('/^[A-F0-9]{64}$/D', $value) === 1));
+        $certificateMatches = false;
+        foreach ($expectedCertificates as $expectedCertificate) {
+            $certificateMatches = hash_equals($expectedCertificate, $certificateSha256) || $certificateMatches;
+        }
+        if ($expectedPackage === '' || !hash_equals($expectedPackage, $packageName)
+            || !$certificateMatches) {
+            $this->encryptedJson(
+                ['status' => false, 'reason' => 'APP IDENTITY FAILED', 'request_nonce' => $nonce, 'canary' => $canary],
+                $sessionKey,
+                $nonce,
+                403
+            );
+        }
+        try {
+            $statement = $this->db->prepare('INSERT INTO api_nonces (nonce_hash,expires_at) VALUES (?,UTC_TIMESTAMP()+INTERVAL 10 MINUTE)');
+            $statement->execute([hash('sha256', $nonce)]);
+        } catch (Throwable) {
+            $this->encryptedJson(
+                ['status' => false, 'reason' => 'REPLAYED REQUEST', 'request_nonce' => $nonce, 'canary' => $canary],
+                $sessionKey,
+                $nonce,
+                409
+            );
+        }
+        if (random_int(1, 100) === 1) {
+            $this->db->exec('DELETE FROM api_nonces WHERE expires_at < UTC_TIMESTAMP()');
+        }
+        if (!$this->allowConnectRequest($userKey)) {
+            $this->encryptedJson(
+                ['status' => false, 'reason' => 'TOO MANY REQUESTS', 'request_nonce' => $nonce, 'canary' => $canary],
+                $sessionKey,
+                $nonce,
+                429
+            );
+        }
+        $result = $this->encryptedLicenseResult($game, $userKey, $serial);
+        $result['request_nonce'] = $nonce;
+        $result['canary'] = $canary;
+        $result['server_time'] = time();
+        $result['receipt'] = rtrim(strtr(base64_encode(random_bytes(24)), '+/', '-_'), '=');
+        $this->encryptedJson($result, $sessionKey, $nonce, ($result['status'] ?? false) ? 200 : 403);
+    }
+
+    /** @return array<string,mixed> */
+    private function encryptedLicenseResult(string $game, string $userKey, string $serial): array
+    {
+        $this->db->beginTransaction();
+        try {
+            $statement = $this->db->prepare('SELECT * FROM keys_code WHERE user_key=? AND game=? LIMIT 1 FOR UPDATE');
+            $statement->execute([$userKey, $game]);
+            $key = $statement->fetch();
+            if (!$key) {
+                $this->db->rollBack();
+                return ['status' => false, 'reason' => 'USER OR GAME NOT REGISTERED'];
+            }
+            if ((int) $key['status'] !== 1) {
+                $this->db->rollBack();
+                return ['status' => false, 'reason' => 'USER BLOCKED'];
+            }
+            $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+            $expiry = $key['expired_date']
+                ? new DateTimeImmutable($key['expired_date'], new DateTimeZone('UTC')) : null;
+            if ($expiry && $expiry <= $now) {
+                $this->db->rollBack();
+                return ['status' => false, 'reason' => 'EXPIRED KEY'];
+            }
+            if (!$expiry) {
+                $expiry = $now->modify('+' . max(1, (int) $key['duration']) . ' hours');
+                $this->db->prepare('UPDATE keys_code SET expired_date=? WHERE id_keys=?')
+                    ->execute([$expiry->format('Y-m-d H:i:s'), $key['id_keys']]);
+            }
+            $devices = array_values(array_unique(array_filter(array_map('trim', explode(',', (string) $key['devices'])))));
+            if (!in_array($serial, $devices, true)) {
+                if (count($devices) >= max(1, (int) $key['max_devices'])) {
+                    $this->db->rollBack();
+                    return ['status' => false, 'reason' => 'MAX DEVICE REACHED'];
+                }
+                $devices[] = $serial;
+                $this->db->prepare('UPDATE keys_code SET devices=? WHERE id_keys=?')
+                    ->execute([implode(',', $devices), $key['id_keys']]);
+            }
+            $server = $this->db->query('SELECT modname FROM modname WHERE id=1')->fetch() ?: [];
+            $copy = $this->db->query('SELECT `_status`,`_ftext` FROM `_ftext` WHERE id=1')->fetch() ?: [];
+            $feature = $this->db->query('SELECT * FROM `Feature` WHERE id=1')->fetch() ?: [];
+            $maintenance = $this->db->query('SELECT status,myinput FROM onoff WHERE id=1')->fetch() ?: [];
+            $this->db->commit();
+            if (($maintenance['status'] ?? 'off') === 'on') {
+                return ['status' => false, 'reason' => (string) ($maintenance['myinput'] ?? 'Maintenance in progress')];
+            }
+            return ['status' => true, 'data' => [
+                'modname' => (string) ($server['modname'] ?? ''),
+                'mod_status' => (string) ($copy['_status'] ?? ''),
+                'credit' => (string) ($copy['_ftext'] ?? ''),
+                'ESP' => (string) ($feature['ESP'] ?? 'off'),
+                'Item' => (string) ($feature['Item'] ?? 'off'),
+                'AIM' => (string) ($feature['AIM'] ?? 'off'),
+                'SilentAim' => (string) ($feature['SilentAim'] ?? 'off'),
+                'BulletTrack' => (string) ($feature['BulletTrack'] ?? 'off'),
+                'Floating' => (string) ($feature['Floating'] ?? 'off'),
+                'Memory' => (string) ($feature['Memory'] ?? 'off'),
+                'Setting' => (string) ($feature['Setting'] ?? 'off'),
+                'expired_date' => $expiry->format('Y-m-d H:i:s'),
+                'device' => max(1, (int) $key['max_devices']),
+            ]];
+        } catch (Throwable $error) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $error;
+        }
+    }
+
+    /** @param array<string,mixed> $payload */
+    private function encryptedJson(array $payload, string $sessionKey, string $nonce, int $status): never
+    {
+        $this->json(ApiCrypto::encryptResponse($payload, $sessionKey, $nonce), $status);
     }
 
     private function allowConnectRequest(string $userKey): bool

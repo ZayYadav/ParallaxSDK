@@ -127,7 +127,8 @@ jobs:
       LOADER_AAR_PATH: One-Core-Engine/app/libs/ParallaxCore-release.aar
       NDK_VERSION: 27.2.12479018
       BUILD_LOG_DIR: build-logs
-      ONECORE_LEGACY_TOKEN_SECRET: ${{ secrets.ONECORE_LEGACY_TOKEN_SECRET }}
+      PARALLAX_API_PUBLIC_KEY_B64: ${{ vars.PARALLAX_API_PUBLIC_KEY_B64 }}
+      PARALLAX_TLS_PINS: ${{ vars.PARALLAX_TLS_PINS }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -167,33 +168,44 @@ jobs:
       - name: Prepare build log folder
         run: mkdir -p "${BUILD_LOG_DIR}"
 
-      - name: Configure loader licensing for CI
+      - name: Configure encrypted loader transport
         shell: bash
         run: |
           set -euo pipefail
-          if [ -n "${ONECORE_LEGACY_TOKEN_SECRET:-}" ]; then
-            echo "ONECORE_HAS_REAL_LICENSE_SECRET=true" >> "$GITHUB_ENV"
+          if [ -n "${PARALLAX_API_PUBLIC_KEY_B64:-}" ] && [ -n "${PARALLAX_TLS_PINS:-}" ]; then
+            echo "PARALLAX_HAS_RELEASE_TRANSPORT=true" >> "$GITHUB_ENV"
           elif [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            echo "ONECORE_LEGACY_TOKEN_SECRET=ci-only-${GITHUB_SHA}-not-for-release" >> "$GITHUB_ENV"
-            echo "ONECORE_HAS_REAL_LICENSE_SECRET=false" >> "$GITHUB_ENV"
-            echo "Using a non-production licensing secret for PR compile checks."
+            openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/parallax-ci-private.pem 2>/dev/null
+            PUBLIC_KEY=$(openssl pkey -in /tmp/parallax-ci-private.pem -pubout -outform DER 2>/dev/null | base64 -w0)
+            rm -f /tmp/parallax-ci-private.pem
+            echo "PARALLAX_API_PUBLIC_KEY_B64=${PUBLIC_KEY}" >> "$GITHUB_ENV"
+            echo "PARALLAX_TLS_PINS=sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" >> "$GITHUB_ENV"
+            echo "PARALLAX_HAS_RELEASE_TRANSPORT=false" >> "$GITHUB_ENV"
+            echo "Using non-production transport configuration for PR compile checks."
           else
-            echo "ONECORE_LEGACY_TOKEN_SECRET must be configured for release builds" >&2
+            echo "PARALLAX_API_PUBLIC_KEY_B64 and PARALLAX_TLS_PINS repository variables are required for release builds" >&2
             exit 1
           fi
 
-      - name: Validate loader licensing configuration
+      - name: Validate encrypted loader transport
         shell: python
         run: |
+          import base64
           import os
+          import re
 
-          secret = os.environ.get("ONECORE_LEGACY_TOKEN_SECRET", "")
-          if len(secret) < 32 or len(secret) > 256:
-              raise SystemExit(
-                  "ONECORE_LEGACY_TOKEN_SECRET must contain 32-256 characters"
+          try:
+              public_key = base64.b64decode(
+                  os.environ.get("PARALLAX_API_PUBLIC_KEY_B64", ""), validate=True
               )
-
-          print("Pinned Parallax licensing configuration is valid")
+          except Exception as error:
+              raise SystemExit("PARALLAX_API_PUBLIC_KEY_B64 is invalid") from error
+          if len(public_key) < 256 or len(public_key) > 1024:
+              raise SystemExit("PARALLAX_API_PUBLIC_KEY_B64 has an invalid DER size")
+          pins = [item.strip() for item in os.environ.get("PARALLAX_TLS_PINS", "").split(",") if item.strip()]
+          if not pins or any(not re.fullmatch(r"sha256/[A-Za-z0-9+/]{43}=", item) for item in pins):
+              raise SystemExit("PARALLAX_TLS_PINS must contain valid OkHttp SHA-256 pins")
+          print("Encrypted and pinned Parallax transport configuration is valid")
 
       - name: Build SDK release AAR
         working-directory: ${{ env.SDK_PROJECT_DIR }}
@@ -237,11 +249,54 @@ jobs:
               -dname "CN=CI,O=SdkLodaLasan,C=US"
           fi
 
-      - name: Build signed loader release and debug APKs
+      - name: Build signed and flattened loader release APK
         working-directory: ${{ env.LOADER_PROJECT_DIR }}
         run: |
           set -o pipefail
-          ./gradlew :app:assembleRelease :app:assembleDebug --stacktrace 2>&1 | tee "../${BUILD_LOG_DIR}/loader-apks.log"
+          ./gradlew :app:assembleRelease \
+            -PblackObfuscatorEnabled=true \
+            -PblackObfuscatorDepth=2 \
+            --stacktrace 2>&1 | tee "../${BUILD_LOG_DIR}/loader-apks.log"
+
+      - name: Verify BlackObfuscator and packaged DEX
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG="${BUILD_LOG_DIR}/loader-apks.log"
+          RELEASE_APK=$(find "${LOADER_PROJECT_DIR}/app/build/outputs/apk/release" -name '*.apk' -print -quit)
+          test -n "$RELEASE_APK"
+          TRANSFORMED=$(grep -c '^BlackObf Class:' "$LOG" || true)
+          if [ "$TRANSFORMED" -lt 50 ]; then
+            echo "BlackObfuscator transformed only ${TRANSFORMED} methods; refusing unobfuscated release" >&2
+            exit 1
+          fi
+          if grep -Eq 'Obfuscator Class not found|No classes found|^[A-Za-z0-9_.]+(Exception|Error):|^[[:space:]]+at [A-Za-z0-9_.$]+\(' "$LOG"; then
+            echo "BlackObfuscator reported a conversion failure" >&2
+            exit 1
+          fi
+          DEX_DIR=$(mktemp -d)
+          unzip -qq "$RELEASE_APK" 'classes*.dex' -d "$DEX_DIR"
+          DEX_COUNT=0
+          for dex in "$DEX_DIR"/classes*.dex; do
+            "${ANDROID_HOME}/build-tools/36.0.0/dexdump" -f "$dex" >/dev/null
+            for forbidden in \
+              'https://parallaxserver.online/api/v2/connect' \
+              'parallax-license-v2-request' \
+              'parallax-license-v2-response:' \
+              'Licensing TLS pins are not configured'; do
+              if grep -aFq "$forbidden" "$dex"; then
+                echo "Sensitive loader string remained in plaintext DEX: ${forbidden}" >&2
+                exit 1
+              fi
+            done
+            DEX_COUNT=$((DEX_COUNT + 1))
+          done
+          test "$DEX_COUNT" -gt 0
+          "${ANDROID_HOME}/build-tools/36.0.0/apksigner" verify --verbose "$RELEASE_APK"
+          "${ANDROID_HOME}/build-tools/36.0.0/zipalign" -c -v 4 "$RELEASE_APK" >/dev/null
+          printf 'black_obfuscator_commit=%s\ndepth=%s\ntransformed_methods=%s\ndex_files=%s\n' \
+            '67aec4c457be0d2644224100fa85aed7eac87cb6' '2' "$TRANSFORMED" "$DEX_COUNT" \
+            | tee "${BUILD_LOG_DIR}/black-obfuscator-report.txt"
 
       - name: Record release signing certificate SHA-256
         run: |
@@ -259,19 +314,11 @@ jobs:
           if-no-files-found: error
 
       - name: Upload loader release APK
-        if: env.ONECORE_HAS_REAL_LICENSE_SECRET == 'true'
+        if: env.PARALLAX_HAS_RELEASE_TRANSPORT == 'true'
         uses: actions/upload-artifact@v6
         with:
           name: loader-release-apk
           path: ${{ env.LOADER_PROJECT_DIR }}/app/build/outputs/apk/release/*.apk
-          if-no-files-found: error
-
-      - name: Upload loader debug APK
-        if: env.ONECORE_HAS_REAL_LICENSE_SECRET == 'true'
-        uses: actions/upload-artifact@v6
-        with:
-          name: loader-debug-apk
-          path: ${{ env.LOADER_PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
       - name: Upload release signing certificate
@@ -286,5 +333,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: build-logs
-          path: ${{ env.BUILD_LOG_DIR }}/*.log
+          path: |
+            ${{ env.BUILD_LOG_DIR }}/*.log
+            ${{ env.BUILD_LOG_DIR }}/black-obfuscator-report.txt
           if-no-files-found: warn

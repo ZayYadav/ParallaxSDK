@@ -44,19 +44,23 @@ The CI workflow performs both stages automatically.
 - Runtime status shows the Android API level and the device ABI list.
 - License values are encrypted with AES-GCM using an app-scoped Android
   Keystore key. Existing plaintext values are migrated after the first launch.
-- Login is pinned to `https://parallaxserver.online/connect` and the `PUBG`
+- Login is pinned to `https://parallaxserver.online/api/v2/connect` and the `PUBG`
   game identifier used by the OneCore Integrity legacy-key inventory. The
   endpoint and game cannot be replaced through Gradle properties or runtime
   configuration.
-- Successful checker responses are accepted only when their token is bound to
-  the submitted key and Android Keystore device identity, their server
-  timestamp is fresh, and their UTC expiry is still in the future.
+- Each request uses a fresh AES-256-GCM key wrapped to the panel's RSA public
+  key. Responses are separately encrypted and bound to the request nonce and a
+  random canary. Replays, tampering, stale timestamps, redirects, oversized
+  payloads, and invalid expiry fail closed.
+- OkHttp certificate pinning and `Proxy.NO_PROXY` protect the outer verified
+  HTTPS connection against common proxy/MITM interception. The server private
+  API key never enters the APK.
 - The server-issued expiry is stored with a monotonic time anchor. Install,
   download, launch, and floating-service actions fail closed when the key
   expires, after a reboot, or when protected state cannot be decrypted.
-- CI requires `ONECORE_LEGACY_TOKEN_SECRET` (the same private value configured
-  on the key panel) and compiles it into `BuildConfig`; the secret must never be
-  committed to the repository.
+- Release CI requires public repository variables
+  `PARALLAX_API_PUBLIC_KEY_B64` and `PARALLAX_TLS_PINS`. The legacy token secret
+  is no longer compiled into the loader.
 - Release builds validate the exact active signing-certificate set across three
   independent paths: PackageManager metadata, a raw-file cryptographic APK
   verification using Android `apksig`, and native SHA-256 hashing of the raw
@@ -72,6 +76,22 @@ The CI workflow performs both stages automatically.
   configured keystore.
 - Release builds minify resources and code, remove verbose logs, and block
   screen capture on sensitive activities.
+- Production release APKs additionally run BlackObfuscator control-flow
+  flattening at depth 2 over first-party security, license, download, and
+  activity code after R8. Generated binding/resource classes, the exact native
+  signing entrypoint, and third-party libraries are excluded for runtime
+  compatibility, as recommended by BlackObfuscator upstream.
+- High-value license transport classes are also marked for the existing
+  LSParanoid release string transformation; this conceals fixed endpoint,
+  algorithm, binding, and parser strings in the packaged DEX without pretending
+  that the whole DEX is cryptographically sealed at runtime.
+- BlackObfuscator is disabled unless the release task explicitly sets
+  `-PblackObfuscatorEnabled=true`. CI pins upstream commit
+  `67aec4c457be0d2644224100fa85aed7eac87cb6`, rejects fewer than 50 transformed
+  methods or conversion stack traces, validates every packaged DEX with
+  `dexdump`, rejects plaintext high-value license strings, and verifies APK
+  signing plus ZIP alignment. Debug APKs are no longer published as production
+  artifacts.
 - Tapjacking protection rejects obscured touches on the license input, while
   WorkManager and notification registrations are delegated to their current
   AndroidX manifests for modern Android compatibility.

@@ -7,15 +7,51 @@ plugins {
     id 'org.lsposed.lsparanoid'
 }
 
+apply plugin: 'top.niunaijun.blackobfuscator'
 apply from: '../signing.gradle'
 
-def parallaxLegacyTokenSecret = providers.gradleProperty('parallaxLegacyTokenSecret')
-        .orElse(System.getenv('ONECORE_LEGACY_TOKEN_SECRET') ?: '')
+def parallaxApiPublicKey = providers.gradleProperty('parallaxApiPublicKey')
+        .orElse(System.getenv('PARALLAX_API_PUBLIC_KEY_B64') ?: '')
+        .get()
+def parallaxTlsPins = providers.gradleProperty('parallaxTlsPins')
+        .orElse(System.getenv('PARALLAX_TLS_PINS') ?: '')
         .get()
 def oneCoreAllowedSigningSha256 = providers.gradleProperty('onecoreAllowedSigningSha256')
         .orElse(System.getenv('ONECORE_ALLOWED_SIGNING_SHA256') ?: '')
         .get()
+def blackObfuscatorEnabled = providers.gradleProperty('blackObfuscatorEnabled')
+        .orElse('false')
+        .get()
+        .toBoolean()
+def blackObfuscatorDepth = providers.gradleProperty('blackObfuscatorDepth')
+        .orElse('2')
+        .get()
+        .toInteger()
+if (blackObfuscatorDepth < 1 || blackObfuscatorDepth > 3) {
+    throw new GradleException('blackObfuscatorDepth must be between 1 and 3')
+}
 def javaString = { String value -> '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"' }
+
+BlackObfuscator {
+    // Explicit opt-in keeps debug/unit-test builds readable and deterministic.
+    enabled blackObfuscatorEnabled
+    depth blackObfuscatorDepth
+    // Upstream recommends targeting only first-party business code.
+    obfClass = [
+            'com.onecore.loader.security',
+            'com.onecore.loader.libhelper',
+            'com.onecore.loader.activity',
+            'com.onecore.loader.BoxApplication'
+    ]
+    // Generated/JNI entrypoint identities must remain stable.
+    blackClass = [
+            'com.onecore.loader.BuildConfig',
+            'com.onecore.loader.R',
+            'com.onecore.loader.BR',
+            'com.onecore.loader.databinding',
+            'com.onecore.loader.security.NativeSigningVerifier'
+    ]
+}
 
 
 def getSigningCertificateSha256 = { signingConfig ->
@@ -66,7 +102,8 @@ android {
         versionName rootProject.ext.versionName
         vectorDrawables.useSupportLibrary = true
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField "String", "PARALLAX_LEGACY_TOKEN_SECRET", javaString(parallaxLegacyTokenSecret)
+        buildConfigField "String", "PARALLAX_API_PUBLIC_KEY_B64", javaString(parallaxApiPublicKey)
+        buildConfigField "String", "PARALLAX_TLS_PINS", javaString(parallaxTlsPins)
         
         ndk {
             // Parallax Loader APKs intentionally target modern 64-bit ARM devices only.

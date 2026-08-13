@@ -38,7 +38,7 @@ final class Security
             return null;
         }
         $statement = Database::connection()->prepare(
-            "SELECT id, username, role, balance_credits, status FROM panel_users WHERE id = ? LIMIT 1"
+            "SELECT id, username, telegram_user_id, role, balance_credits, status FROM panel_users WHERE id = ? LIMIT 1"
         );
         $statement->execute([$id]);
         $user = $statement->fetch();
@@ -63,14 +63,17 @@ final class Security
         return $user;
     }
 
-    public static function login(string $username, string $password): bool
+    public static function login(string $username, string $password, string $telegramUserId): bool
     {
         $statement = Database::connection()->prepare(
-            'SELECT id, password_hash, status FROM panel_users WHERE username = ? LIMIT 1'
+            'SELECT id, password_hash, telegram_user_id, status FROM panel_users WHERE username = ? LIMIT 1'
         );
         $statement->execute([$username]);
         $user = $statement->fetch();
-        if (!$user || $user['status'] !== 'active' || !password_verify($password, $user['password_hash'])) {
+        $telegramMatches = !$user || $user['telegram_user_id'] === null
+            || hash_equals((string) $user['telegram_user_id'], trim($telegramUserId));
+        if (!$user || $user['status'] !== 'active' || !$telegramMatches
+            || !password_verify($password, $user['password_hash'])) {
             password_verify($password, '$2y$12$usesomesillystringfore7hnbRJHxXVLeakoG8K30oukPsA.ztMG');
             return false;
         }
@@ -99,5 +102,26 @@ final class Security
     public static function clientIp(): string
     {
         return substr((string) ($_SERVER['REMOTE_ADDR'] ?? 'unknown'), 0, 45);
+    }
+
+    public static function captchaQuestion(): string
+    {
+        if (!isset($_SESSION['captcha_answer'], $_SESSION['captcha_expires'])
+            || (int) $_SESSION['captcha_expires'] < time()) {
+            $left = random_int(2, 12);
+            $right = random_int(1, 9);
+            $_SESSION['captcha_answer'] = (string) ($left + $right);
+            $_SESSION['captcha_question'] = "$left + $right";
+            $_SESSION['captcha_expires'] = time() + 300;
+        }
+        return (string) $_SESSION['captcha_question'];
+    }
+
+    public static function verifyCaptcha(string $answer): bool
+    {
+        $expected = (string) ($_SESSION['captcha_answer'] ?? '');
+        $expires = (int) ($_SESSION['captcha_expires'] ?? 0);
+        unset($_SESSION['captcha_answer'], $_SESSION['captcha_question'], $_SESSION['captcha_expires']);
+        return $expected !== '' && $expires >= time() && hash_equals($expected, trim($answer));
     }
 }
