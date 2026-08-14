@@ -38,9 +38,11 @@ $assert(!Security::verifyCaptcha($answer), 'CAPTCHA must be one-time use.');
 
 $schema = file_get_contents(PANEL_ROOT . '/database/schema.sql');
 $assert(is_string($schema), 'Schema must be readable.');
-foreach (['panel_users', 'keys_code', 'key_generation_options', 'license_keys', 'device_license_bindings', 'connect_rate_limits', 'login_rate_limits', 'api_nonces', 'telegram_updates', 'audit_log'] as $table) {
+foreach (['panel_users', 'keys_code', 'key_generation_options', 'connect_rate_limits', 'login_rate_limits', 'api_nonces', 'telegram_updates', 'audit_log'] as $table) {
     $assert(str_contains((string) $schema, 'TABLE IF NOT EXISTS ' . $table), "Schema is missing $table.");
 }
+$assert(!str_contains((string) $schema, 'TABLE IF NOT EXISTS license_keys'), 'Panel schema must use keys_code as its only key inventory.');
+$assert(!str_contains((string) $schema, 'TABLE IF NOT EXISTS device_license_bindings'), 'Separate OneCore device bindings must not be installed.');
 
 $games = GenerationOptions::parse(GenerationOptions::GAME, "pubg|PUBG Mobile\nBGMI|Battlegrounds Mobile India");
 $assert($games[0] === ['value' => 'PUBG', 'label' => 'PUBG Mobile'], 'Game option parsing failed.');
@@ -57,9 +59,6 @@ try {
     $assert(true, 'Duplicate generation options rejected.');
 }
 
-$token = md5('PUBG-TESTKEY-SERIAL-' . str_repeat('a', 32));
-$assert(hash_equals('80f33beab28376b3dba4acf5375faab0', $token), 'Legacy token compatibility vector changed.');
-
 $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(PANEL_ROOT . '/src'));
 foreach ($iterator as $file) {
     if ($file->isFile() && $file->getExtension() === 'php') {
@@ -72,12 +71,22 @@ $telegramSource = (string) file_get_contents(PANEL_ROOT . '/src/TelegramBot.php'
 $assert(str_contains($telegramSource, 'HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN'), 'Telegram webhook secret header validation is missing.');
 $assert(str_contains($telegramSource, 'TELEGRAM_ALLOWED_USER_IDS'), 'Telegram allowlist validation is missing.');
 $assert(str_contains($telegramSource, "role IN ('owner','admin')"), 'Telegram role authorization is missing.');
-$assert(!str_contains($telegramSource, 'INSERT INTO license_keys (created_by_user_id'), 'Telegram key creation must support legacy OneCore schemas.');
+$assert(!str_contains($telegramSource, 'license_keys'), 'Telegram bot must use keys_code only.');
+$assert(!str_contains(strtolower($telegramSource), 'onecore key'), 'Telegram bot must not expose a second key type.');
 $appSource = (string) file_get_contents(PANEL_ROOT . '/src/App.php');
-$assert(str_contains($appSource, "Env::get('ENABLE_LEGACY_CONNECT', 'false') === 'true'"), 'Legacy connect must be disabled by default.');
+$assert(!str_contains($appSource, 'ONECORE_LEGACY_TOKEN_SECRET'), 'Plaintext shared-token licensing must be removed.');
+$assert(!str_contains($appSource, 'private function connect()'), 'Plaintext /connect handler must be removed.');
 $assert(str_contains($appSource, "Env::get('EXPECTED_ANDROID_CERT_SHA256')"), 'Server-side signing identity binding is missing.');
+$assert(str_contains($appSource, "Env::get('MIN_ANDROID_VERSION_CODE'"), 'Minimum Loader version enforcement is missing.');
 $assert(str_contains($appSource, "View::select('game'"), 'Game generation control must be a select list.');
 $assert(str_contains($appSource, "View::select('duration'"), 'Duration generation control must be a select list.');
-$assert(!str_contains($appSource, 'INSERT INTO license_keys (created_by_user_id'), 'Panel key creation must support legacy OneCore schemas.');
+$assert(!str_contains($appSource, 'license_keys'), 'Panel must use keys_code only.');
+$assert(!str_contains(strtolower($appSource), 'onecore key'), 'Panel must not expose a second key type.');
+$bootstrapSource = (string) file_get_contents(PANEL_ROOT . '/src/bootstrap.php');
+$assert(str_contains($bootstrapSource, 'Strict-Transport-Security'), 'Production HSTS is missing.');
+$assert(str_contains($bootstrapSource, "session.use_strict_mode"), 'Strict session mode is missing.');
+$securitySource = (string) file_get_contents(PANEL_ROOT . '/src/Security.php');
+$assert(str_contains($securitySource, 'SESSION_IDLE_SECONDS'), 'Authenticated session idle expiry is missing.');
+$assert(str_contains($securitySource, 'sameOriginRequest'), 'Same-origin CSRF validation is missing.');
 
 echo "Standalone panel tests passed ($assertions assertions).\n";

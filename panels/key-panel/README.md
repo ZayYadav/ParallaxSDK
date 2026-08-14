@@ -9,10 +9,10 @@ Node.js, or vendor dependency.
 - Owner, admin, and reseller accounts with linked Telegram user IDs
 - Password hashing, secure sessions, one-time login CAPTCHA, login throttling,
   CSRF protection, audit log, security headers, and outline-style web controls
-- Legacy key duration/device enforcement and encrypted loader API
+- One `keys_code` inventory shared by the panel, Telegram bot, and Loader
+- Key duration/device enforcement through the encrypted Loader API only
 - Owner-managed game and duration lists used by both the web key form and the
   Telegram key-generation flow
-- OneCore hashed activation keys, expiry, device count, and revocation
 - Telegram webhook bot with inline keyboards for dashboard, recent keys,
   maintenance, users, and key generation
 - HTTPS validation, TLS certificate pinning in the loader, AES-256-GCM request
@@ -66,6 +66,7 @@ both the `.env` allowlist and an active linked owner/admin account are accepted.
    APP_TIMEZONE=UTC
    SESSION_NAME=parallax_panel
    SETUP_TOKEN=<generated value>
+   TRUSTED_PROXY_IPS=
 
    DB_HOST=localhost
    DB_PORT=3306
@@ -73,8 +74,6 @@ both the `.env` allowlist and an active linked owner/admin account are accepted.
    DB_USER=<database user>
    DB_PASSWORD=<database password>
 
-   ENABLE_LEGACY_CONNECT=false
-   ONECORE_LEGACY_TOKEN_SECRET=<only needed for an old /connect migration window>
    TELEGRAM_BOT_TOKEN=<BotFather token>
    TELEGRAM_BOT_USERNAME=<bot username without @>
    TELEGRAM_WEBHOOK_SECRET=<generated value>
@@ -83,6 +82,7 @@ both the `.env` allowlist and an active linked owner/admin account are accepted.
    API_PUBLIC_KEY_PATH=runtime/api-public.b64
    EXPECTED_ANDROID_PACKAGE=com.onecore.loader
    EXPECTED_ANDROID_CERT_SHA256=<64-hex release signing certificate digest>
+   MIN_ANDROID_VERSION_CODE=1
    ```
 
 For a subfolder URL such as `https://example.com/panel`, set
@@ -133,7 +133,7 @@ for a planned signing-key rotation.
 Get the current leaf-certificate pin from the hosting terminal:
 
 ```bash
-php tools/tls-pin.php parallaxserver.online
+php tools/tls-pin.php parallaxloader.parallaxserver.online
 ```
 
 Example format:
@@ -149,8 +149,8 @@ CA intermediate merely to avoid maintenance; that widens trust to unrelated
 certificates.
 
 The repository variables are public configuration. The RSA private key remains
-only on hosting. The loader no longer embeds `ONECORE_LEGACY_TOKEN_SECRET`, and
-the legacy plaintext `/connect` route is disabled by default.
+only on hosting. Plaintext `/connect` and shared-token licensing are not
+exposed; the Loader uses only the encrypted `/api/v2/connect` route.
 
 ## 5. Enable Telegram controls
 
@@ -172,10 +172,9 @@ connections. Open the bot and send `/start` to show the control keyboard.
 Available bot controls:
 
 - Dashboard metrics
-- Recent legacy keys with device reset, block/enable, and confirmed deletion
-- Generate a legacy key by choosing from the owner-managed game and duration
+- Recent keys with device reset, block/enable, and confirmed deletion
+- Generate a key by choosing from the owner-managed game and duration
   lists
-- Generate a 30-day OneCore key and revoke it with bound devices
 - View linked panel users
 - Confirmed maintenance-mode on/off switch
 
@@ -186,6 +185,11 @@ Existing standalone installations create and seed the
 `key_generation_options` table automatically on the first request after the
 updated files are deployed. Editing a list affects new key generation only;
 already-issued keys keep their stored game and duration.
+
+The panel no longer creates or reads a second `license_keys` inventory. Existing
+old tables are deliberately left untouched during upgrade so deployment cannot
+silently delete historical data; the active panel and Loader use `keys_code`
+only.
 
 ## 6. GitHub release configuration
 
@@ -222,6 +226,13 @@ returned inside the authenticated encrypted response. The loader also verifies
 its signing identity, while the server checks the claimed package and signing
 digest, and fails closed on response tampering, replay, redirect,
 oversize payload, invalid expiry, certificate mismatch, or canary mismatch.
+
+Production also enforces an HTTPS `APP_URL`, HSTS, strict same-site sessions,
+same-origin form checks, idle and absolute session expiry, CSP and browser
+isolation headers, bounded request bodies, per-IP and per-account login limits,
+and protected runtime-key permissions. Set `TRUSTED_PROXY_IPS` only when TLS
+terminates at a reverse proxy you control. Raise `MIN_ANDROID_VERSION_CODE` to
+reject an outdated Loader release.
 
 No client-side protection can make a secret or decrypted value impossible to
 inspect on a fully compromised/rooted device. These controls substantially

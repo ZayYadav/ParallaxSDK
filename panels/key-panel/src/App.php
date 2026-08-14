@@ -32,9 +32,6 @@ final class App
             if ($path === '/api/v2/connect') {
                 $this->connectV2();
             }
-            if ($path === '/connect' && Env::get('ENABLE_LEGACY_CONNECT', 'false') === 'true') {
-                $this->connect();
-            }
             if ($path === '/' || $path === '/login') {
                 $this->login();
             }
@@ -48,9 +45,6 @@ final class App
                 '/keys' => 'keys',
                 '/keys/create' => 'createKeys',
                 '/keys/action' => 'keyAction',
-                '/licenses' => 'licenses',
-                '/licenses/create' => 'createLicenses',
-                '/licenses/revoke' => 'revokeLicense',
                 '/settings' => 'settings',
                 '/account' => 'account',
                 '/users' => 'users',
@@ -65,7 +59,7 @@ final class App
             View::page('Not found', '<div class="card"><h1>404</h1><p>Page not found.</p></div>', Security::user());
         } catch (Throwable $error) {
             error_log((string) $error);
-            if ($path === '/connect' || $path === '/api/v2/connect') {
+            if ($path === '/api/v2/connect') {
                 $this->json(['status' => false, 'reason' => 'SERVER ERROR'], 500);
             }
             $message = Env::get('APP_ENV') === 'development'
@@ -121,7 +115,7 @@ final class App
             $statement = $this->db->prepare(
                 "INSERT INTO panel_users (username,password_hash,telegram_user_id,role,status) VALUES (?,?,?,'owner','active')"
             );
-            $statement->execute([$username, password_hash($password, PASSWORD_DEFAULT), $telegramUserId]);
+            $statement->execute([$username, Security::hashPassword($password), $telegramUserId]);
             flash('success', 'Owner created. Delete or rotate SETUP_TOKEN, then sign in.');
             redirect('login');
         }
@@ -143,7 +137,8 @@ final class App
         }
         if ($this->isPost()) {
             Security::verifyCsrf();
-            if (!$this->allowLoginAttempt()) {
+            $username = trim((string) ($_POST['username'] ?? ''));
+            if (!$this->allowLoginAttempt($username)) {
                 flash('danger', 'Too many login attempts. Wait 15 minutes and try again.');
                 redirect('login');
             }
@@ -152,12 +147,12 @@ final class App
                 redirect('login');
             }
             if (Security::login(
-                trim((string) ($_POST['username'] ?? '')),
+                $username,
                 (string) ($_POST['password'] ?? ''),
                 trim((string) ($_POST['telegram_user_id'] ?? ''))
             )) {
                 $this->db->prepare('DELETE FROM login_rate_limits WHERE rate_key=?')
-                    ->execute([hash('sha256', Security::clientIp())]);
+                    ->execute([$this->loginRateKey($username)]);
                 redirect('dashboard');
             }
             flash('danger', 'Invalid username or password.');
@@ -177,10 +172,10 @@ final class App
     private function dashboard(): never
     {
         $user = Security::requireUser();
-        $legacy = (int) $this->db->query('SELECT COUNT(*) FROM keys_code')->fetchColumn();
+        $total = (int) $this->db->query('SELECT COUNT(*) FROM keys_code')->fetchColumn();
         $active = (int) $this->db->query('SELECT COUNT(*) FROM keys_code WHERE status=1 AND (expired_date IS NULL OR expired_date > UTC_TIMESTAMP())')->fetchColumn();
-        $modern = (int) $this->db->query('SELECT COUNT(*) FROM license_keys')->fetchColumn();
-        $devices = (int) $this->db->query('SELECT COUNT(*) FROM device_license_bindings')->fetchColumn();
+        $unused = (int) $this->db->query('SELECT COUNT(*) FROM keys_code WHERE expired_date IS NULL')->fetchColumn();
+        $users = (int) $this->db->query("SELECT COUNT(*) FROM panel_users WHERE status='active'")->fetchColumn();
         $recent = $this->db->query('SELECT action_name,target_value,ip_address,created_at FROM audit_log ORDER BY id DESC LIMIT 12')->fetchAll();
         $rows = '';
         foreach ($recent as $row) {
@@ -188,8 +183,8 @@ final class App
                 . '</td><td>' . h($row['ip_address']) . '</td><td>' . h($row['created_at']) . '</td></tr>';
         }
         $body = '<h1>Dashboard</h1><p class="lead">License and access overview.</p><div class="grid">'
-            . View::metric('Legacy keys', $legacy) . View::metric('Active legacy', $active)
-            . View::metric('OneCore keys', $modern) . View::metric('Device bindings', $devices)
+            . View::metric('Total keys', $total) . View::metric('Active keys', $active)
+            . View::metric('Unused keys', $unused) . View::metric('Active users', $users)
             . '</div><section class="card"><h2>Recent audit activity</h2><div class="table-wrap"><table>'
             . '<thead><tr><th>Action</th><th>Target</th><th>IP</th><th>Time UTC</th></tr></thead><tbody>'
             . ($rows ?: '<tr><td colspan="4" class="empty">No activity yet.</td></tr>') . '</tbody></table></div></section>';
@@ -220,21 +215,21 @@ final class App
                 . $this->postButton('keys/action', 'toggle', (int) $key['id_keys'], (int) $key['status'] ? 'Block' : 'Enable', 'secondary')
                 . $this->postButton('keys/action', 'delete', (int) $key['id_keys'], 'Delete', 'danger') . '</div></td></tr>';
         }
-        $form = '<section class="card"><h2>Generate legacy keys</h2><form method="post" action="' . url('keys/create') . '"><div class="form-grid">'
+        $form = '<section class="card"><h2>Generate keys</h2><form method="post" action="' . url('keys/create') . '"><div class="form-grid">'
             . Security::csrfField() . View::select('game', 'Game', $games, (string) array_key_first($games))
             . View::select('duration', 'Duration', $durationLabels, array_key_exists('24', $durations) ? '24' : (string) array_key_first($durations))
             . View::input('max_devices', 'Max devices', 'number', '1', 'required min="1" max="100"')
             . View::input('quantity', 'Quantity', 'number', '1', 'required min="1" max="100"')
-            . View::input('custom_key', 'Custom key (optional)', 'text', '', 'maxlength="128"')
+            . View::input('custom_key', 'Custom key (optional)', 'text', '', 'maxlength="64"')
             . '<button type="submit">Generate</button></div></form></section>';
         $created = $_SESSION['created_keys'] ?? [];
         unset($_SESSION['created_keys']);
         $output = $created ? '<div class="keys-output mono">' . h(implode("\n", $created)) . '</div>' : '';
-        $body = '<h1>Legacy keys</h1><p class="lead">Keys accepted by the pinned <code>/connect</code> endpoint.</p>' . $output . $form
+        $body = '<h1>Keys</h1><p class="lead">The Loader validates these <code>keys_code</code> records through the encrypted <code>/api/v2/connect</code> endpoint.</p>' . $output . $form
             . '<section class="card"><div class="table-wrap"><table><thead><tr><th>ID</th><th>Game</th><th>Key</th>'
             . '<th>Expiry</th><th>Devices</th><th>Owner</th><th>Actions</th></tr></thead><tbody>'
             . ($rows ?: '<tr><td colspan="7" class="empty">No keys.</td></tr>') . '</tbody></table></div></section>';
-        View::page('Legacy keys', $body, $user);
+        View::page('Keys', $body, $user);
     }
 
     private function createKeys(): never
@@ -249,7 +244,7 @@ final class App
         if (!GenerationOptions::contains($this->db, GenerationOptions::GAME, $game)
             || !GenerationOptions::contains($this->db, GenerationOptions::DURATION, (string) $duration)
             || $maxDevices < 1 || $maxDevices > 100 || $quantity < 1 || $quantity > 100
-            || ($custom !== '' && ($quantity !== 1 || preg_match('/^[A-Z0-9_-]{4,128}$/D', $custom) !== 1))) {
+            || ($custom !== '' && ($quantity !== 1 || preg_match('/^[A-Z0-9_-]{4,64}$/D', $custom) !== 1))) {
             flash('danger', 'Select an approved game and duration. Custom keys can only be created one at a time.');
             redirect('keys');
         }
@@ -260,7 +255,7 @@ final class App
                 $balance->execute([(int) $user['id']]);
                 if ((int) $balance->fetchColumn() < $quantity) {
                     $this->db->rollBack();
-                    flash('danger', 'Insufficient credits. Each generated legacy key costs 1 credit.');
+                    flash('danger', 'Insufficient credits. Each generated key costs 1 credit.');
                     redirect('keys');
                 }
                 $this->db->prepare('UPDATE panel_users SET balance_credits=balance_credits-? WHERE id=?')
@@ -273,7 +268,7 @@ final class App
                 $statement->execute([$game, $key, $duration, $maxDevices, $user['username'], $user['id']]);
                 $keys[] = $key;
             }
-            Security::audit($this->db, (int) $user['id'], 'legacy_keys_created', $game . ':' . $quantity);
+            Security::audit($this->db, (int) $user['id'], 'keys_created', $game . ':' . $quantity);
             $this->db->commit();
             $_SESSION['created_keys'] = $keys;
             flash('success', $quantity . ' key(s) created. Copy them now.');
@@ -307,109 +302,9 @@ final class App
             flash('danger', 'Unsupported action.');
             redirect('keys');
         }
-        Security::audit($this->db, (int) $user['id'], 'legacy_key_' . $action, (string) $id);
+        Security::audit($this->db, (int) $user['id'], 'key_' . $action, (string) $id);
         flash('success', 'Key updated.');
         redirect('keys');
-    }
-
-    private function licenses(): never
-    {
-        $user = Security::requireUser();
-        $this->requireAdminRole($user);
-        $rows = '';
-        $licenses = $this->db->query(
-            'SELECT l.*, COUNT(b.id) AS device_count FROM license_keys l '
-            . 'LEFT JOIN device_license_bindings b ON b.license_key_id=l.id '
-            . 'GROUP BY l.id ORDER BY l.id DESC LIMIT 500'
-        )->fetchAll();
-        foreach ($licenses as $license) {
-            $effective = $license['status'];
-            if ($license['expires_at'] && strtotime($license['expires_at'] . ' UTC') <= time()) {
-                $effective = 'expired';
-            }
-            $rows .= '<tr><td>#' . h($license['id']) . '<br><span class="pill ' . h($effective) . '">' . h($effective) . '</span></td>'
-                . '<td>' . h($license['label']) . '</td><td class="mono">' . h($license['key_prefix']) . '…</td>'
-                . '<td>' . h($license['device_count']) . '/' . h($license['max_devices']) . '</td>'
-                . '<td>' . h($license['expires_at'] ?: 'never') . '</td><td>' . h($license['last_used_at'] ?: 'unused') . '</td>'
-                . '<td>' . ($license['status'] === 'active'
-                    ? $this->postButton('licenses/revoke', 'revoke', (int) $license['id'], 'Revoke', 'danger') : '') . '</td></tr>';
-        }
-        $created = $_SESSION['created_onecore_keys'] ?? [];
-        unset($_SESSION['created_onecore_keys']);
-        $output = $created ? '<div class="keys-output mono">' . h(implode("\n", $created)) . '</div>' : '';
-        $form = '<section class="card"><h2>Create OneCore activation keys</h2><form method="post" action="' . url('licenses/create') . '">'
-            . '<div class="form-grid">' . Security::csrfField()
-            . View::input('label', 'Customer / label', 'text', '', 'required maxlength="100"')
-            . View::input('valid_days', 'Valid days', 'number', '30', 'required min="1" max="3650"')
-            . View::input('max_devices', 'Max devices', 'number', '1', 'required min="1" max="100"')
-            . View::input('quantity', 'Quantity', 'number', '1', 'required min="1" max="100"')
-            . '<button type="submit">Create</button></div></form></section>';
-        $body = '<h1>OneCore keys</h1><p class="lead">Full keys are shown once; the database stores SHA-256 hashes only.</p>'
-            . $output . $form . '<section class="card"><div class="table-wrap"><table><thead><tr><th>ID</th><th>Label</th>'
-            . '<th>Prefix</th><th>Devices</th><th>Expiry UTC</th><th>Last used</th><th>Action</th></tr></thead><tbody>'
-            . ($rows ?: '<tr><td colspan="7" class="empty">No OneCore keys.</td></tr>') . '</tbody></table></div></section>';
-        View::page('OneCore keys', $body, $user);
-    }
-
-    private function createLicenses(): never
-    {
-        $user = Security::requireUser();
-        $this->requireAdminRole($user);
-        $this->requirePost();
-        $label = trim((string) ($_POST['label'] ?? ''));
-        $days = (int) ($_POST['valid_days'] ?? 0);
-        $maxDevices = (int) ($_POST['max_devices'] ?? 0);
-        $quantity = (int) ($_POST['quantity'] ?? 0);
-        if ($label === '' || strlen($label) > 100 || $days < 1 || $days > 3650
-            || $maxDevices < 1 || $maxDevices > 100 || $quantity < 1 || $quantity > 100) {
-            flash('danger', 'Invalid activation-key fields.');
-            redirect('licenses');
-        }
-        $expires = gmdate('Y-m-d H:i:s', time() + ($days * 86400));
-        $statement = $this->db->prepare(
-            'INSERT INTO license_keys (key_hash,key_prefix,label,max_devices,expires_at) VALUES (?,?,?,?,?)'
-        );
-        $keys = [];
-        $this->db->beginTransaction();
-        try {
-            for ($index = 0; $index < $quantity; $index++) {
-                $parts = str_split(strtoupper(bin2hex(random_bytes(16))), 4);
-                $key = 'OC-' . implode('-', $parts);
-                // The optional creator column is deliberately omitted so this
-                // works with both legacy and current Integrity schemas.
-                $statement->execute([hash('sha256', $key), substr($key, 0, 12), $label, $maxDevices, $expires]);
-                $keys[] = $key;
-            }
-            Security::audit($this->db, (int) $user['id'], 'onecore_keys_created', $label . ':' . $quantity);
-            $this->db->commit();
-            $_SESSION['created_onecore_keys'] = $keys;
-            flash('success', $quantity . ' activation key(s) created. Copy them now.');
-        } catch (Throwable) {
-            $this->db->rollBack();
-            flash('danger', 'Activation keys could not be created.');
-        }
-        redirect('licenses');
-    }
-
-    private function revokeLicense(): never
-    {
-        $user = Security::requireUser();
-        $this->requireAdminRole($user);
-        $this->requirePost();
-        $id = (int) ($_POST['id'] ?? 0);
-        $this->db->beginTransaction();
-        try {
-            $this->db->prepare("UPDATE license_keys SET status='revoked' WHERE id=?")->execute([$id]);
-            $this->db->prepare("UPDATE devices d JOIN device_license_bindings b ON b.device_id=d.device_id SET d.status='revoked' WHERE b.license_key_id=?")
-                ->execute([$id]);
-            Security::audit($this->db, (int) $user['id'], 'onecore_key_revoked', (string) $id);
-            $this->db->commit();
-            flash('success', 'Activation key and bound devices revoked.');
-        } catch (Throwable) {
-            $this->db->rollBack();
-            flash('danger', 'License revoke failed.');
-        }
-        redirect('licenses');
     }
 
     private function settings(): never
@@ -478,7 +373,7 @@ final class App
         $gameOptionsText = GenerationOptions::toEditorText(GenerationOptions::games($this->db));
         $durationOptionsText = GenerationOptions::toEditorText(GenerationOptions::durations($this->db));
         $generationOptions = '<section class="card"><h2>Key generation lists</h2>'
-            . '<p class="lead">These approved values appear as dropdowns on Legacy Keys and in Telegram. '
+            . '<p class="lead">These approved values appear as dropdowns on Keys and in Telegram. '
             . 'Use one entry per line in <code>VALUE|Display label</code> format. The current loader submits game ID '
             . '<code>PUBG</code>; keep that option unless the loader is rebuilt to submit another ID.</p>';
         if ($user['role'] === 'owner') {
@@ -494,7 +389,7 @@ final class App
                 . '<label><span>Durations in hours</span><textarea rows="8" readonly>' . h($durationOptionsText) . '</textarea></label></div>';
         }
         $generationOptions .= '</section>';
-        $body = '<h1>Server settings</h1><p class="lead">Values returned by the legacy checker.</p><section class="card">'
+        $body = '<h1>Server settings</h1><p class="lead">Values returned by the Loader key checker.</p><section class="card">'
             . '<form method="post"><fieldset' . $disabled . '><div class="form-grid">' . Security::csrfField()
             . '<input type="hidden" name="settings_action" value="server">'
             . View::input('modname', 'Mod name', 'text', (string) $server['modname'], 'required maxlength="100"')
@@ -556,7 +451,7 @@ final class App
         }
         try {
             $statement = $this->db->prepare('INSERT INTO panel_users (username,password_hash,telegram_user_id,role,balance_credits) VALUES (?,?,?,?,?)');
-            $statement->execute([$username, password_hash($password, PASSWORD_DEFAULT), $telegramUserId === '' ? null : $telegramUserId, $role, $balance]);
+            $statement->execute([$username, Security::hashPassword($password), $telegramUserId === '' ? null : $telegramUserId, $role, $balance]);
             Security::audit($this->db, (int) $user['id'], 'panel_user_created', $username);
             flash('success', 'Panel user created.');
         } catch (Throwable) {
@@ -596,7 +491,7 @@ final class App
                 redirect('account');
             }
             $this->db->prepare('UPDATE panel_users SET password_hash=? WHERE id=?')
-                ->execute([password_hash($password, PASSWORD_DEFAULT), (int) $user['id']]);
+                ->execute([Security::hashPassword($password), (int) $user['id']]);
             Security::audit($this->db, (int) $user['id'], 'password_changed');
             session_regenerate_id(true);
             flash('success', 'Password changed.');
@@ -609,102 +504,6 @@ final class App
             . View::input('confirm_password', 'Confirm new password', 'password', '', 'required minlength="12" autocomplete="new-password"')
             . '<button type="submit">Change password</button></div></form></section>';
         View::page('Account', $body, $user);
-    }
-
-    private function connect(): never
-    {
-        if (!$this->isPost()) {
-            $body = '<section class="auth"><div class="card"><h1>Activation portal</h1>'
-                . '<p class="lead">Enter your key inside the official Parallax loader. Keys are bound to the first permitted device and expire according to their purchased duration.</p>'
-                . '<a class="button" href="mailto:support@parallaxserver.online">Contact support</a></div></section>';
-            View::page('Activation portal', $body, Security::user());
-        }
-        header('Cache-Control: no-store, max-age=0');
-        $secret = Env::get('ONECORE_LEGACY_TOKEN_SECRET');
-        if (strlen($secret) < 32 || strlen($secret) > 256) {
-            error_log('ONECORE_LEGACY_TOKEN_SECRET is missing or invalid.');
-            $this->json(['status' => false, 'reason' => 'SERVER CONFIGURATION ERROR'], 500);
-        }
-        $game = trim((string) ($_POST['game'] ?? ''));
-        $userKey = trim((string) ($_POST['user_key'] ?? ''));
-        $serial = trim((string) ($_POST['serial'] ?? ''));
-        if ($game === '' || $userKey === '' || $serial === '' || strlen($game) > 64
-            || strlen($userKey) > 128 || strlen($serial) > 256 || str_contains($serial, ',')) {
-            $this->json(['status' => false, 'reason' => 'INVALID PARAMETER']);
-        }
-        if (!$this->allowConnectRequest($userKey)) {
-            $this->json(['status' => false, 'reason' => 'TOO MANY REQUESTS'], 429);
-        }
-        $this->db->beginTransaction();
-        try {
-            $statement = $this->db->prepare('SELECT * FROM keys_code WHERE user_key=? AND game=? LIMIT 1 FOR UPDATE');
-            $statement->execute([$userKey, $game]);
-            $key = $statement->fetch();
-            if (!$key) {
-                $this->db->rollBack();
-                $this->json(['status' => false, 'reason' => 'USER OR GAME NOT REGISTERED']);
-            }
-            if ((int) $key['status'] !== 1) {
-                $this->db->rollBack();
-                $this->json(['status' => false, 'reason' => 'USER BLOCKED']);
-            }
-            $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
-            $expiry = $key['expired_date']
-                ? new DateTimeImmutable($key['expired_date'], new DateTimeZone('UTC')) : null;
-            if ($expiry && $expiry <= $now) {
-                $this->db->rollBack();
-                $this->json(['status' => false, 'reason' => 'EXPIRED KEY']);
-            }
-            if (!$expiry) {
-                $expiry = $now->modify('+' . max(1, (int) $key['duration']) . ' hours');
-                $this->db->prepare('UPDATE keys_code SET expired_date=? WHERE id_keys=?')
-                    ->execute([$expiry->format('Y-m-d H:i:s'), $key['id_keys']]);
-            }
-            $devices = array_values(array_unique(array_filter(array_map('trim', explode(',', (string) $key['devices'])))));
-            if (!in_array($serial, $devices, true)) {
-                if (count($devices) >= max(1, (int) $key['max_devices'])) {
-                    $this->db->rollBack();
-                    $this->json(['status' => false, 'reason' => 'MAX DEVICE REACHED']);
-                }
-                $devices[] = $serial;
-                $this->db->prepare('UPDATE keys_code SET devices=? WHERE id_keys=?')
-                    ->execute([implode(',', $devices), $key['id_keys']]);
-            }
-            $server = $this->db->query('SELECT modname FROM modname WHERE id=1')->fetch() ?: [];
-            $copy = $this->db->query('SELECT `_status`,`_ftext` FROM `_ftext` WHERE id=1')->fetch() ?: [];
-            $feature = $this->db->query('SELECT * FROM `Feature` WHERE id=1')->fetch() ?: [];
-            $maintenance = $this->db->query('SELECT status,myinput FROM onoff WHERE id=1')->fetch() ?: [];
-            $this->db->commit();
-            if (($maintenance['status'] ?? 'off') === 'on') {
-                $this->json(['status' => true, 'reason' => (string) ($maintenance['myinput'] ?? 'Maintenance in progress')]);
-            }
-            $expiryString = $expiry->format('Y-m-d H:i:s');
-            $token = md5($game . '-' . $userKey . '-' . $serial . '-' . $secret);
-            $this->json(['status' => true, 'data' => [
-                'token' => $token,
-                'modname' => (string) ($server['modname'] ?? ''),
-                'mod_status' => (string) ($copy['_status'] ?? ''),
-                'credit' => (string) ($copy['_ftext'] ?? ''),
-                'ESP' => (string) ($feature['ESP'] ?? 'off'),
-                'Item' => (string) ($feature['Item'] ?? 'off'),
-                'AIM' => (string) ($feature['AIM'] ?? 'off'),
-                'SilentAim' => (string) ($feature['SilentAim'] ?? 'off'),
-                'BulletTrack' => (string) ($feature['BulletTrack'] ?? 'off'),
-                'Floating' => (string) ($feature['Floating'] ?? 'off'),
-                'Memory' => (string) ($feature['Memory'] ?? 'off'),
-                'Setting' => (string) ($feature['Setting'] ?? 'off'),
-                'expired_date' => $expiryString,
-                'EXP' => $expiryString,
-                'exdate' => $expiryString,
-                'device' => max(1, (int) $key['max_devices']),
-                'rng' => time(),
-            ]]);
-        } catch (Throwable $error) {
-            if ($this->db->inTransaction()) {
-                $this->db->rollBack();
-            }
-            throw $error;
-        }
     }
 
     private function connectV2(): never
@@ -722,7 +521,12 @@ final class App
         if (strlen($rawRequest) > 32768) {
             $this->json(['status' => false, 'reason' => 'REQUEST TOO LARGE'], 413);
         }
-        $decrypted = ApiCrypto::decryptRequest($rawRequest);
+        try {
+            $decrypted = ApiCrypto::decryptRequest($rawRequest);
+        } catch (Throwable) {
+            error_log('Rejected malformed encrypted licensing request.');
+            $this->json(['status' => false, 'reason' => 'INVALID ENCRYPTED REQUEST'], 400);
+        }
         $payload = $decrypted['payload'];
         $sessionKey = $decrypted['key'];
         $nonce = $decrypted['nonce'];
@@ -731,12 +535,15 @@ final class App
         $serial = trim((string) ($payload['serial'] ?? ''));
         $canary = (string) ($payload['canary'] ?? '');
         $timestamp = (int) ($payload['timestamp'] ?? 0);
+        $versionCode = (int) ($payload['version_code'] ?? 0);
         $packageName = (string) ($payload['package_name'] ?? '');
         $certificateSha256 = strtoupper(str_replace(':', '', (string) ($payload['certificate_sha256'] ?? '')));
-        if ($game === '' || $userKey === '' || $serial === '' || strlen($game) > 64
-            || strlen($userKey) > 128 || strlen($serial) > 256 || str_contains($serial, ',')
+        if (preg_match('/^[A-Z0-9_-]{1,64}$/D', $game) !== 1
+            || preg_match('/^[A-Za-z0-9_-]{4,64}$/D', $userKey) !== 1
+            || preg_match('/^[A-Za-z0-9_-]{43}$/D', $serial) !== 1
             || preg_match('/^[A-Za-z0-9_-]{22,64}$/D', $canary) !== 1
             || abs(time() - $timestamp) > 60
+            || $versionCode < 1 || $versionCode > 2147483647
             || preg_match('/^[A-Za-z][A-Za-z0-9_.]{2,127}$/D', $packageName) !== 1
             || preg_match('/^[A-F0-9]{64}$/D', $certificateSha256) !== 1) {
             $this->encryptedJson(
@@ -755,8 +562,9 @@ final class App
         foreach ($expectedCertificates as $expectedCertificate) {
             $certificateMatches = hash_equals($expectedCertificate, $certificateSha256) || $certificateMatches;
         }
+        $minimumVersionCode = max(1, (int) Env::get('MIN_ANDROID_VERSION_CODE', '1'));
         if ($expectedPackage === '' || !hash_equals($expectedPackage, $packageName)
-            || !$certificateMatches) {
+            || !$certificateMatches || $versionCode < $minimumVersionCode) {
             $this->encryptedJson(
                 ['status' => false, 'reason' => 'APP IDENTITY FAILED', 'request_nonce' => $nonce, 'canary' => $canary],
                 $sessionKey,
@@ -764,6 +572,15 @@ final class App
                 403
             );
         }
+        if (!$this->allowConnectRequest($userKey)) {
+            $this->encryptedJson(
+                ['status' => false, 'reason' => 'TOO MANY REQUESTS', 'request_nonce' => $nonce, 'canary' => $canary],
+                $sessionKey,
+                $nonce,
+                429
+            );
+        }
+        $this->db->exec('DELETE FROM api_nonces WHERE expires_at < UTC_TIMESTAMP()');
         try {
             $statement = $this->db->prepare('INSERT INTO api_nonces (nonce_hash,expires_at) VALUES (?,UTC_TIMESTAMP()+INTERVAL 10 MINUTE)');
             $statement->execute([hash('sha256', $nonce)]);
@@ -773,17 +590,6 @@ final class App
                 $sessionKey,
                 $nonce,
                 409
-            );
-        }
-        if (random_int(1, 100) === 1) {
-            $this->db->exec('DELETE FROM api_nonces WHERE expires_at < UTC_TIMESTAMP()');
-        }
-        if (!$this->allowConnectRequest($userKey)) {
-            $this->encryptedJson(
-                ['status' => false, 'reason' => 'TOO MANY REQUESTS', 'request_nonce' => $nonce, 'canary' => $canary],
-                $sessionKey,
-                $nonce,
-                429
             );
         }
         $result = $this->encryptedLicenseResult($game, $userKey, $serial);
@@ -880,34 +686,36 @@ final class App
         $statement->execute([$rateKey, $window]);
         $check = $this->db->prepare('SELECT request_count FROM connect_rate_limits WHERE rate_key=? AND window_started_at=?');
         $check->execute([$rateKey, $window]);
-        if (random_int(1, 100) === 1) {
-            $this->db->exec("DELETE FROM connect_rate_limits WHERE window_started_at < UTC_TIMESTAMP() - INTERVAL 1 DAY");
-        }
+        $this->db->exec("DELETE FROM connect_rate_limits WHERE window_started_at < UTC_TIMESTAMP() - INTERVAL 1 DAY");
         return (int) $check->fetchColumn() <= 30;
     }
 
-    private function allowLoginAttempt(): bool
+    private function allowLoginAttempt(string $username): bool
     {
         $windowTimestamp = intdiv(time(), 900) * 900;
         $window = gmdate('Y-m-d H:i:s', $windowTimestamp);
-        $rateKey = hash('sha256', Security::clientIp());
+        $rateKeys = [
+            [$this->loginRateKey($username), 10],
+            [hash('sha256', Security::clientIp() . '|*'), 30],
+        ];
         $statement = $this->db->prepare(
             'INSERT INTO login_rate_limits (rate_key,window_started_at,attempt_count) VALUES (?,?,1) '
             . 'ON DUPLICATE KEY UPDATE attempt_count=attempt_count+1'
         );
-        $statement->execute([$rateKey, $window]);
         $check = $this->db->prepare('SELECT attempt_count FROM login_rate_limits WHERE rate_key=? AND window_started_at=?');
-        $check->execute([$rateKey, $window]);
-        return (int) $check->fetchColumn() <= 10;
+        $allowed = true;
+        foreach ($rateKeys as [$rateKey, $limit]) {
+            $statement->execute([$rateKey, $window]);
+            $check->execute([$rateKey, $window]);
+            $allowed = (int) $check->fetchColumn() <= $limit && $allowed;
+        }
+        $this->db->exec("DELETE FROM login_rate_limits WHERE window_started_at < UTC_TIMESTAMP() - INTERVAL 1 DAY");
+        return $allowed;
     }
 
-    /** @param array<string,mixed> $user */
-    private function requireAdminRole(array $user): void
+    private function loginRateKey(string $username): string
     {
-        if (!in_array($user['role'], ['owner', 'admin'], true)) {
-            http_response_code(403);
-            exit('Admin access required.');
-        }
+        return hash('sha256', Security::clientIp() . '|' . strtoupper(trim($username)));
     }
 
     private function requirePost(): void

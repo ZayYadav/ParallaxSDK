@@ -8,6 +8,10 @@ use PDO;
 
 final class Security
 {
+    private const SESSION_IDLE_SECONDS = 1800;
+    private const SESSION_ABSOLUTE_SECONDS = 43200;
+    private const SESSION_ROTATE_SECONDS = 900;
+
     public static function csrfToken(): string
     {
         if (!isset($_SESSION['csrf']) || !is_string($_SESSION['csrf'])) {
@@ -24,7 +28,7 @@ final class Security
     public static function verifyCsrf(): void
     {
         $token = (string) ($_POST['_csrf'] ?? '');
-        if ($token === '' || !hash_equals(self::csrfToken(), $token)) {
+        if (!self::sameOriginRequest() || $token === '' || !hash_equals(self::csrfToken(), $token)) {
             http_response_code(419);
             exit('Invalid or expired form token. Reload the page and try again.');
         }
@@ -33,6 +37,9 @@ final class Security
     /** @return array<string,mixed>|null */
     public static function user(): ?array
     {
+        if (!self::validAuthenticatedSession()) {
+            return null;
+        }
         $id = (int) ($_SESSION['user_id'] ?? 0);
         if ($id < 1 || !Database::installed()) {
             return null;
@@ -79,7 +86,15 @@ final class Security
         }
         session_regenerate_id(true);
         $_SESSION['user_id'] = (int) $user['id'];
+        $_SESSION['auth_started_at'] = time();
+        $_SESSION['last_seen_at'] = time();
+        $_SESSION['last_regenerated_at'] = time();
+        $_SESSION['user_agent_hash'] = self::userAgentHash();
         unset($_SESSION['csrf']);
+        if (password_needs_rehash((string) $user['password_hash'], self::passwordAlgorithm())) {
+            Database::connection()->prepare('UPDATE panel_users SET password_hash=? WHERE id=?')
+                ->execute([self::hashPassword($password), (int) $user['id']]);
+        }
         Database::connection()->prepare('UPDATE panel_users SET last_login_at = UTC_TIMESTAMP() WHERE id = ?')
             ->execute([(int) $user['id']]);
         return true;
@@ -87,8 +102,28 @@ final class Security
 
     public static function logout(): void
     {
-        unset($_SESSION['user_id'], $_SESSION['csrf']);
-        session_regenerate_id(true);
+        $_SESSION = [];
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $params = session_get_cookie_params();
+            setcookie(session_name(), '', [
+                'expires' => time() - 42000,
+                'path' => $params['path'],
+                'domain' => $params['domain'],
+                'secure' => $params['secure'],
+                'httponly' => $params['httponly'],
+                'samesite' => $params['samesite'] ?? 'Strict',
+            ]);
+            session_destroy();
+        }
+    }
+
+    public static function hashPassword(string $password): string
+    {
+        $hash = password_hash($password, self::passwordAlgorithm());
+        if (!is_string($hash)) {
+            throw new \RuntimeException('Password hashing failed.');
+        }
+        return $hash;
     }
 
     public static function audit(PDO $db, int $actorId, string $action, string $target = ''): void
@@ -123,5 +158,70 @@ final class Security
         $expires = (int) ($_SESSION['captcha_expires'] ?? 0);
         unset($_SESSION['captcha_answer'], $_SESSION['captcha_question'], $_SESSION['captcha_expires']);
         return $expected !== '' && $expires >= time() && hash_equals($expected, trim($answer));
+    }
+
+    private static function validAuthenticatedSession(): bool
+    {
+        if ((int) ($_SESSION['user_id'] ?? 0) < 1) {
+            return false;
+        }
+        $now = time();
+        $started = (int) ($_SESSION['auth_started_at'] ?? 0);
+        $lastSeen = (int) ($_SESSION['last_seen_at'] ?? 0);
+        $lastRegenerated = (int) ($_SESSION['last_regenerated_at'] ?? 0);
+        $agentHash = (string) ($_SESSION['user_agent_hash'] ?? '');
+        if ($started < 1 || $lastSeen < 1 || $lastRegenerated < 1
+            || $now - $lastSeen > self::SESSION_IDLE_SECONDS
+            || $now - $started > self::SESSION_ABSOLUTE_SECONDS
+            || $agentHash === '' || !hash_equals($agentHash, self::userAgentHash())) {
+            self::logout();
+            return false;
+        }
+        if ($now - $lastRegenerated >= self::SESSION_ROTATE_SECONDS) {
+            session_regenerate_id(true);
+            $_SESSION['last_regenerated_at'] = $now;
+        }
+        $_SESSION['last_seen_at'] = $now;
+        return true;
+    }
+
+    private static function sameOriginRequest(): bool
+    {
+        $fetchSite = strtolower((string) ($_SERVER['HTTP_SEC_FETCH_SITE'] ?? ''));
+        if ($fetchSite !== '' && $fetchSite !== 'same-origin') {
+            return false;
+        }
+        $source = (string) ($_SERVER['HTTP_ORIGIN'] ?? '');
+        if ($source === '') {
+            $source = (string) ($_SERVER['HTTP_REFERER'] ?? '');
+        }
+        if ($source === '') {
+            return true;
+        }
+        $expected = self::normalizedOrigin(Env::get('APP_URL'));
+        $actual = self::normalizedOrigin($source);
+        return $expected !== '' && $actual !== '' && hash_equals($expected, $actual);
+    }
+
+    private static function normalizedOrigin(string $url): string
+    {
+        $parts = parse_url($url);
+        if (!is_array($parts) || !isset($parts['scheme'], $parts['host'])) {
+            return '';
+        }
+        $scheme = strtolower((string) $parts['scheme']);
+        $host = strtolower((string) $parts['host']);
+        $port = isset($parts['port']) ? (int) $parts['port'] : ($scheme === 'https' ? 443 : 80);
+        return $scheme . '://' . $host . ':' . $port;
+    }
+
+    private static function userAgentHash(): string
+    {
+        return hash('sha256', substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 512));
+    }
+
+    private static function passwordAlgorithm(): string|int|null
+    {
+        return defined('PASSWORD_ARGON2ID') ? PASSWORD_ARGON2ID : PASSWORD_DEFAULT;
     }
 }

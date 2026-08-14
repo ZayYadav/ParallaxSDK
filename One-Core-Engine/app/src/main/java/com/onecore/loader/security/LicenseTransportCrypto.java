@@ -65,13 +65,17 @@ final class LicenseTransportCrypto {
         envelope.put("ct", base64(Arrays.copyOfRange(encryptedAndTag, 0, ciphertextLength)));
         envelope.put("tag", base64(Arrays.copyOfRange(
                 encryptedAndTag, ciphertextLength, encryptedAndTag.length)));
-        return new RequestEnvelope(envelope.toString(), sessionKey, nonce, canary);
+        RequestEnvelope result = new RequestEnvelope(envelope.toString(), sessionKey, nonce, canary);
+        Arrays.fill(sessionKey, (byte) 0);
+        return result;
     }
 
     static JSONObject decryptResponse(String envelopeJson, RequestEnvelope request)
             throws Exception {
         JSONObject envelope = new JSONObject(envelopeJson);
-        if (envelope.optInt("v", 0) != VERSION) {
+        if (envelope.length() != 4 || !envelope.has("v") || !envelope.has("iv")
+                || !envelope.has("ct") || !envelope.has("tag")
+                || envelope.optInt("v", 0) != VERSION) {
             throw new IllegalStateException("Licensing server encryption version is unsupported");
         }
         byte[] iv = decodeBase64(envelope.optString("iv", ""), 12, 12);
@@ -120,6 +124,10 @@ final class LicenseTransportCrypto {
             this.sessionKey = Arrays.copyOf(sessionKey, sessionKey.length);
             this.nonce = nonce;
             this.canary = canary;
+        }
+
+        void destroy() {
+            Arrays.fill(sessionKey, (byte) 0);
         }
     }
 }

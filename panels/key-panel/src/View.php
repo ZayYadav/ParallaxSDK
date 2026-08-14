@@ -14,8 +14,7 @@ final class View
         $nav = '';
         if ($user) {
             $nav = '<nav><a href="' . url('dashboard') . '">Dashboard</a>'
-                . '<a href="' . url('keys') . '">Legacy Keys</a>'
-                . '<a href="' . url('licenses') . '">OneCore Keys</a>'
+                . '<a href="' . url('keys') . '">Keys</a>'
                 . '<a href="' . url('settings') . '">Settings</a>';
             if ($user['role'] === 'owner') {
                 $nav .= '<a href="' . url('users') . '">Users</a>';

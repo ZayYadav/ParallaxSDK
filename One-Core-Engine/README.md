@@ -44,8 +44,8 @@ The CI workflow performs both stages automatically.
 - Runtime status shows the Android API level and the device ABI list.
 - License values are encrypted with AES-GCM using an app-scoped Android
   Keystore key. Existing plaintext values are migrated after the first launch.
-- Login is pinned to `https://parallaxserver.online/api/v2/connect` and the `PUBG`
-  game identifier used by the OneCore Integrity legacy-key inventory. The
+- Login is pinned to `https://parallaxloader.parallaxserver.online/api/v2/connect` and the `PUBG`
+  game identifier used by the panel's `keys_code` inventory. The
   endpoint and game cannot be replaced through Gradle properties or runtime
   configuration.
 - Each request uses a fresh AES-256-GCM key wrapped to the panel's RSA public
@@ -58,9 +58,9 @@ The CI workflow performs both stages automatically.
 - The server-issued expiry is stored with a monotonic time anchor. Install,
   download, launch, and floating-service actions fail closed when the key
   expires, after a reboot, or when protected state cannot be decrypted.
-- Release CI requires public repository variables
-  `PARALLAX_API_PUBLIC_KEY_B64` and `PARALLAX_TLS_PINS`. The legacy token secret
-  is no longer compiled into the loader.
+- Release CI and direct release tasks require valid
+  `PARALLAX_API_PUBLIC_KEY_B64` and `PARALLAX_TLS_PINS` configuration. No shared
+  licensing token is compiled into the Loader.
 - Release builds validate the exact active signing-certificate set across three
   independent paths: PackageManager metadata, a raw-file cryptographic APK
   verification using Android `apksig`, and native SHA-256 hashing of the raw

@@ -296,7 +296,7 @@ jobs:
           for dex in "$DEX_DIR"/classes*.dex; do
             "${ANDROID_HOME}/build-tools/36.0.0/dexdump" -f "$dex" >/dev/null
             for forbidden in \
-              'https://parallaxserver.online/api/v2/connect' \
+              'https://parallaxloader.parallaxserver.online/api/v2/connect' \
               'parallax-license-v2-request' \
               'parallax-license-v2-response:' \
               'Licensing TLS pins are not configured'; do
