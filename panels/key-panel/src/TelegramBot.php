@@ -215,7 +215,7 @@ final class TelegramBot
             }
         } elseif ($data === 'onecore:30') {
             $key = 'OC-' . implode('-', str_split(strtoupper(bin2hex(random_bytes(16))), 4));
-            $statement = $this->db->prepare('INSERT INTO license_keys (created_by_user_id,key_hash,key_prefix,label,max_devices,expires_at) VALUES (NULL,?,?,?,?,?)');
+            $statement = $this->db->prepare('INSERT INTO license_keys (key_hash,key_prefix,label,max_devices,expires_at) VALUES (?,?,?,?,?)');
             $statement->execute([hash('sha256', $key), substr($key, 0, 12), 'Telegram', 1, gmdate('Y-m-d H:i:s', time() + 2592000)]);
             Security::audit($this->db, (int) $user['id'], 'telegram_onecore_key_created', substr($key, 0, 12));
             $this->edit($chatId, $messageId, "OneCore key created\nDuration: 30 days\n$key", $this->copyKeyboard($key));

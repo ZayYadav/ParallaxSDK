@@ -367,7 +367,7 @@ final class App
         }
         $expires = gmdate('Y-m-d H:i:s', time() + ($days * 86400));
         $statement = $this->db->prepare(
-            'INSERT INTO license_keys (created_by_user_id,key_hash,key_prefix,label,max_devices,expires_at) VALUES (?,?,?,?,?,?)'
+            'INSERT INTO license_keys (key_hash,key_prefix,label,max_devices,expires_at) VALUES (?,?,?,?,?)'
         );
         $keys = [];
         $this->db->beginTransaction();
@@ -375,9 +375,9 @@ final class App
             for ($index = 0; $index < $quantity; $index++) {
                 $parts = str_split(strtoupper(bin2hex(random_bytes(16))), 4);
                 $key = 'OC-' . implode('-', $parts);
-                // Keep this compatible with an Integrity database whose
-                // created_by_user_id may reference its own dashboard_users table.
-                $statement->execute([null, hash('sha256', $key), substr($key, 0, 12), $label, $maxDevices, $expires]);
+                // The optional creator column is deliberately omitted so this
+                // works with both legacy and current Integrity schemas.
+                $statement->execute([hash('sha256', $key), substr($key, 0, 12), $label, $maxDevices, $expires]);
                 $keys[] = $key;
             }
             Security::audit($this->db, (int) $user['id'], 'onecore_keys_created', $label . ':' . $quantity);

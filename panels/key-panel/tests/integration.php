@@ -45,7 +45,7 @@ $assert(GenerationOptions::contains($db, GenerationOptions::GAME, 'BGMI'), 'Save
 $assert(!GenerationOptions::contains($db, GenerationOptions::DURATION, '24'), 'Removed duration option is still active.');
 
 $activationKey = 'OC-' . implode('-', str_split(strtoupper(bin2hex(random_bytes(16))), 4));
-$db->prepare('INSERT INTO license_keys (created_by_user_id,key_hash,key_prefix,label,max_devices,expires_at) VALUES (NULL,?,?,?,?,?)')
+$db->prepare('INSERT INTO license_keys (key_hash,key_prefix,label,max_devices,expires_at) VALUES (?,?,?,?,?)')
     ->execute([hash('sha256', $activationKey), substr($activationKey, 0, 12), 'CI key', 1, gmdate('Y-m-d H:i:s', time() + 86400)]);
 $licenseId = (int) $db->lastInsertId();
 $assert($licenseId > 0, 'OneCore key insert failed.');

@@ -72,10 +72,12 @@ $telegramSource = (string) file_get_contents(PANEL_ROOT . '/src/TelegramBot.php'
 $assert(str_contains($telegramSource, 'HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN'), 'Telegram webhook secret header validation is missing.');
 $assert(str_contains($telegramSource, 'TELEGRAM_ALLOWED_USER_IDS'), 'Telegram allowlist validation is missing.');
 $assert(str_contains($telegramSource, "role IN ('owner','admin')"), 'Telegram role authorization is missing.');
+$assert(!str_contains($telegramSource, 'INSERT INTO license_keys (created_by_user_id'), 'Telegram key creation must support legacy OneCore schemas.');
 $appSource = (string) file_get_contents(PANEL_ROOT . '/src/App.php');
 $assert(str_contains($appSource, "Env::get('ENABLE_LEGACY_CONNECT', 'false') === 'true'"), 'Legacy connect must be disabled by default.');
 $assert(str_contains($appSource, "Env::get('EXPECTED_ANDROID_CERT_SHA256')"), 'Server-side signing identity binding is missing.');
 $assert(str_contains($appSource, "View::select('game'"), 'Game generation control must be a select list.');
 $assert(str_contains($appSource, "View::select('duration'"), 'Duration generation control must be a select list.');
+$assert(!str_contains($appSource, 'INSERT INTO license_keys (created_by_user_id'), 'Panel key creation must support legacy OneCore schemas.');
 
 echo "Standalone panel tests passed ($assertions assertions).\n";
