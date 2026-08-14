@@ -40,6 +40,15 @@ public class LicenseTransportCryptoTest {
         assertEquals(encrypted.nonce, decrypted.getString("request_nonce"));
         assertEquals(encrypted.canary, decrypted.getString("canary"));
 
+        JSONObject unexpectedField = new JSONObject(responseEnvelope.toString());
+        unexpectedField.put("debug", true);
+        try {
+            LicenseTransportCrypto.decryptResponse(unexpectedField.toString(), encrypted);
+            fail("Unexpected response envelope fields must be rejected");
+        } catch (Exception expected) {
+            assertTrue(true);
+        }
+
         JSONObject tampered = new JSONObject(responseEnvelope.toString());
         tampered.put("ct", tampered.getString("ct").substring(0, 4) + "AAAA");
         try {

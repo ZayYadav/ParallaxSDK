@@ -6,8 +6,8 @@ uploaded files are intentionally excluded from version control.
 
 ## Packages
 
-- `key-panel/` — CodeIgniter overlay that modernizes the key panel, repairs
-  license inventory views, and adds OneCore activation-key management.
+- `key-panel/` — standalone dependency-free PHP control panel whose web UI,
+  Telegram bot, and encrypted Loader API share the `keys_code` inventory.
 - `sdk-panel/` — standalone PHP SDK panel with the secure encrypted API v2,
   responsive administration UI, device controls, audit logs, and migration
   scripts.

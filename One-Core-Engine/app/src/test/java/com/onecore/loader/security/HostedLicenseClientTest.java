@@ -16,9 +16,9 @@ public class HostedLicenseClientTest {
 
     @Test
     public void encryptedCheckerIdentityIsPinnedInTheLoader() {
-        assertEquals("https://parallaxserver.online/api/v2/connect",
+        assertEquals("https://parallaxloader.parallaxserver.online/api/v2/connect",
                 HostedLicenseClient.CONNECT_URL);
-        assertEquals("parallaxserver.online", HostedLicenseClient.CONNECT_HOST);
+        assertEquals("parallaxloader.parallaxserver.online", HostedLicenseClient.CONNECT_HOST);
         assertEquals("PUBG", HostedLicenseClient.GAME_ID);
     }
 
@@ -67,6 +67,10 @@ public class HostedLicenseClientTest {
     @Test
     public void validatesPanelKeyAlphabetWithoutChangingCase() {
         assertTrue(HostedLicenseClient.isSupportedActivationKey("Key_Name-1234"));
+        assertTrue(HostedLicenseClient.isSupportedActivationKey(
+                "A".repeat(64)));
+        assertFalse(HostedLicenseClient.isSupportedActivationKey(
+                "A".repeat(65)));
         assertFalse(HostedLicenseClient.isSupportedActivationKey("bad key"));
         assertFalse(HostedLicenseClient.isSupportedActivationKey("abc"));
         assertEquals("Mixed_Case-Key", HostedLicenseClient.normalizeActivationKey(

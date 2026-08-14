@@ -21,6 +21,9 @@ final class ApiCrypto
         if (is_file($privatePath) && is_file($publicPath)) {
             return;
         }
+        if (is_file($privatePath) || is_file($publicPath)) {
+            throw new RuntimeException('API key pair is incomplete; restore both files from the same backup.');
+        }
         if (!extension_loaded('openssl')) {
             throw new RuntimeException('OpenSSL PHP extension is required.');
         }
@@ -52,7 +55,14 @@ final class ApiCrypto
         self::ensureKeyPair();
         [, $publicPath] = self::keyPaths();
         $value = trim((string) file_get_contents($publicPath));
-        if ($value === '' || base64_decode($value, true) === false) {
+        $der = base64_decode($value, true);
+        $pem = $der === false ? '' : "-----BEGIN PUBLIC KEY-----\n"
+            . chunk_split(base64_encode($der), 64, "\n") . "-----END PUBLIC KEY-----\n";
+        $key = $pem === '' ? false : openssl_pkey_get_public($pem);
+        $details = $key === false ? false : openssl_pkey_get_details($key);
+        if ($value === '' || $der === false || !is_array($details)
+            || ($details['type'] ?? null) !== OPENSSL_KEYTYPE_RSA
+            || (int) ($details['bits'] ?? 0) < 3072) {
             throw new RuntimeException('API public key is invalid.');
         }
         return $value;
@@ -72,15 +82,32 @@ final class ApiCrypto
         if (!is_array($envelope) || (int) ($envelope['v'] ?? 0) !== self::VERSION) {
             throw new RuntimeException('Unsupported encrypted request.');
         }
+        $fields = array_keys($envelope);
+        sort($fields);
+        if ($fields !== ['ct', 'iv', 'k', 'tag', 'v']) {
+            throw new RuntimeException('Encrypted request fields are invalid.');
+        }
         $wrappedKey = self::decode((string) ($envelope['k'] ?? ''), null, 256, 512);
         $iv = self::decode((string) ($envelope['iv'] ?? ''), 12);
         $ciphertext = self::decode((string) ($envelope['ct'] ?? ''), null, 1, 16384);
         $tag = self::decode((string) ($envelope['tag'] ?? ''), self::TAG_BYTES);
         [$privatePath] = self::keyPaths();
         self::ensureKeyPair();
+        if (is_link($privatePath)) {
+            throw new RuntimeException('API private key path must not be a symbolic link.');
+        }
+        $permissions = @fileperms($privatePath);
+        if (Env::get('APP_ENV', 'production') === 'production'
+            && is_int($permissions) && (($permissions & 0777) & 0077) !== 0) {
+            throw new RuntimeException('API private key permissions must be 0600.');
+        }
         $privatePem = file_get_contents($privatePath);
-        if (!is_string($privatePem)
-            || !openssl_private_decrypt($wrappedKey, $sessionKey, $privatePem, OPENSSL_PKCS1_OAEP_PADDING)
+        $privateKey = is_string($privatePem) ? openssl_pkey_get_private($privatePem) : false;
+        $privateDetails = $privateKey === false ? false : openssl_pkey_get_details($privateKey);
+        if ($privateKey === false || !is_array($privateDetails)
+            || ($privateDetails['type'] ?? null) !== OPENSSL_KEYTYPE_RSA
+            || (int) ($privateDetails['bits'] ?? 0) < 3072
+            || !openssl_private_decrypt($wrappedKey, $sessionKey, $privateKey, OPENSSL_PKCS1_OAEP_PADDING)
             || strlen($sessionKey) !== 32) {
             throw new RuntimeException('Encrypted session key was rejected.');
         }
@@ -93,7 +120,7 @@ final class ApiCrypto
             $tag,
             self::REQUEST_AAD
         );
-        if (!is_string($plain)) {
+        if (!is_string($plain) || $plain === '' || strlen($plain) > 8192) {
             throw new RuntimeException('Encrypted request authentication failed.');
         }
         try {

@@ -33,8 +33,8 @@ $assert($ownerId > 0, 'Owner insert failed.');
 
 $db->prepare('INSERT INTO keys_code (game,user_key,duration,max_devices,registrator,admin_id) VALUES (?,?,?,?,?,?)')
     ->execute(['PUBG', 'CI-LEGACY-KEY', 24, 1, 'ci_owner', $ownerId]);
-$legacy = $db->query("SELECT * FROM keys_code WHERE user_key='CI-LEGACY-KEY'")->fetch();
-$assert(is_array($legacy) && $legacy['game'] === 'PUBG', 'Legacy key insert failed.');
+$keyRecord = $db->query("SELECT * FROM keys_code WHERE user_key='CI-LEGACY-KEY'")->fetch();
+$assert(is_array($keyRecord) && $keyRecord['game'] === 'PUBG', 'Key insert failed.');
 
 GenerationOptions::replace(
     $db,
@@ -44,11 +44,6 @@ GenerationOptions::replace(
 $assert(GenerationOptions::contains($db, GenerationOptions::GAME, 'BGMI'), 'Saved game option was not found.');
 $assert(!GenerationOptions::contains($db, GenerationOptions::DURATION, '24'), 'Removed duration option is still active.');
 
-$activationKey = 'OC-' . implode('-', str_split(strtoupper(bin2hex(random_bytes(16))), 4));
-$db->prepare('INSERT INTO license_keys (key_hash,key_prefix,label,max_devices,expires_at) VALUES (?,?,?,?,?)')
-    ->execute([hash('sha256', $activationKey), substr($activationKey, 0, 12), 'CI key', 1, gmdate('Y-m-d H:i:s', time() + 86400)]);
-$licenseId = (int) $db->lastInsertId();
-$assert($licenseId > 0, 'OneCore key insert failed.');
 $assert((int) $db->query('SELECT COUNT(*) FROM onoff WHERE id=1')->fetchColumn() === 1, 'Default server settings missing.');
 
 ApiCrypto::ensureKeyPair();
@@ -62,10 +57,11 @@ $canary = rtrim(strtr(base64_encode(random_bytes(18)), '+/', '-_'), '=');
 $payload = json_encode([
     'game' => 'PUBG',
     'user_key' => 'CI-LEGACY-KEY',
-    'serial' => 'ci-device',
+    'serial' => str_repeat('A', 43),
     'nonce' => $nonce,
     'canary' => $canary,
     'timestamp' => time(),
+    'version_code' => 1,
     'package_name' => 'com.onecore.loader',
     'certificate_sha256' => str_repeat('A', 64),
 ], JSON_THROW_ON_ERROR);
@@ -82,6 +78,14 @@ $request = json_encode([
 $decrypted = ApiCrypto::decryptRequest($request);
 $assert($decrypted['payload']['canary'] === $canary, 'Encrypted request canary did not round-trip.');
 $assert(hash_equals($sessionKey, $decrypted['key']), 'Wrapped session key did not round-trip.');
+$unexpectedEnvelope = json_decode($request, true, 16, JSON_THROW_ON_ERROR);
+$unexpectedEnvelope['debug'] = true;
+try {
+    ApiCrypto::decryptRequest(json_encode($unexpectedEnvelope, JSON_THROW_ON_ERROR));
+    $assert(false, 'Unexpected encrypted request envelope fields must fail.');
+} catch (\RuntimeException) {
+    $assert(true, 'Unexpected encrypted request envelope fields rejected.');
+}
 $response = ApiCrypto::encryptResponse(['status' => true, 'request_nonce' => $nonce], $sessionKey, $nonce);
 $responseIv = base64_decode($response['iv'], true);
 $responseCiphertext = base64_decode($response['ct'], true);

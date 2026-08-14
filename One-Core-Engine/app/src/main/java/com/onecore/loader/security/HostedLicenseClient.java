@@ -33,16 +33,20 @@ import okio.BufferedSource;
 /** Fail-closed encrypted client for the pinned Parallax licensing API. */
 @Obfuscate
 public final class HostedLicenseClient {
-    static final String CONNECT_URL = "https://parallaxserver.online/api/v2/connect";
-    static final String CONNECT_HOST = "parallaxserver.online";
+    static final String CONNECT_URL = "https://parallaxloader.parallaxserver.online/api/v2/connect";
+    static final String CONNECT_HOST = "parallaxloader.parallaxserver.online";
     static final String GAME_ID = "PUBG";
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
-    private static final long MAX_RESPONSE_BYTES = 64L * 1024L;
+    private static final long MAX_RESPONSE_BYTES = 32L * 1024L;
     private static final long MAX_CLOCK_SKEW_SECONDS = 60L;
     private static final Pattern ACTIVATION_KEY_PATTERN =
             Pattern.compile("^[A-Za-z0-9_-]{4,64}$");
     private static final Pattern RECEIPT_PATTERN =
             Pattern.compile("^[A-Za-z0-9_-]{32,64}$");
+    private static final Pattern TLS_PIN_PATTERN =
+            Pattern.compile("^sha256/[A-Za-z0-9+/]{43}=$");
+    private static final Pattern PUBLIC_KEY_PATTERN =
+            Pattern.compile("^[A-Za-z0-9+/]+={0,2}$");
 
     private static final String LICENSE_KEY = "PARALLAX_LICENSE_KEY";
     private static final String LICENSE_TOKEN = "PARALLAX_LICENSE_TOKEN";
@@ -101,33 +105,37 @@ public final class HostedLicenseClient {
             payload.put("version_code", BuildConfig.VERSION_CODE);
             LicenseTransportCrypto.RequestEnvelope encrypted =
                     LicenseTransportCrypto.encryptRequest(payload, configuredPublicKey());
-            Request request = new Request.Builder()
-                    .url(CONNECT_URL)
-                    .header("Accept", "application/json")
-                    .header("Cache-Control", "no-store")
-                    .post(RequestBody.create(encrypted.json, JSON))
-                    .build();
-            try (Response response = httpClient.newCall(request).execute()) {
-                if (!CONNECT_URL.equals(response.request().url().toString())) {
-                    throw new IllegalStateException("Licensing server redirected unexpectedly");
+            try {
+                Request request = new Request.Builder()
+                        .url(CONNECT_URL)
+                        .header("Accept", "application/json")
+                        .header("Cache-Control", "no-store")
+                        .post(RequestBody.create(encrypted.json, JSON))
+                        .build();
+                try (Response response = httpClient.newCall(request).execute()) {
+                    if (!CONNECT_URL.equals(response.request().url().toString())) {
+                        throw new IllegalStateException("Licensing server redirected unexpectedly");
+                    }
+                    String body = readBoundedJson(response);
+                    JSONObject decrypted = LicenseTransportCrypto.decryptResponse(body, encrypted);
+                    long receivedAt = System.currentTimeMillis() / 1000L;
+                    ParsedLicense license = parseDecryptedResponse(
+                            decrypted, encrypted.nonce, encrypted.canary, receivedAt);
+                    if (!response.isSuccessful()) {
+                        throw new LicenseRejectedException("Licensing server rejected the request");
+                    }
+                    SecurePreferences preferences = new SecurePreferences(context);
+                    preferences.putString(LICENSE_KEY, normalizedKey);
+                    preferences.putString(LICENSE_TOKEN, license.receipt);
+                    preferences.putString(LICENSE_EXPIRES_AT, Long.toString(license.expiresAt));
+                    preferences.putString(VERIFIED_SERVER_TIME, Long.toString(license.serverTime));
+                    preferences.putString(
+                            VERIFIED_ELAPSED_TIME,
+                            Long.toString(SystemClock.elapsedRealtime()));
+                    return "OK";
                 }
-                String body = readBoundedJson(response);
-                JSONObject decrypted = LicenseTransportCrypto.decryptResponse(body, encrypted);
-                long receivedAt = System.currentTimeMillis() / 1000L;
-                ParsedLicense license = parseDecryptedResponse(
-                        decrypted, encrypted.nonce, encrypted.canary, receivedAt);
-                if (!response.isSuccessful()) {
-                    throw new LicenseRejectedException("Licensing server rejected the request");
-                }
-                SecurePreferences preferences = new SecurePreferences(context);
-                preferences.putString(LICENSE_KEY, normalizedKey);
-                preferences.putString(LICENSE_TOKEN, license.receipt);
-                preferences.putString(LICENSE_EXPIRES_AT, Long.toString(license.expiresAt));
-                preferences.putString(VERIFIED_SERVER_TIME, Long.toString(license.serverTime));
-                preferences.putString(
-                        VERIFIED_ELAPSED_TIME,
-                        Long.toString(SystemClock.elapsedRealtime()));
-                return "OK";
+            } finally {
+                encrypted.destroy();
             }
         } catch (LicenseRejectedException exception) {
             clearLicense();
@@ -305,7 +313,8 @@ public final class HostedLicenseClient {
 
     private static String configuredPublicKey() {
         String value = BuildConfig.PARALLAX_API_PUBLIC_KEY_B64;
-        if (value == null || value.length() < 256) {
+        if (value == null || value.length() < 256 || value.length() > 2048
+                || !PUBLIC_KEY_PATTERN.matcher(value).matches()) {
             throw new IllegalStateException("Licensing public key is not configured");
         }
         return value;
@@ -316,10 +325,14 @@ public final class HostedLicenseClient {
         if (value == null || value.trim().isEmpty()) {
             return new String[0];
         }
-        return Arrays.stream(value.split(","))
-                .map(String::trim)
-                .filter(pin -> pin.startsWith("sha256/") && pin.length() == 51)
-                .toArray(String[]::new);
+        String[] configured = value.split(",", -1);
+        for (int index = 0; index < configured.length; index++) {
+            configured[index] = configured[index].trim();
+            if (!TLS_PIN_PATTERN.matcher(configured[index]).matches()) {
+                throw new IllegalStateException("Licensing TLS pin configuration is invalid");
+            }
+        }
+        return configured;
     }
 
     private static String userFacingError(Exception exception) {

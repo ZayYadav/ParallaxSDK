@@ -1,5 +1,6 @@
 import java.security.KeyStore
 import java.security.MessageDigest
+import java.util.Base64
 
 plugins {
     id 'com.android.application'
@@ -31,6 +32,24 @@ if (blackObfuscatorDepth < 1 || blackObfuscatorDepth > 3) {
     throw new GradleException('blackObfuscatorDepth must be between 1 and 3')
 }
 def javaString = { String value -> '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"' }
+def releaseTaskRequested = gradle.startParameter.taskNames.any {
+    it.toLowerCase(Locale.ROOT).contains('release')
+}
+if (releaseTaskRequested) {
+    byte[] publicKeyDer
+    try {
+        publicKeyDer = Base64.decoder.decode(parallaxApiPublicKey)
+    } catch (IllegalArgumentException error) {
+        throw new GradleException('PARALLAX_API_PUBLIC_KEY_B64 is invalid for release builds', error)
+    }
+    if (publicKeyDer.length < 256 || publicKeyDer.length > 1024) {
+        throw new GradleException('PARALLAX_API_PUBLIC_KEY_B64 has an invalid DER size')
+    }
+    def configuredPins = parallaxTlsPins.split(',', -1).collect { it.trim() }
+    if (configuredPins.isEmpty() || configuredPins.any { !(it ==~ /^sha256\/[A-Za-z0-9+\/]{43}=$/) }) {
+        throw new GradleException('PARALLAX_TLS_PINS must contain valid SHA-256 pins for release builds')
+    }
+}
 
 BlackObfuscator {
     // Explicit opt-in keeps debug/unit-test builds readable and deterministic.
