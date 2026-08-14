@@ -6,6 +6,7 @@ namespace ParallaxPanel;
 
 use DateTimeImmutable;
 use DateTimeZone;
+use InvalidArgumentException;
 use PDO;
 use Throwable;
 
@@ -24,6 +25,7 @@ final class App
             if (!Database::installed()) {
                 redirect('setup');
             }
+            Database::upgrade();
             if ($path === '/telegram/webhook') {
                 (new TelegramBot($this->db))->handleWebhook();
             }
@@ -197,6 +199,12 @@ final class App
     private function keys(): never
     {
         $user = Security::requireUser();
+        $games = GenerationOptions::games($this->db);
+        $durations = GenerationOptions::durations($this->db);
+        $durationLabels = [];
+        foreach ($durations as $hours => $label) {
+            $durationLabels[$hours] = $label . ' (' . $hours . 'h)';
+        }
         $where = $user['role'] === 'reseller' ? ' WHERE registrator = ?' : '';
         $statement = $this->db->prepare('SELECT * FROM keys_code' . $where . ' ORDER BY id_keys DESC LIMIT 500');
         $statement->execute($where ? [$user['username']] : []);
@@ -213,8 +221,8 @@ final class App
                 . $this->postButton('keys/action', 'delete', (int) $key['id_keys'], 'Delete', 'danger') . '</div></td></tr>';
         }
         $form = '<section class="card"><h2>Generate legacy keys</h2><form method="post" action="' . url('keys/create') . '"><div class="form-grid">'
-            . Security::csrfField() . View::input('game', 'Game', 'text', 'PUBG', 'required maxlength="64"')
-            . View::input('duration', 'Duration (hours)', 'number', '24', 'required min="1" max="87600"')
+            . Security::csrfField() . View::select('game', 'Game', $games, (string) array_key_first($games))
+            . View::select('duration', 'Duration', $durationLabels, array_key_exists('24', $durations) ? '24' : (string) array_key_first($durations))
             . View::input('max_devices', 'Max devices', 'number', '1', 'required min="1" max="100"')
             . View::input('quantity', 'Quantity', 'number', '1', 'required min="1" max="100"')
             . View::input('custom_key', 'Custom key (optional)', 'text', '', 'maxlength="128"')
@@ -238,10 +246,11 @@ final class App
         $maxDevices = (int) ($_POST['max_devices'] ?? 0);
         $quantity = (int) ($_POST['quantity'] ?? 0);
         $custom = strtoupper(trim((string) ($_POST['custom_key'] ?? '')));
-        if (preg_match('/^[A-Z0-9_-]{2,64}$/D', $game) !== 1 || $duration < 1 || $duration > 87600
+        if (!GenerationOptions::contains($this->db, GenerationOptions::GAME, $game)
+            || !GenerationOptions::contains($this->db, GenerationOptions::DURATION, (string) $duration)
             || $maxDevices < 1 || $maxDevices > 100 || $quantity < 1 || $quantity > 100
             || ($custom !== '' && ($quantity !== 1 || preg_match('/^[A-Z0-9_-]{4,128}$/D', $custom) !== 1))) {
-            flash('danger', 'Invalid key fields. Custom keys can only be created one at a time.');
+            flash('danger', 'Select an approved game and duration. Custom keys can only be created one at a time.');
             redirect('keys');
         }
         $this->db->beginTransaction();
@@ -408,6 +417,31 @@ final class App
         $user = Security::requireUser();
         if ($this->isPost()) {
             Security::verifyCsrf();
+            $settingsAction = (string) ($_POST['settings_action'] ?? 'server');
+            if ($settingsAction === 'generation_options') {
+                if ($user['role'] !== 'owner') {
+                    http_response_code(403);
+                    exit('Owner access required.');
+                }
+                try {
+                    $games = GenerationOptions::parse(
+                        GenerationOptions::GAME,
+                        (string) ($_POST['game_options'] ?? '')
+                    );
+                    $durations = GenerationOptions::parse(
+                        GenerationOptions::DURATION,
+                        (string) ($_POST['duration_options'] ?? '')
+                    );
+                    GenerationOptions::replace($this->db, $games, $durations);
+                    Security::audit($this->db, (int) $user['id'], 'generation_options_updated');
+                    flash('success', 'Game and duration lists saved.');
+                } catch (InvalidArgumentException $error) {
+                    flash('danger', $error->getMessage());
+                } catch (Throwable) {
+                    flash('danger', 'Game and duration lists could not be saved.');
+                }
+                redirect('settings');
+            }
             if ($user['role'] === 'reseller') {
                 http_response_code(403);
                 exit('Admin access required.');
@@ -441,14 +475,35 @@ final class App
         $telegramReady = Env::get('TELEGRAM_BOT_TOKEN') !== ''
             && strlen(Env::get('TELEGRAM_WEBHOOK_SECRET')) >= 32
             && Env::get('TELEGRAM_ALLOWED_USER_IDS') !== '';
+        $gameOptionsText = GenerationOptions::toEditorText(GenerationOptions::games($this->db));
+        $durationOptionsText = GenerationOptions::toEditorText(GenerationOptions::durations($this->db));
+        $generationOptions = '<section class="card"><h2>Key generation lists</h2>'
+            . '<p class="lead">These approved values appear as dropdowns on Legacy Keys and in Telegram. '
+            . 'Use one entry per line in <code>VALUE|Display label</code> format. The current loader submits game ID '
+            . '<code>PUBG</code>; keep that option unless the loader is rebuilt to submit another ID.</p>';
+        if ($user['role'] === 'owner') {
+            $generationOptions .= '<form method="post">' . Security::csrfField()
+                . '<input type="hidden" name="settings_action" value="generation_options"><div class="form-grid">'
+                . '<label><span>Games</span><textarea name="game_options" rows="10" required>' . h($gameOptionsText) . '</textarea></label>'
+                . '<label><span>Durations in hours</span><textarea name="duration_options" rows="10" required>' . h($durationOptionsText) . '</textarea></label>'
+                . '</div><p class="lead">Examples: <code>BGMI|Battlegrounds Mobile India</code> and <code>168|7 Days</code>. '
+                . 'Existing issued keys are not changed when an option is removed.</p><button type="submit">Save game and duration lists</button></form>';
+        } else {
+            $generationOptions .= '<p>Only the owner can edit these lists.</p><div class="form-grid">'
+                . '<label><span>Games</span><textarea rows="8" readonly>' . h($gameOptionsText) . '</textarea></label>'
+                . '<label><span>Durations in hours</span><textarea rows="8" readonly>' . h($durationOptionsText) . '</textarea></label></div>';
+        }
+        $generationOptions .= '</section>';
         $body = '<h1>Server settings</h1><p class="lead">Values returned by the legacy checker.</p><section class="card">'
             . '<form method="post"><fieldset' . $disabled . '><div class="form-grid">' . Security::csrfField()
+            . '<input type="hidden" name="settings_action" value="server">'
             . View::input('modname', 'Mod name', 'text', (string) $server['modname'], 'required maxlength="100"')
             . View::input('credit', 'Credit text', 'text', (string) $server['_ftext'], 'maxlength="255"')
             . View::input('message', 'Maintenance message', 'text', (string) $server['myinput'], 'maxlength="255"')
             . '</div><p><label><input type="checkbox" name="maintenance" value="on" '
             . ($server['status'] === 'on' ? 'checked' : '') . '> Maintenance mode</label></p>'
             . '<div class="grid">' . $checks . '</div><p><button type="submit">Save settings</button></p></fieldset></form></section>'
+            . $generationOptions
             . '<section class="card"><h2>Encrypted loader API</h2><p>Copy this public key to the GitHub repository variable '
             . '<code>PARALLAX_API_PUBLIC_KEY_B64</code>. The private key remains protected in <code>runtime/</code>.</p>'
             . '<textarea class="mono" rows="6" readonly>' . h($publicKey) . '</textarea></section>'

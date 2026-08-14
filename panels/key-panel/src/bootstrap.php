@@ -38,6 +38,7 @@ header('Referrer-Policy: no-referrer');
 header("Content-Security-Policy: default-src 'self'; style-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
 
 require PANEL_ROOT . '/src/Database.php';
+require PANEL_ROOT . '/src/GenerationOptions.php';
 require PANEL_ROOT . '/src/Security.php';
 require PANEL_ROOT . '/src/ApiCrypto.php';
 require PANEL_ROOT . '/src/TelegramBot.php';

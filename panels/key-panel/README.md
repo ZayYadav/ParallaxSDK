@@ -10,6 +10,8 @@ Node.js, or vendor dependency.
 - Password hashing, secure sessions, one-time login CAPTCHA, login throttling,
   CSRF protection, audit log, security headers, and outline-style web controls
 - Legacy key duration/device enforcement and encrypted loader API
+- Owner-managed game and duration lists used by both the web key form and the
+  Telegram key-generation flow
 - OneCore hashed activation keys, expiry, device count, and revocation
 - Telegram webhook bot with inline keyboards for dashboard, recent keys,
   maintenance, users, and key generation
@@ -102,6 +104,11 @@ php tools/telegram-user-id.php
 4. After successful setup, remove or rotate `SETUP_TOKEN` in `.env`.
 5. Sign in. The CAPTCHA is one-time and expires after five minutes. Accounts
    with a linked Telegram ID must also enter that ID at login.
+6. Open **Settings -> Key generation lists**. The owner can edit the game and
+   duration dropdowns with one `VALUE|Display label` entry per line, for example
+   `BGMI|Battlegrounds Mobile India` and `168|7 Days`. The current loader submits
+   game ID `PUBG`, so keep `PUBG` in the list unless that loader is rebuilt to
+   submit another game ID.
 
 The private API key is stored at `runtime/api-private.pem`. Back it up privately.
 Never upload it to GitHub. Rotating it requires copying the new public key to
@@ -166,13 +173,19 @@ Available bot controls:
 
 - Dashboard metrics
 - Recent legacy keys with device reset, block/enable, and confirmed deletion
-- Generate 24-hour, 7-day, or 30-day legacy key
+- Generate a legacy key by choosing from the owner-managed game and duration
+  lists
 - Generate a 30-day OneCore key and revoke it with bound devices
 - View linked panel users
 - Confirmed maintenance-mode on/off switch
 
 Key material sent by Telegram is visible in the recipient's Telegram account.
 Use a protected private chat and enable Telegram account two-step verification.
+
+Existing standalone installations create and seed the
+`key_generation_options` table automatically on the first request after the
+updated files are deployed. Editing a list affects new key generation only;
+already-issued keys keep their stored game and duration.
 
 ## 6. GitHub release configuration
 

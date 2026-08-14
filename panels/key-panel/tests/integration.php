@@ -7,6 +7,7 @@ namespace ParallaxPanel;
 define('PANEL_ROOT', dirname(__DIR__));
 require PANEL_ROOT . '/src/Support.php';
 require PANEL_ROOT . '/src/Database.php';
+require PANEL_ROOT . '/src/GenerationOptions.php';
 require PANEL_ROOT . '/src/ApiCrypto.php';
 
 $assertions = 0;
@@ -20,6 +21,9 @@ $assert = static function (bool $condition, string $message) use (&$assertions):
 Database::install();
 $db = Database::connection();
 $assert(Database::installed(), 'Installed schema was not detected.');
+$assert(GenerationOptions::games($db) === ['PUBG' => 'PUBG'], 'Default game option is missing.');
+$defaultDurations = GenerationOptions::durations($db);
+$assert(($defaultDurations[24] ?? null) === '1 Day', 'Default 24-hour duration is missing.');
 
 $password = password_hash('integration-test-password', PASSWORD_DEFAULT);
 $db->prepare("INSERT INTO panel_users (username,password_hash,telegram_user_id,role) VALUES (?,?,?, 'owner')")
@@ -31,6 +35,14 @@ $db->prepare('INSERT INTO keys_code (game,user_key,duration,max_devices,registra
     ->execute(['PUBG', 'CI-LEGACY-KEY', 24, 1, 'ci_owner', $ownerId]);
 $legacy = $db->query("SELECT * FROM keys_code WHERE user_key='CI-LEGACY-KEY'")->fetch();
 $assert(is_array($legacy) && $legacy['game'] === 'PUBG', 'Legacy key insert failed.');
+
+GenerationOptions::replace(
+    $db,
+    GenerationOptions::parse(GenerationOptions::GAME, "BGMI|Battlegrounds Mobile India\nPUBG|PUBG Mobile"),
+    GenerationOptions::parse(GenerationOptions::DURATION, "12|12 Hours\n48|2 Days")
+);
+$assert(GenerationOptions::contains($db, GenerationOptions::GAME, 'BGMI'), 'Saved game option was not found.');
+$assert(!GenerationOptions::contains($db, GenerationOptions::DURATION, '24'), 'Removed duration option is still active.');
 
 $activationKey = 'OC-' . implode('-', str_split(strtoupper(bin2hex(random_bytes(16))), 4));
 $db->prepare('INSERT INTO license_keys (created_by_user_id,key_hash,key_prefix,label,max_devices,expires_at) VALUES (NULL,?,?,?,?,?)')

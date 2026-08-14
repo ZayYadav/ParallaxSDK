@@ -35,6 +35,19 @@ CREATE TABLE IF NOT EXISTS keys_code (
     KEY idx_keys_registrator (registrator)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS key_generation_options (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    option_type ENUM('game','duration') NOT NULL,
+    option_value VARCHAR(64) NOT NULL,
+    option_label VARCHAR(100) NOT NULL,
+    sort_order SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_generation_option (option_type,option_value),
+    KEY idx_generation_option_order (option_type,sort_order,id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS devices (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     device_id VARCHAR(191) NOT NULL,
@@ -158,3 +171,14 @@ INSERT INTO onoff (id,status,myinput) VALUES (1,'off','Maintenance in progress')
 INSERT INTO modname (id,modname) VALUES (1,'Parallax') ON DUPLICATE KEY UPDATE id=VALUES(id);
 INSERT INTO `_ftext` (id,`_status`,`_ftext`) VALUES (1,'on','Parallax') ON DUPLICATE KEY UPDATE id=VALUES(id);
 INSERT INTO `Feature` (id) VALUES (1) ON DUPLICATE KEY UPDATE id=VALUES(id);
+INSERT INTO key_generation_options (option_type,option_value,option_label,sort_order) VALUES
+    ('game','PUBG','PUBG',1),
+    ('duration','1','1 Hour',1),
+    ('duration','6','6 Hours',2),
+    ('duration','12','12 Hours',3),
+    ('duration','24','1 Day',4),
+    ('duration','72','3 Days',5),
+    ('duration','168','7 Days',6),
+    ('duration','360','15 Days',7),
+    ('duration','720','30 Days',8)
+ON DUPLICATE KEY UPDATE option_label=VALUES(option_label),sort_order=VALUES(sort_order);
