@@ -46,11 +46,12 @@ final class View
             . '" value="' . h($value) . '" ' . $extra . '></label>';
     }
 
-    /** @param array<string,string> $options */
+    /** @param array<int|string,string> $options */
     public static function select(string $name, string $label, array $options, string $selected = ''): string
     {
         $html = '<label><span>' . h($label) . '</span><select name="' . h($name) . '">';
         foreach ($options as $value => $text) {
+            $value = (string) $value;
             $html .= '<option value="' . h($value) . '"' . ($value === $selected ? ' selected' : '') . '>'
                 . h($text) . '</option>';
         }

@@ -170,15 +170,52 @@ final class TelegramBot
             $this->db->prepare('UPDATE onoff SET status=? WHERE id=1')->execute([$match[1]]);
             Security::audit($this->db, (int) $user['id'], 'telegram_maintenance_' . $match[1]);
             $this->edit($chatId, $messageId, 'Maintenance is now ' . strtoupper($match[1]) . '.', $this->menuKeyboard());
-        } elseif (preg_match('/^legacy:(24|168|720)$/D', $data, $match) === 1) {
-            $key = 'TG-' . strtoupper(bin2hex(random_bytes(8)));
-            $statement = $this->db->prepare('INSERT INTO keys_code (game,user_key,duration,max_devices,registrator,admin_id) VALUES (?,?,?,?,?,?)');
-            $statement->execute(['PUBG', $key, (int) $match[1], 1, $user['username'], $user['id']]);
-            Security::audit($this->db, (int) $user['id'], 'telegram_legacy_key_created', $key);
-            $this->edit($chatId, $messageId, "Legacy key created\nDuration: {$match[1]} hours\n$key", $this->copyKeyboard($key));
+        } elseif ($data === 'legacy:new') {
+            $this->edit($chatId, $messageId, 'Choose a game:', $this->legacyGamesKeyboard());
+        } elseif (preg_match('/^legacy_game:([1-9][0-9]*)$/D', $data, $match) === 1) {
+            $game = GenerationOptions::findById($this->db, GenerationOptions::GAME, (int) $match[1]);
+            if (!$game) {
+                $this->edit($chatId, $messageId, 'That game is no longer available.', $this->menuKeyboard());
+            } else {
+                $this->edit(
+                    $chatId,
+                    $messageId,
+                    'Game: ' . $game['option_label'] . "\nChoose a duration:",
+                    $this->legacyDurationsKeyboard((int) $game['id'])
+                );
+            }
+        } elseif (preg_match('/^legacy_make:([1-9][0-9]*):([1-9][0-9]*)$/D', $data, $match) === 1) {
+            $game = GenerationOptions::findById($this->db, GenerationOptions::GAME, (int) $match[1]);
+            $duration = GenerationOptions::findById($this->db, GenerationOptions::DURATION, (int) $match[2]);
+            if (!$game || !$duration) {
+                $this->edit($chatId, $messageId, 'That game or duration is no longer available.', $this->menuKeyboard());
+            } else {
+                $key = $this->createLegacyKey(
+                    $user,
+                    (string) $game['option_value'],
+                    (int) $duration['option_value']
+                );
+                $this->edit(
+                    $chatId,
+                    $messageId,
+                    "Legacy key created\nGame: {$game['option_label']}\nDuration: {$duration['option_label']} ({$duration['option_value']}h)\n$key",
+                    $this->copyKeyboard($key)
+                );
+            }
+        } elseif (preg_match('/^legacy:([1-9][0-9]{0,4})$/D', $data, $match) === 1) {
+            // Compatibility for buttons in messages sent by older bot versions.
+            $games = GenerationOptions::games($this->db);
+            $hours = (string) ((int) $match[1]);
+            if ($games === [] || !GenerationOptions::contains($this->db, GenerationOptions::DURATION, $hours)) {
+                $this->edit($chatId, $messageId, 'That old option is no longer available.', $this->menuKeyboard());
+            } else {
+                $game = (string) array_key_first($games);
+                $key = $this->createLegacyKey($user, $game, (int) $hours);
+                $this->edit($chatId, $messageId, "Legacy key created\nGame: {$games[$game]}\nDuration: {$hours} hours\n$key", $this->copyKeyboard($key));
+            }
         } elseif ($data === 'onecore:30') {
             $key = 'OC-' . implode('-', str_split(strtoupper(bin2hex(random_bytes(16))), 4));
-            $statement = $this->db->prepare('INSERT INTO license_keys (created_by_user_id,key_hash,key_prefix,label,max_devices,expires_at) VALUES (NULL,?,?,?,?,?)');
+            $statement = $this->db->prepare('INSERT INTO license_keys (key_hash,key_prefix,label,max_devices,expires_at) VALUES (?,?,?,?,?)');
             $statement->execute([hash('sha256', $key), substr($key, 0, 12), 'Telegram', 1, gmdate('Y-m-d H:i:s', time() + 2592000)]);
             Security::audit($this->db, (int) $user['id'], 'telegram_onecore_key_created', substr($key, 0, 12));
             $this->edit($chatId, $messageId, "OneCore key created\nDuration: 30 days\n$key", $this->copyKeyboard($key));
@@ -228,12 +265,62 @@ final class TelegramBot
     {
         return ['inline_keyboard' => [
             [['text' => 'Dashboard', 'callback_data' => 'stats'], ['text' => 'Recent keys', 'callback_data' => 'keys']],
-            [['text' => 'New 24h key', 'callback_data' => 'legacy:24'], ['text' => 'New 7d key', 'callback_data' => 'legacy:168']],
-            [['text' => 'New 30d key', 'callback_data' => 'legacy:720'], ['text' => 'OneCore 30d', 'callback_data' => 'onecore:30']],
+            [['text' => 'New legacy key', 'callback_data' => 'legacy:new'], ['text' => 'OneCore 30d', 'callback_data' => 'onecore:30']],
             [['text' => 'OneCore list', 'callback_data' => 'onecore'], ['text' => 'Users', 'callback_data' => 'users']],
             [['text' => 'Maintenance', 'callback_data' => 'maintenance']],
             [['text' => 'Refresh menu', 'callback_data' => 'menu']],
         ]];
+    }
+
+    /** @return array<string,mixed> */
+    private function legacyGamesKeyboard(): array
+    {
+        $rows = $this->db->query(
+            "SELECT id,option_label FROM key_generation_options WHERE option_type='game' ORDER BY sort_order,id LIMIT 50"
+        )->fetchAll();
+        $buttons = [];
+        foreach ($rows as $row) {
+            $buttons[] = [[
+                'text' => $this->buttonLabel((string) $row['option_label']),
+                'callback_data' => 'legacy_game:' . $row['id'],
+            ]];
+        }
+        $buttons[] = [['text' => 'Back', 'callback_data' => 'menu']];
+        return ['inline_keyboard' => $buttons];
+    }
+
+    /** @return array<string,mixed> */
+    private function legacyDurationsKeyboard(int $gameId): array
+    {
+        $rows = $this->db->query(
+            "SELECT id,option_value,option_label FROM key_generation_options WHERE option_type='duration' ORDER BY sort_order,id LIMIT 50"
+        )->fetchAll();
+        $buttons = [];
+        foreach ($rows as $row) {
+            $buttons[] = [[
+                'text' => $this->buttonLabel((string) $row['option_label'] . ' (' . $row['option_value'] . 'h)'),
+                'callback_data' => 'legacy_make:' . $gameId . ':' . $row['id'],
+            ]];
+        }
+        $buttons[] = [['text' => 'Back to games', 'callback_data' => 'legacy:new']];
+        return ['inline_keyboard' => $buttons];
+    }
+
+    /** @param array<string,mixed> $user */
+    private function createLegacyKey(array $user, string $game, int $duration): string
+    {
+        $key = 'TG-' . strtoupper(bin2hex(random_bytes(8)));
+        $statement = $this->db->prepare(
+            'INSERT INTO keys_code (game,user_key,duration,max_devices,registrator,admin_id) VALUES (?,?,?,?,?,?)'
+        );
+        $statement->execute([$game, $key, $duration, 1, $user['username'], $user['id']]);
+        Security::audit($this->db, (int) $user['id'], 'telegram_legacy_key_created', $key);
+        return $key;
+    }
+
+    private function buttonLabel(string $label): string
+    {
+        return strlen($label) <= 52 ? $label : substr($label, 0, 49) . '...';
     }
 
     /** @return array<string,mixed> */

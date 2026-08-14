@@ -54,7 +54,7 @@ final class Database
             throw new \RuntimeException('Database schema is missing.');
         }
         self::connection()->exec($sql);
-        // Safe upgrades for installations created by the first standalone release.
+        // Safe upgrades for installations created by earlier standalone releases.
         try {
             self::connection()->exec('ALTER TABLE panel_users ADD COLUMN telegram_user_id BIGINT NULL AFTER password_hash');
         } catch (\Throwable) {
@@ -64,6 +64,59 @@ final class Database
             self::connection()->exec('CREATE UNIQUE INDEX uq_panel_users_telegram ON panel_users (telegram_user_id)');
         } catch (\Throwable) {
             // Index already exists.
+        }
+        self::upgrade();
+    }
+
+    public static function upgrade(): void
+    {
+        $db = self::connection();
+        $db->exec(
+            "CREATE TABLE IF NOT EXISTS key_generation_options (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                option_type ENUM('game','duration') NOT NULL,
+                option_value VARCHAR(64) NOT NULL,
+                option_label VARCHAR(100) NOT NULL,
+                sort_order SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                UNIQUE KEY uq_generation_option (option_type,option_value),
+                KEY idx_generation_option_order (option_type,sort_order,id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+        self::seedGenerationOptions($db);
+    }
+
+    private static function seedGenerationOptions(PDO $db): void
+    {
+        $statement = $db->prepare(
+            'INSERT INTO key_generation_options (option_type,option_value,option_label,sort_order) VALUES (?,?,?,?)'
+        );
+        $count = $db->prepare('SELECT COUNT(*) FROM key_generation_options WHERE option_type=?');
+        $defaults = [
+            'game' => [
+                ['PUBG', 'PUBG'],
+            ],
+            'duration' => [
+                ['1', '1 Hour'],
+                ['6', '6 Hours'],
+                ['12', '12 Hours'],
+                ['24', '1 Day'],
+                ['72', '3 Days'],
+                ['168', '7 Days'],
+                ['360', '15 Days'],
+                ['720', '30 Days'],
+            ],
+        ];
+        foreach ($defaults as $type => $options) {
+            $count->execute([$type]);
+            if ((int) $count->fetchColumn() > 0) {
+                continue;
+            }
+            foreach ($options as $index => [$value, $label]) {
+                $statement->execute([$type, $value, $label, $index + 1]);
+            }
         }
     }
 }
