@@ -34,6 +34,31 @@ license-management defects.
 
 ## Deployment order
 
+### Fresh installation
+
+For a new/empty SDK panel database, do not import only
+`secure_api_migration.sql`. In phpMyAdmin select the database configured in the
+private SDK panel config and import:
+
+```text
+database/fresh-install.sql
+```
+
+Then create the first owner from cPanel Terminal:
+
+```bash
+php tools/check-schema.php
+php tools/create-owner.php YOUR_OWNER_USERNAME
+```
+
+The tool asks for a 12+ character password without storing a default password
+in SQL or source control. If the panel returns `SERVER_DATABASE_SCHEMA_ERROR`,
+check the PHP error log for the exact missing table/column and confirm that
+`DB_NAME` points to the SDK panel database rather than the separate key-panel
+database.
+
+### Existing installation upgrade
+
 1. Back up the current website and database.
 2. In phpMyAdmin, select the SDK panel database and import
    `secure_api_migration.sql` once. The statements preserve existing data.

@@ -15,6 +15,12 @@ function panel_security_bootstrap(array $config): void
     }
     $started = true;
 
+    // CLI maintenance tools connect to the same database but have no HTTP/TLS
+    // request, browser session, headers, or CSRF boundary to initialize.
+    if (PHP_SAPI === 'cli') {
+        return;
+    }
+
     header('X-Content-Type-Options: nosniff');
     header('X-Frame-Options: DENY');
     header('Referrer-Policy: no-referrer');

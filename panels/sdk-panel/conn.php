@@ -61,3 +61,40 @@ if (!defined('SDK_PANEL_BOOTSTRAPPED')) {
     require_once __DIR__ . DIRECTORY_SEPARATOR . 'panel_security.php';
     panel_security_bootstrap($SDK_PANEL_CONFIG);
 }
+
+if (!function_exists('sdk_panel_schema_problems')) {
+    /** @return list<string> */
+    function sdk_panel_schema_problems(mysqli $connection): array
+    {
+        $requiredSchema = [
+            'users' => ['id', 'username', 'password', 'role', 'status', 'is_online'],
+            'licenses' => ['id', 'license_key', 'expiry_date', 'status', 'package_name'],
+            'devices' => ['device_id', 'license_key', 'status'],
+            'panel_settings' => ['setting_key', 'setting_value'],
+            'server_settings' => ['setting_key', 'setting_value'],
+            'api_rate_limits' => ['bucket_hash', 'window_start', 'request_count'],
+            'api_audit_logs' => ['event_type', 'result', 'ip_address'],
+        ];
+        $problems = [];
+        foreach ($requiredSchema as $table => $columns) {
+            $quotedTable = '`' . str_replace('`', '``', $table) . '`';
+            $result = $connection->query('SHOW COLUMNS FROM ' . $quotedTable);
+            if (!$result) {
+                $problems[] = $table . ' (table missing)';
+                continue;
+            }
+            $available = [];
+            while ($row = $result->fetch_assoc()) {
+                $available[(string) $row['Field']] = true;
+            }
+            $missing = array_values(array_filter(
+                $columns,
+                static fn(string $column): bool => !isset($available[$column])
+            ));
+            if ($missing !== []) {
+                $problems[] = $table . ' (missing: ' . implode(', ', $missing) . ')';
+            }
+        }
+        return $problems;
+    }
+}

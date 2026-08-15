@@ -61,6 +61,7 @@ jobs:
         run: |
           find . -path ./vendor -prune -o -name '*.php' -print0 | xargs -0 -n1 php -l
           find ../panels/key-panel -name '*.php' -print0 | xargs -0 -n1 php -l
+          find ../panels/sdk-panel -name '*.php' -print0 | xargs -0 -n1 php -l
 
       - name: Test standalone key panel
         run: php ../panels/key-panel/tests/run.php
@@ -75,6 +76,13 @@ jobs:
         run: |
           mysql -h 127.0.0.1 -uroot -ponecore_ci_root -e 'CREATE DATABASE parallax_panel_ci CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'
           php ../panels/key-panel/tests/integration.php
+
+      - name: Test fresh SDK panel schema with MySQL
+        run: |
+          mysql -h 127.0.0.1 -uroot -ponecore_ci_root -e 'CREATE DATABASE parallax_sdk_panel_ci CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'
+          mysql -h 127.0.0.1 -uroot -ponecore_ci_root parallax_sdk_panel_ci < ../panels/sdk-panel/database/fresh-install.sql
+          mysql -h 127.0.0.1 -uroot -ponecore_ci_root parallax_sdk_panel_ci -e \
+            "SELECT username,password,role,status,is_online FROM users LIMIT 0; SELECT license_key,expiry_date,status,package_name FROM licenses LIMIT 0; SELECT setting_key,setting_value FROM panel_settings LIMIT 1;"
 
       - name: Test crypto, JWT, and request binding
         run: php tests/run.php
