@@ -4,6 +4,15 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 include 'conn.php';
 include 'panel_helper.php';
+$schemaProblems = sdk_panel_schema_problems($conn);
+if ($schemaProblems !== []) {
+    error_log(
+        'SDK Panel database schema is incomplete for database '
+        . (string) panel_config('DB_NAME', 'unknown') . ': ' . implode('; ', $schemaProblems)
+    );
+    http_response_code(503);
+    exit('SERVER_DATABASE_SCHEMA_ERROR');
+}
 $P = get_panel_settings($conn);
 
 if (isset($_POST['login'])) {
@@ -16,31 +25,45 @@ if (isset($_POST['login'])) {
         $error = 'Invalid username or password!';
     } else {
         $stmt = $conn->prepare('SELECT * FROM users WHERE username = ? LIMIT 1');
-        $stmt->bind_param('s', $username);
-        $stmt->execute();
-        $user = $stmt->get_result()->fetch_assoc();
-        $stmt->close();
-
-        if ($user && (!isset($user['status']) || (int) $user['status'] === 1)
-            && password_verify($password, (string) $user['password'])) {
-            session_regenerate_id(true);
-            $_SESSION['user_id'] = $user['id'];
-            $_SESSION['username'] = $user['username'];
-            $_SESSION['logged_in'] = true;
-            $_SESSION['last_activity'] = time();
-            $_SESSION['agent_hash'] = hash('sha256', (string) ($_SERVER['HTTP_USER_AGENT'] ?? 'unknown'));
-
-            $userId = (int) $user['id'];
-            $update = $conn->prepare('UPDATE users SET is_online = 1 WHERE id = ?');
-            $update->bind_param('i', $userId);
-            $update->execute();
-            $update->close();
-            panel_audit($conn, 'panel_login', 'success', '', ['user_id' => $userId]);
-            header("Location: dashboard.php");
-            exit();
+        if (!$stmt) {
+            error_log('SDK Panel login statement failed: ' . $conn->error);
+            http_response_code(503);
+            $error = 'Panel database is not initialized correctly. Contact the administrator.';
+            $user = null;
         } else {
-            panel_audit($conn, 'panel_login', 'failed', '', ['username_hash' => hash('sha256', strtolower($username))]);
-            $error = "Invalid username or password!";
+            $stmt->bind_param('s', $username);
+            $stmt->execute();
+            $user = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+        }
+
+        if (!isset($error)) {
+            if ($user && (!isset($user['status']) || (int) $user['status'] === 1)
+                && password_verify($password, (string) $user['password'])) {
+                $userId = (int) $user['id'];
+                $update = $conn->prepare('UPDATE users SET is_online = 1 WHERE id = ?');
+                if (!$update) {
+                    error_log('SDK Panel online-state statement failed: ' . $conn->error);
+                    http_response_code(503);
+                    $error = 'Panel database is not initialized correctly. Contact the administrator.';
+                } else {
+                    $update->bind_param('i', $userId);
+                    $update->execute();
+                    $update->close();
+                    session_regenerate_id(true);
+                    $_SESSION['user_id'] = $userId;
+                    $_SESSION['username'] = $user['username'];
+                    $_SESSION['logged_in'] = true;
+                    $_SESSION['last_activity'] = time();
+                    $_SESSION['agent_hash'] = hash('sha256', (string) ($_SERVER['HTTP_USER_AGENT'] ?? 'unknown'));
+                    panel_audit($conn, 'panel_login', 'success', '', ['user_id' => $userId]);
+                    header("Location: dashboard.php");
+                    exit();
+                }
+            } else {
+                panel_audit($conn, 'panel_login', 'failed', '', ['username_hash' => hash('sha256', strtolower($username))]);
+                $error = "Invalid username or password!";
+            }
         }
     }
 }
