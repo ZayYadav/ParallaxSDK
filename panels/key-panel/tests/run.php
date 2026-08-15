@@ -22,7 +22,7 @@ $temporary = tempnam(sys_get_temp_dir(), 'panel-env-');
 if ($temporary === false) {
     throw new \RuntimeException('Could not create test file.');
 }
-file_put_contents($temporary, "# comment\nTEST_ALPHA=plain\nTEST_QUOTED=\"quoted value\"\ninvalid-key=no\n");
+file_put_contents($temporary, "# comment\nTEST_ALPHA=plain\nTEST_QUOTED=\"quoted value\"\nAPP_URL=https://panel.example.com\ninvalid-key=no\n");
 Env::load($temporary);
 unlink($temporary);
 $assert(Env::get('TEST_ALPHA') === 'plain', 'Plain environment values must parse.');
@@ -35,6 +35,26 @@ $assert(preg_match('/^(\d+) \+ (\d+)$/D', $question, $parts) === 1, 'CAPTCHA que
 $answer = (string) ((int) $parts[1] + (int) $parts[2]);
 $assert(Security::verifyCaptcha($answer), 'Fresh CAPTCHA answer must validate.');
 $assert(!Security::verifyCaptcha($answer), 'CAPTCHA must be one-time use.');
+
+$_SERVER['HTTP_ORIGIN'] = 'https://panel.example.com';
+$_SERVER['HTTP_REFERER'] = '';
+$_SERVER['HTTP_SEC_FETCH_SITE'] = 'same-site';
+$assert(Security::sameOriginRequest(), 'An exact Origin must override an inconsistent Fetch Metadata hint.');
+$_SERVER['HTTP_ORIGIN'] = '';
+$_SERVER['HTTP_REFERER'] = 'https://panel.example.com/setup';
+$_SERVER['HTTP_SEC_FETCH_SITE'] = 'none';
+$assert(Security::sameOriginRequest(), 'An exact Referer must allow privacy-browser setup submissions.');
+$_SERVER['HTTP_ORIGIN'] = 'https://attacker.example';
+$_SERVER['HTTP_REFERER'] = '';
+$_SERVER['HTTP_SEC_FETCH_SITE'] = 'same-origin';
+$assert(!Security::sameOriginRequest(), 'A conflicting cross-origin source must be rejected.');
+$_SERVER['HTTP_ORIGIN'] = '';
+$_SERVER['HTTP_REFERER'] = '';
+$_SERVER['HTTP_SEC_FETCH_SITE'] = 'cross-site';
+$assert(!Security::sameOriginRequest(), 'A source-less cross-site request must be rejected.');
+$_SERVER['HTTP_SEC_FETCH_SITE'] = 'same-origin';
+$assert(Security::sameOriginRequest(), 'A source-less same-origin browser request must be accepted.');
+unset($_SERVER['HTTP_ORIGIN'], $_SERVER['HTTP_REFERER'], $_SERVER['HTTP_SEC_FETCH_SITE']);
 
 $schema = file_get_contents(PANEL_ROOT . '/database/schema.sql');
 $assert(is_string($schema), 'Schema must be readable.');
