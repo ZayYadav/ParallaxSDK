@@ -1,15 +1,25 @@
 SET NAMES utf8mb4;
 
-ALTER TABLE licenses
-    ADD COLUMN IF NOT EXISTS package_lock TINYINT(1) NOT NULL DEFAULT 1 AFTER package_name,
-    ADD COLUMN IF NOT EXISTS max_devices INT UNSIGNED NOT NULL DEFAULT 1 AFTER package_lock,
-    ADD COLUMN IF NOT EXISTS force_logout TINYINT(1) NOT NULL DEFAULT 0 AFTER status,
-    ADD COLUMN IF NOT EXISTS generated_by VARCHAR(64) NULL AFTER force_logout;
+-- MySQL does not support ADD COLUMN IF NOT EXISTS. Each guarded statement is
+-- also accepted by MariaDB and preserves existing data on repeated imports.
+SET @sdk_schema_sql = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='server_settings' AND COLUMN_NAME='broadcast_version'), 'SELECT 1', 'ALTER TABLE server_settings ADD COLUMN broadcast_version INT UNSIGNED NOT NULL DEFAULT 0 AFTER setting_value');
+PREPARE sdk_schema_statement FROM @sdk_schema_sql; EXECUTE sdk_schema_statement; DEALLOCATE PREPARE sdk_schema_statement;
 
-ALTER TABLE devices
-    ADD COLUMN IF NOT EXISTS blocked TINYINT(1) NOT NULL DEFAULT 0 AFTER status,
-    ADD COLUMN IF NOT EXISTS app_name VARCHAR(120) NULL AFTER package_name,
-    ADD COLUMN IF NOT EXISTS device_model VARCHAR(120) NULL AFTER app_name;
+SET @sdk_schema_sql = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='licenses' AND COLUMN_NAME='package_lock'), 'SELECT 1', 'ALTER TABLE licenses ADD COLUMN package_lock TINYINT(1) NOT NULL DEFAULT 1 AFTER package_name');
+PREPARE sdk_schema_statement FROM @sdk_schema_sql; EXECUTE sdk_schema_statement; DEALLOCATE PREPARE sdk_schema_statement;
+SET @sdk_schema_sql = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='licenses' AND COLUMN_NAME='max_devices'), 'SELECT 1', 'ALTER TABLE licenses ADD COLUMN max_devices INT UNSIGNED NOT NULL DEFAULT 1 AFTER package_lock');
+PREPARE sdk_schema_statement FROM @sdk_schema_sql; EXECUTE sdk_schema_statement; DEALLOCATE PREPARE sdk_schema_statement;
+SET @sdk_schema_sql = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='licenses' AND COLUMN_NAME='force_logout'), 'SELECT 1', 'ALTER TABLE licenses ADD COLUMN force_logout TINYINT(1) NOT NULL DEFAULT 0 AFTER status');
+PREPARE sdk_schema_statement FROM @sdk_schema_sql; EXECUTE sdk_schema_statement; DEALLOCATE PREPARE sdk_schema_statement;
+SET @sdk_schema_sql = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='licenses' AND COLUMN_NAME='generated_by'), 'SELECT 1', 'ALTER TABLE licenses ADD COLUMN generated_by VARCHAR(64) NULL AFTER force_logout');
+PREPARE sdk_schema_statement FROM @sdk_schema_sql; EXECUTE sdk_schema_statement; DEALLOCATE PREPARE sdk_schema_statement;
+
+SET @sdk_schema_sql = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='devices' AND COLUMN_NAME='blocked'), 'SELECT 1', 'ALTER TABLE devices ADD COLUMN blocked TINYINT(1) NOT NULL DEFAULT 0 AFTER status');
+PREPARE sdk_schema_statement FROM @sdk_schema_sql; EXECUTE sdk_schema_statement; DEALLOCATE PREPARE sdk_schema_statement;
+SET @sdk_schema_sql = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='devices' AND COLUMN_NAME='app_name'), 'SELECT 1', 'ALTER TABLE devices ADD COLUMN app_name VARCHAR(120) NULL AFTER package_name');
+PREPARE sdk_schema_statement FROM @sdk_schema_sql; EXECUTE sdk_schema_statement; DEALLOCATE PREPARE sdk_schema_statement;
+SET @sdk_schema_sql = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='devices' AND COLUMN_NAME='device_model'), 'SELECT 1', 'ALTER TABLE devices ADD COLUMN device_model VARCHAR(120) NULL AFTER app_name');
+PREPARE sdk_schema_statement FROM @sdk_schema_sql; EXECUTE sdk_schema_statement; DEALLOCATE PREPARE sdk_schema_statement;
 
 CREATE TABLE IF NOT EXISTS blocked_apps (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

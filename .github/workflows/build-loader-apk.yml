@@ -82,7 +82,14 @@ jobs:
           mysql -h 127.0.0.1 -uroot -ponecore_ci_root -e 'CREATE DATABASE parallax_sdk_panel_ci CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'
           mysql -h 127.0.0.1 -uroot -ponecore_ci_root parallax_sdk_panel_ci < ../panels/sdk-panel/database/fresh-install.sql
           mysql -h 127.0.0.1 -uroot -ponecore_ci_root parallax_sdk_panel_ci -e \
-            "SELECT username,password,role,status,is_online FROM users LIMIT 0; SELECT license_key,expiry_date,status,package_name FROM licenses LIMIT 0; SELECT setting_key,setting_value FROM panel_settings LIMIT 1;"
+            "SELECT username,password,role,status,is_online FROM users LIMIT 0; SELECT license_key,expiry_date,status,package_name FROM licenses LIMIT 0; SELECT setting_key,setting_value FROM panel_settings LIMIT 1; SELECT setting_key,setting_value,broadcast_version FROM server_settings LIMIT 1;"
+          mysql -h 127.0.0.1 -uroot -ponecore_ci_root parallax_sdk_panel_ci -e \
+            "ALTER TABLE server_settings DROP COLUMN broadcast_version;"
+          mysql -h 127.0.0.1 -uroot -ponecore_ci_root parallax_sdk_panel_ci < ../panels/sdk-panel/database/fresh-install.sql
+          mysql -h 127.0.0.1 -uroot -ponecore_ci_root parallax_sdk_panel_ci -e \
+            "SELECT broadcast_version FROM server_settings LIMIT 1;"
+          mysql -h 127.0.0.1 -uroot -ponecore_ci_root parallax_sdk_panel_ci < ../panels/sdk-panel/secure_api_migration.sql
+          mysql -h 127.0.0.1 -uroot -ponecore_ci_root parallax_sdk_panel_ci < ../panels/sdk-panel/secure_api_migration.sql
 
       - name: Test crypto, JWT, and request binding
         run: php tests/run.php
