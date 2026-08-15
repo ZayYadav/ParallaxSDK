@@ -1,5 +1,8 @@
 SET NAMES utf8mb4;
 
+ALTER TABLE server_settings
+    ADD COLUMN IF NOT EXISTS broadcast_version INT UNSIGNED NOT NULL DEFAULT 0 AFTER setting_value;
+
 ALTER TABLE licenses
     ADD COLUMN IF NOT EXISTS package_lock TINYINT(1) NOT NULL DEFAULT 1 AFTER package_name,
     ADD COLUMN IF NOT EXISTS max_devices INT UNSIGNED NOT NULL DEFAULT 1 AFTER package_lock,

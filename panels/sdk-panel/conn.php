@@ -71,7 +71,7 @@ if (!function_exists('sdk_panel_schema_problems')) {
             'licenses' => ['id', 'license_key', 'expiry_date', 'status', 'package_name'],
             'devices' => ['device_id', 'license_key', 'status'],
             'panel_settings' => ['setting_key', 'setting_value'],
-            'server_settings' => ['setting_key', 'setting_value'],
+            'server_settings' => ['setting_key', 'setting_value', 'broadcast_version'],
             'api_rate_limits' => ['bucket_hash', 'window_start', 'request_count'],
             'api_audit_logs' => ['event_type', 'result', 'ip_address'],
         ];
