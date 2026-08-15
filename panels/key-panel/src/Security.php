@@ -29,8 +29,14 @@ final class Security
     {
         $token = (string) ($_POST['_csrf'] ?? '');
         if (!self::sameOriginRequest() || $token === '' || !hash_equals(self::csrfToken(), $token)) {
-            http_response_code(419);
-            exit('Invalid or expired form token. Reload the page and try again.');
+            $_SESSION['flash'] = [
+                'type' => 'danger',
+                'message' => 'The form expired. Please complete the fresh form below.',
+            ];
+            $requestPath = (string) parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+            $requestPath = str_starts_with($requestPath, '/') ? $requestPath : '/';
+            header('Location: ' . $requestPath, true, 303);
+            exit;
         }
     }
 
@@ -185,22 +191,25 @@ final class Security
         return true;
     }
 
-    private static function sameOriginRequest(): bool
+    public static function sameOriginRequest(): bool
     {
         $fetchSite = strtolower((string) ($_SERVER['HTTP_SEC_FETCH_SITE'] ?? ''));
-        if ($fetchSite !== '' && $fetchSite !== 'same-origin') {
-            return false;
-        }
         $source = (string) ($_SERVER['HTTP_ORIGIN'] ?? '');
         if ($source === '') {
             $source = (string) ($_SERVER['HTTP_REFERER'] ?? '');
         }
-        if ($source === '') {
-            return true;
-        }
         $expected = self::normalizedOrigin(Env::get('APP_URL'));
-        $actual = self::normalizedOrigin($source);
-        return $expected !== '' && $actual !== '' && hash_equals($expected, $actual);
+        if ($source !== '' && strtolower(trim($source)) !== 'null') {
+            $actual = self::normalizedOrigin($source);
+            return $expected !== '' && $actual !== '' && hash_equals($expected, $actual);
+        }
+
+        // Some privacy browsers omit Origin/Referer or report a top-level
+        // same-origin form as Sec-Fetch-Site: none. Prefer an exact source
+        // origin when supplied, otherwise accept only an explicit same-origin
+        // browser signal. Headerless clients still require the random CSRF
+        // token and are retained for compatibility with older WebViews.
+        return $fetchSite === '' || $fetchSite === 'same-origin';
     }
 
     private static function normalizedOrigin(string $url): string
