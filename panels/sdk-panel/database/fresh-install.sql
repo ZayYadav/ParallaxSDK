@@ -113,10 +113,22 @@ CREATE TABLE IF NOT EXISTS server_settings (
     PRIMARY KEY (setting_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- CREATE TABLE IF NOT EXISTS does not add columns to an older table. Keep this
--- import safe when a legacy SDK database already has server_settings.
-ALTER TABLE server_settings
-    ADD COLUMN IF NOT EXISTS broadcast_version INT UNSIGNED NOT NULL DEFAULT 0 AFTER setting_value;
+-- CREATE TABLE IF NOT EXISTS does not add columns to an older table. Use an
+-- information_schema guard because MySQL, unlike MariaDB, does not support
+-- ALTER TABLE ... ADD COLUMN IF NOT EXISTS.
+SET @sdk_schema_sql = IF(
+    EXISTS(
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'server_settings'
+          AND COLUMN_NAME = 'broadcast_version'
+    ),
+    'SELECT 1',
+    'ALTER TABLE server_settings ADD COLUMN broadcast_version INT UNSIGNED NOT NULL DEFAULT 0 AFTER setting_value'
+);
+PREPARE sdk_schema_statement FROM @sdk_schema_sql;
+EXECUTE sdk_schema_statement;
+DEALLOCATE PREPARE sdk_schema_statement;
 
 CREATE TABLE IF NOT EXISTS announcements (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
