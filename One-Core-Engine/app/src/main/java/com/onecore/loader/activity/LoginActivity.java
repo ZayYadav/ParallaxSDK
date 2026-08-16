@@ -1,5 +1,6 @@
 package com.onecore.loader.activity;
 
+
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import android.animation.Animator;
