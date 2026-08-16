@@ -56,9 +56,7 @@ BlackObfuscator {
     depth blackObfuscatorDepth
 
     obfClass = [
-            'com.onecore.loader.security',
-            'com.onecore.loader.libhelper',
-            'com.onecore.loader.activity'
+            'com.onecore.loader.libhelper'
     ]
 
     blackClass = [
@@ -66,8 +64,13 @@ BlackObfuscator {
             'com.onecore.loader.R',
             'com.onecore.loader.BR',
             'com.onecore.loader.databinding',
+
+            'com.onecore.loader.BoxApplication',
+
+            'com.onecore.loader.security',
             'com.onecore.loader.security.NativeSigningVerifier',
-            'com.onecore.loader.BoxApplication'
+
+            'com.onecore.loader.activity'
     ]
 }
 
