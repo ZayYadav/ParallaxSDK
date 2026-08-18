@@ -1,5 +1,6 @@
 package com.onecore.loader.utils;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
@@ -7,74 +8,63 @@ import android.os.Process;
 import android.util.Log;
 
 import com.onecore.loader.activity.CrashActivity;
+
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.Calendar;
 
-/*import org.lsposed.lsparanoid.Obfuscate;
-
-@Obfuscate*/
 public class CrashHandler implements Thread.UncaughtExceptionHandler {
 
-  // Declare variables
-  private String newLine = "\n";
-  private StringBuilder errorMessage = new StringBuilder();
-  private StringBuilder softwareInfo = new StringBuilder();
-  private StringBuilder dateInfo = new StringBuilder();
+  private final String newLine = "\n";
+  private final StringBuilder errorMessage = new StringBuilder();
+  private final StringBuilder softwareInfo = new StringBuilder();
+  private final StringBuilder dateInfo = new StringBuilder();
+  private final Context context;
 
-  private Context context;
-  
   public CrashHandler(Context context) {
     this.context = context;
   }
-  
+
   @Override
   public void uncaughtException(Thread thread, Throwable exception) {
-    // Create a StringWriter to write stack trace to
-    StringWriter stackTrace = new StringWriter();
+    try {
+      StringWriter stackTrace = new StringWriter();
+      exception.printStackTrace(new PrintWriter(stackTrace));
+      errorMessage.append(stackTrace);
 
-    // Print the stack trace to the StringWriter
-    exception.printStackTrace(new PrintWriter(stackTrace));
+      softwareInfo
+          .append("SDK: ")
+          .append(Build.VERSION.SDK_INT)
+          .append(newLine)
+          .append("Android: ")
+          .append(Build.VERSION.RELEASE)
+          .append(newLine)
+          .append("Model: ")
+          .append(Build.MODEL)
+          .append(newLine);
 
-    // Append the stack trace to the error message
-    errorMessage.append(stackTrace.toString());
+      dateInfo.append(Calendar.getInstance().getTime()).append(newLine);
 
-    // Append software information to the software info
-    softwareInfo
-        .append("SDK: ")
-        .append(Build.VERSION.SDK_INT)
-        .append(newLine)
-        .append("Android: ")
-        .append(Build.VERSION.RELEASE)
-        .append(newLine)
-        .append("Model: ")
-        .append(Build.VERSION.INCREMENTAL)
-        .append(newLine);
+      Log.e("OneCoreCrash", errorMessage.toString());
+      FLog.error("Crash captured\n" + dateInfo + softwareInfo + errorMessage);
 
-    // Append the date information to the date info
-    dateInfo.append(Calendar.getInstance().getTime()).append(newLine);
+      Intent intent = new Intent(context, CrashActivity.class);
+      intent.putExtra("Error", errorMessage.toString());
+      intent.putExtra("Software", softwareInfo.toString());
+      intent.putExtra("Date", dateInfo.toString());
 
-    // Log the error message, software info, and date info
-    Log.d("Error", errorMessage.toString());
-    Log.d("Software", softwareInfo.toString());
-    Log.d("Date", dateInfo.toString());
-    FLog.error("Crash captured\n" + dateInfo + softwareInfo + errorMessage);
-
-    // Create an intent for the crash activity
-    Intent intent = new Intent(context, CrashActivity.class);
-
-    // Add the error message, software info, and date info as extras
-    intent.putExtra("Error", errorMessage.toString());
-    intent.putExtra("Software", softwareInfo.toString());
-    intent.putExtra("Date", dateInfo.toString());
-
-    // Start the crash activity
-    context.startActivity(intent);
-
-    // Kill the process
-    Process.killProcess(Process.myPid());
-
-    // Exit with a code of 2
-    System.exit(2);
+      // The default handler is installed from Application.attachBaseContext(), so the context is
+      // often not an Activity. Starting CrashActivity without NEW_TASK would throw another
+      // exception while handling the original startup failure.
+      if (!(context instanceof Activity)) {
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+      }
+      context.startActivity(intent);
+    } catch (Throwable handlerError) {
+      Log.e("OneCoreCrash", "Crash handler failed", handlerError);
+    } finally {
+      Process.killProcess(Process.myPid());
+      System.exit(2);
+    }
   }
 }
