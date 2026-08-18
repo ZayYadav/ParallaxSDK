@@ -5,10 +5,8 @@ import java.util.Base64
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
-    id 'org.lsposed.lsparanoid'
 }
 
-apply plugin: 'top.niunaijun.blackobfuscator'
 apply from: '../signing.gradle'
 
 def parallaxApiPublicKey = providers.gradleProperty('parallaxApiPublicKey')
@@ -20,17 +18,6 @@ def parallaxTlsPins = providers.gradleProperty('parallaxTlsPins')
 def oneCoreAllowedSigningSha256 = providers.gradleProperty('onecoreAllowedSigningSha256')
         .orElse(System.getenv('ONECORE_ALLOWED_SIGNING_SHA256') ?: '')
         .get()
-def blackObfuscatorEnabled = providers.gradleProperty('blackObfuscatorEnabled')
-        .orElse('false')
-        .get()
-        .toBoolean()
-def blackObfuscatorDepth = providers.gradleProperty('blackObfuscatorDepth')
-        .orElse('2')
-        .get()
-        .toInteger()
-if (blackObfuscatorDepth < 1 || blackObfuscatorDepth > 3) {
-    throw new GradleException('blackObfuscatorDepth must be between 1 and 3')
-}
 def javaString = { String value -> '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"' }
 def releaseTaskRequested = gradle.startParameter.taskNames.any {
     it.toLowerCase(Locale.ROOT).contains('release')
@@ -50,27 +37,6 @@ if (releaseTaskRequested) {
         throw new GradleException('PARALLAX_TLS_PINS must contain valid SHA-256 pins for release builds')
     }
 }
-
-BlackObfuscator {
-    enabled blackObfuscatorEnabled
-    depth blackObfuscatorDepth
-
-    obfClass = [
-               'com.onecore.loader.security',
-            'com.onecore.loader.libhelper',
-            'com.onecore.loader.activity',
-            'com.onecore.loader.BoxApplication'
-    ]
-
-    blackClass = [
-            'com.onecore.loader.BuildConfig',
-            'com.onecore.loader.R',
-            'com.onecore.loader.BR',
-            'com.onecore.loader.databinding',
-            'com.onecore.loader.security.NativeSigningVerifier'
-    ]
-}
-
 
 def getSigningCertificateSha256 = { signingConfig ->
     if (signingConfig == null || signingConfig.storeFile == null || !signingConfig.storeFile.exists()) {
@@ -103,15 +69,14 @@ def getSigningCertificateSha256 = { signingConfig ->
 }
 
 android {
-    
     compileSdk rootProject.ext.compileSdkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
     namespace rootProject.ext.LoaderPkg
-    
+
     lint {
-      baseline = file("lint-baseline.xml")
+        baseline = file("lint-baseline.xml")
     }
-    
+
     defaultConfig {
         applicationId rootProject.ext.LoaderPkg
         minSdk rootProject.ext.minSdk
@@ -122,14 +87,12 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField "String", "PARALLAX_API_PUBLIC_KEY_B64", javaString(parallaxApiPublicKey)
         buildConfigField "String", "PARALLAX_TLS_PINS", javaString(parallaxTlsPins)
-        
+
         ndk {
-            // Parallax Loader APKs intentionally target modern 64-bit ARM devices only.
             abiFilters "arm64-v8a"
         }
-    
     }
-    
+
     buildTypes {
         debug {
             debuggable true
@@ -145,8 +108,9 @@ android {
         release {
             debuggable false
             jniDebuggable false
-            shrinkResources true
-            minifyEnabled true
+            // Temporary stability mode: keep bytecode untouched while diagnosing startup VerifyError.
+            shrinkResources false
+            minifyEnabled false
             signingConfig signingConfigs.release
             def releaseSigningSha256 = oneCoreAllowedSigningSha256 ?: getSigningCertificateSha256(signingConfigs.release)
             buildConfigField "String", "EXPECTED_SIGNATURE_SHA256", javaString(releaseSigningSha256)
@@ -164,26 +128,23 @@ android {
     }
 
     ndkVersion rootProject.ext.ndkVersion
-    
+
     externalNativeBuild {
         ndkBuild {
             path "src/main/jni/Android.mk"
-            
         }
     }
 
     packaging {
         jniLibs {
-            // The virtualized runtime consumes extracted native libraries by path.
             useLegacyPackaging true
         }
     }
-    
+
     buildFeatures {
         viewBinding true
         buildConfig true
     }
-    
 }
 
 dependencies {
