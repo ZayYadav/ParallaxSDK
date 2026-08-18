@@ -44,7 +44,6 @@ public class ActivityManagerCommonProxy {
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             MethodParameterUtils.replaceFirstAppPkg(args);
             Intent intent = getIntent(args);
-            Slog.d(TAG, "Hook in : " + intent);
             
             // NULL CHECK - FIX CRASH
             if (intent == null) {
@@ -70,10 +69,9 @@ public class ActivityManagerCommonProxy {
                 intent.setData(Uri.parse("package:" + BlackBoxCore.getHostPkg()));
             }
 
-            // Browser OAuth compatibility for virtual/cloned apps. If the app opens
-            // a Google/Facebook/X authorization URL with a custom redirect that is
-            // declared by the virtual package, launch a host Auth Tab bridge. The
-            // bridge returns the final URI directly to the same virtual package.
+            // Browser OAuth compatibility for virtual/cloned apps. Handle this
+            // before the generic intent log below so OAuth state/request tokens are
+            // never written to logcat by this hook.
             Intent oauthBridge = VirtualOAuthRouter.createBridgeIntent(
                     intent,
                     BActivityThread.getUserId(),
@@ -82,6 +80,8 @@ public class ActivityManagerCommonProxy {
                 replaceIntent(args, oauthBridge);
                 return method.invoke(who, args);
             }
+
+            Slog.d(TAG, "Hook in : " + intent);
             
             ResolveInfo resolveInfo = BlackBoxCore.getBPackageManager().resolveActivity(intent, FileUtils.FileMode.MODE_IWUSR, StartActivityCompat.getResolvedType(args), BActivityThread.getUserId());
             if (resolveInfo == null) {
