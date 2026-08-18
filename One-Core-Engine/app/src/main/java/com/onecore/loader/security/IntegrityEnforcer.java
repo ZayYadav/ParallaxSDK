@@ -24,9 +24,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Revalidates APK signing identity without blocking the Android main thread.
  *
  * <p>ApkVerifier reads and cryptographically verifies the installed APK archive, which can take
- * noticeable time for a large loader. Running that work from Application.onCreate() or lifecycle
- * callbacks can prevent the first frame from being drawn and can trigger an ANR. Verification is
- * therefore serialized on a background worker and the last result is cached.</p>
+ * noticeable time for a large loader. The verification worker is deliberately not started while
+ * SplashActivity is being drawn, so first-launch disk/CPU work cannot starve the first frame.</p>
  */
 public final class IntegrityEnforcer implements Application.ActivityLifecycleCallbacks {
     private static final long RECHECK_INTERVAL_MS = 5 * 60 * 1000L;
@@ -51,15 +50,14 @@ public final class IntegrityEnforcer implements Application.ActivityLifecycleCal
     }
 
     /**
-     * Installs process-wide enforcement and schedules the first verification asynchronously.
+     * Installs process-wide enforcement without doing APK I/O from Application.onCreate().
      *
-     * <p>The boolean return value is retained for source compatibility. Installation itself does
-     * not block startup; an invalid result is enforced as soon as a non-splash activity is active.</p>
+     * <p>The boolean return value is retained for source compatibility. The first verification is
+     * scheduled when a non-splash Activity reaches the foreground.</p>
      */
     public static boolean install(Application application) {
         IntegrityEnforcer enforcer = new IntegrityEnforcer(application);
         application.registerActivityLifecycleCallbacks(enforcer);
-        enforcer.scheduleVerification(null);
         return true;
     }
 
@@ -119,12 +117,15 @@ public final class IntegrityEnforcer implements Application.ActivityLifecycleCal
         }
 
         foregroundActivity = new WeakReference<>(activity);
-        AppIntegrity.Verification cached = lastVerification;
 
+        // Never start the expensive archive verifier while the launcher splash is trying to draw.
+        if (activity instanceof SplashActivity) {
+            return;
+        }
+
+        AppIntegrity.Verification cached = lastVerification;
         if (cached != null && !cached.isValid()) {
-            if (!(activity instanceof SplashActivity)) {
-                blockActivity(activity, cached);
-            }
+            blockActivity(activity, cached);
             return;
         }
 
@@ -137,7 +138,13 @@ public final class IntegrityEnforcer implements Application.ActivityLifecycleCal
         if (!isUsable(activity) || activity instanceof SplashActivity) {
             return;
         }
-        if (blockedActivities.put(activity, Boolean.TRUE) != null) {
+
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post(() -> blockActivity(activity, verification));
+            return;
+        }
+
+        if (blockedActivities.put(activity, Boolean.TRUE) != null || !isUsable(activity)) {
             return;
         }
 
@@ -151,14 +158,6 @@ public final class IntegrityEnforcer implements Application.ActivityLifecycleCal
             }
         }, "IntegrityReport").start();
 
-        if (Looper.myLooper() != Looper.getMainLooper()) {
-            mainHandler.post(() -> blockActivity(activity, verification));
-            return;
-        }
-
-        if (!isUsable(activity)) {
-            return;
-        }
         new AlertDialog.Builder(activity)
                 .setTitle(R.string.security_warning_title)
                 .setMessage(R.string.security_warning_signature)
