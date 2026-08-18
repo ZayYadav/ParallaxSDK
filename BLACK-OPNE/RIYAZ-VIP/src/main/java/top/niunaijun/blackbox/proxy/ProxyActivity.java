@@ -3,36 +3,110 @@ package top.niunaijun.blackbox.proxy;
 import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.util.Log;
+
 import androidx.annotation.Nullable;
+
 import top.niunaijun.blackbox.app.BActivityThread;
+import top.niunaijun.blackbox.compat.auth.ExternalAuthRouter;
+import top.niunaijun.blackbox.fake.frameworks.BActivityManager;
 import top.niunaijun.blackbox.fake.hook.HookManager;
 import top.niunaijun.blackbox.fake.service.HCallbackStub;
 import top.niunaijun.blackbox.proxy.record.ProxyActivityRecord;
-import top.niunaijun.blackbox.utils.Slog;
 
 /**
  * ProxyActivity
- * Fixed & Hardened for Android 10–15
+ * Fixed & Hardened for Android 10–16.
  */
 public class ProxyActivity extends Activity {
 
     public static final String TAG = "ProxyActivity";
+    private static final int REQUEST_EXTERNAL_AUTH = 0x5042;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        Intent launchIntent = getIntent();
+        if (isExternalAuthBridge(launchIntent)) {
+            HookManager.get().checkEnv(HCallbackStub.class);
+            if (savedInstanceState == null) {
+                launchExternalProvider(launchIntent);
+            }
+            return;
+        }
+
         Log.d(TAG, "onCreate");
         finish();
         HookManager.get().checkEnv(HCallbackStub.class);
-        ProxyActivityRecord record = ProxyActivityRecord.create(getIntent());
+        ProxyActivityRecord record = ProxyActivityRecord.create(launchIntent);
         if (record.mTarget != null) {
             record.mTarget.setExtrasClassLoader(BActivityThread.getApplication().getClassLoader());
             startActivity(record.mTarget);
-            return;
         }
     }
-    
+
+    private boolean isExternalAuthBridge(Intent intent) {
+        return intent != null
+                && intent.getBooleanExtra(ExternalAuthRouter.EXTRA_EXTERNAL_AUTH, false);
+    }
+
+    private void launchExternalProvider(Intent bridgeIntent) {
+        try {
+            Intent providerIntent = bridgeIntent.getParcelableExtra(
+                    ExternalAuthRouter.EXTRA_PROVIDER_INTENT);
+            if (!ExternalAuthRouter.isTrustedProviderIntent(providerIntent)) {
+                finish();
+                return;
+            }
+            providerIntent.setExtrasClassLoader(getClassLoader());
+            startActivityForResult(providerIntent, REQUEST_EXTERNAL_AUTH);
+        } catch (Throwable ignored) {
+            deliverExternalAuthResult(RESULT_CANCELED, null);
+            finish();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQUEST_EXTERNAL_AUTH || !isExternalAuthBridge(getIntent())) {
+            return;
+        }
+        deliverExternalAuthResult(resultCode, data);
+        finish();
+    }
+
+    private void deliverExternalAuthResult(int resultCode, Intent data) {
+        try {
+            Intent bridgeIntent = getIntent();
+            Bundle extras = bridgeIntent == null ? null : bridgeIntent.getExtras();
+            if (extras == null) {
+                return;
+            }
+            IBinder resultTo = extras.getBinder(ExternalAuthRouter.EXTRA_RESULT_BINDER);
+            String resultWho = extras.getString(ExternalAuthRouter.EXTRA_RESULT_WHO);
+            int originalRequestCode = extras.getInt(
+                    ExternalAuthRouter.EXTRA_REQUEST_CODE, -1);
+            if (resultTo == null || originalRequestCode < 0) {
+                return;
+            }
+
+            // This proxy instance runs in the same :pN process as the virtual app,
+            // so BActivityManager can deliver the result to the original virtual
+            // Activity token instead of returning it to the loader's main process.
+            BActivityManager.get().sendActivityResult(
+                    resultTo,
+                    resultWho,
+                    originalRequestCode,
+                    data,
+                    resultCode);
+        } catch (Throwable ignored) {
+            // Fail closed. Provider result contents are intentionally not logged.
+        }
+    }
+
     public static class P0 extends ProxyActivity {}
     public static class P1 extends ProxyActivity {}
     public static class P2 extends ProxyActivity {}

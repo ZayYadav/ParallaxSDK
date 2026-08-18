@@ -1,5 +1,6 @@
 package top.niunaijun.blackbox.fake.service;
 
+import android.app.IServiceConnection;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
@@ -7,15 +8,21 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
 
-import top.niunaijun.blackbox.core.env.BEnvironment;
 import java.io.File;
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
 
+import black.android.app.BRLoadedApkServiceDispatcher;
+import black.android.app.BRLoadedApkServiceDispatcherInnerConnection;
 import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.BActivityThread;
+import top.niunaijun.blackbox.compat.auth.ExternalAuthRouter;
 import top.niunaijun.blackbox.compat.oauth.VirtualOAuthRouter;
+import top.niunaijun.blackbox.core.env.AppSystemEnv;
+import top.niunaijun.blackbox.fake.delegate.ServiceConnectionDelegate;
 import top.niunaijun.blackbox.fake.hook.MethodHook;
 import top.niunaijun.blackbox.fake.hook.ProxyMethod;
+import top.niunaijun.blackbox.fake.hook.ProxyMethods;
 import top.niunaijun.blackbox.fake.provider.FileProviderHandler;
 import top.niunaijun.blackbox.utils.ComponentUtils;
 import top.niunaijun.blackbox.utils.FileUtils;
@@ -23,19 +30,14 @@ import top.niunaijun.blackbox.utils.MethodParameterUtils;
 import top.niunaijun.blackbox.utils.Slog;
 import top.niunaijun.blackbox.utils.compat.BuildCompat;
 import top.niunaijun.blackbox.utils.compat.StartActivityCompat;
-import static android.content.pm.PackageManager.GET_META_DATA;
 import org.lsposed.lsparanoid.Obfuscate;
+
 /**
  * Created by @RIYAZXERO on 3/30/21.
- * * ∧＿∧
- * (`･ω･∥
- * 丶　つ０
- * しーＪ
- * 此处无Bug
  */
 @Obfuscate
 public class ActivityManagerCommonProxy {
-    
+
     public static final String TAG = "ActivityManagerCommonProxy";
 
     @ProxyMethod("startActivity")
@@ -44,20 +46,23 @@ public class ActivityManagerCommonProxy {
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             MethodParameterUtils.replaceFirstAppPkg(args);
             Intent intent = getIntent(args);
-            
-            // NULL CHECK - FIX CRASH
+
             if (intent == null) {
                 Slog.e(TAG, "Intent is null, calling original method");
                 return method.invoke(who, args);
             }
-            
+
+            if (ExternalAuthRouter.isDirectProviderDispatch(intent)) {
+                ExternalAuthRouter.clearDirectProviderDispatch(intent);
+                return method.invoke(who, args);
+            }
+
             if (intent.getParcelableExtra("_G_|_target_") != null) {
                 return method.invoke(who, args);
             }
             if (ComponentUtils.isRequestInstall(intent)) {
                 File file = FileProviderHandler.convertFile(BActivityThread.getApplication(), intent.getData());
                 if (BlackBoxCore.get().requestInstallPackage(file)) {
-                    // FIX: Don't return 0, let system handle it
                     intent.setData(FileProviderHandler.convertFileUri(BActivityThread.getApplication(), intent.getData()));
                     return method.invoke(who, args);
                 }
@@ -69,9 +74,17 @@ public class ActivityManagerCommonProxy {
                 intent.setData(Uri.parse("package:" + BlackBoxCore.getHostPkg()));
             }
 
-            // Browser OAuth compatibility for virtual/cloned apps. Handle this
-            // before the generic intent log below so OAuth state/request tokens are
-            // never written to logcat by this hook.
+            Intent externalAuthBridge = ExternalAuthRouter.createResultBridgeIntent(
+                    intent,
+                    StartActivityCompat.getResultTo(args),
+                    StartActivityCompat.getResultWho(args),
+                    StartActivityCompat.getRequestCode(args),
+                    BActivityThread.getAppPackageName());
+            if (externalAuthBridge != null) {
+                replaceIntent(args, externalAuthBridge);
+                return method.invoke(who, args);
+            }
+
             Intent oauthBridge = VirtualOAuthRouter.createBridgeIntent(
                     intent,
                     BActivityThread.getUserId(),
@@ -82,8 +95,12 @@ public class ActivityManagerCommonProxy {
             }
 
             Slog.d(TAG, "Hook in : " + intent);
-            
-            ResolveInfo resolveInfo = BlackBoxCore.getBPackageManager().resolveActivity(intent, FileUtils.FileMode.MODE_IWUSR, StartActivityCompat.getResolvedType(args), BActivityThread.getUserId());
+
+            ResolveInfo resolveInfo = BlackBoxCore.getBPackageManager().resolveActivity(
+                    intent,
+                    FileUtils.FileMode.MODE_IWUSR,
+                    StartActivityCompat.getResolvedType(args),
+                    BActivityThread.getUserId());
             if (resolveInfo == null) {
                 String origPackage = intent.getPackage();
                 if (intent.getPackage() == null && intent.getComponent() == null) {
@@ -91,7 +108,11 @@ public class ActivityManagerCommonProxy {
                 } else {
                     origPackage = intent.getPackage();
                 }
-                resolveInfo = BlackBoxCore.getBPackageManager().resolveActivity(intent, FileUtils.FileMode.MODE_IWUSR, StartActivityCompat.getResolvedType(args), BActivityThread.getUserId());
+                resolveInfo = BlackBoxCore.getBPackageManager().resolveActivity(
+                        intent,
+                        FileUtils.FileMode.MODE_IWUSR,
+                        StartActivityCompat.getResolvedType(args),
+                        BActivityThread.getUserId());
                 if (resolveInfo == null) {
                     intent.setPackage(origPackage);
                     return method.invoke(who, args);
@@ -100,21 +121,21 @@ public class ActivityManagerCommonProxy {
 
             intent.setExtrasClassLoader(who.getClass().getClassLoader());
             intent.setComponent(new ComponentName(resolveInfo.activityInfo.packageName, resolveInfo.activityInfo.name));
-            BlackBoxCore.getBActivityManager().startActivityAms(BActivityThread.getUserId(),StartActivityCompat.getIntent(args),StartActivityCompat.getResolvedType(args),StartActivityCompat.getResultTo(args),
-		    StartActivityCompat.getResultWho(args),StartActivityCompat.getRequestCode(args),StartActivityCompat.getFlags(args),StartActivityCompat.getOptions(args));
+            BlackBoxCore.getBActivityManager().startActivityAms(
+                    BActivityThread.getUserId(),
+                    StartActivityCompat.getIntent(args),
+                    StartActivityCompat.getResolvedType(args),
+                    StartActivityCompat.getResultTo(args),
+                    StartActivityCompat.getResultWho(args),
+                    StartActivityCompat.getRequestCode(args),
+                    StartActivityCompat.getFlags(args),
+                    StartActivityCompat.getOptions(args));
             return 0;
         }
 
         private Intent getIntent(Object[] args) {
-            // FIX: Add null check
             if (args == null) return null;
-            
-            int index;
-            if (BuildCompat.isR()) {
-                index = 3;
-            } else {
-                index = 2;
-            }
+            int index = BuildCompat.isR() ? 3 : 2;
             if (index < args.length && args[index] instanceof Intent) {
                 return (Intent) args[index];
             }
@@ -151,7 +172,6 @@ public class ActivityManagerCommonProxy {
             String[] resolvedTypes = (String[]) args[index++];
             IBinder resultTo = (IBinder) args[index++];
             Bundle options = (Bundle) args[index];
-            // todo ??
             if (!ComponentUtils.isSelf(intents)) {
                 return method.invoke(who, args);
             }
@@ -159,14 +179,77 @@ public class ActivityManagerCommonProxy {
             for (Intent intent : intents) {
                 intent.setExtrasClassLoader(who.getClass().getClassLoader());
             }
-            return BlackBoxCore.getBActivityManager().startActivities(BActivityThread.getUserId(),intents, resolvedTypes, resultTo, options);
+            return BlackBoxCore.getBActivityManager().startActivities(
+                    BActivityThread.getUserId(), intents, resolvedTypes, resultTo, options);
         }
 
         public int getIntents() {
-            if (BuildCompat.isR()) {
-                return 3;
+            return BuildCompat.isR() ? 3 : 2;
+        }
+    }
+
+    /**
+     * Registered after IActivityManagerProxy's own bind hooks via @ScanClass, so
+     * this compatibility hook becomes authoritative for all bindService variants.
+     * Real auth providers are handed to Android unchanged (apart from correcting
+     * the real caller package/user); virtual services keep the original BlackBox
+     * binding path.
+     */
+    @ProxyMethods({"bindService", "bindServiceInstance", "bindIsolatedService"})
+    public static class BindServiceCompat extends MethodHook {
+        @Override
+        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+            if (args == null || args.length <= 4 || !(args[2] instanceof Intent)) {
+                return method.invoke(who, args);
             }
-            return 2;
+
+            Intent intent = (Intent) args[2];
+            if (AppSystemEnv.isOpenPackage(intent)) {
+                intent.removeExtra("_G_|_UserId");
+                MethodParameterUtils.replaceAllAppPkg(args);
+                MethodParameterUtils.replaceLastUserId(args);
+                return method.invoke(who, args);
+            }
+
+            String resolvedType = args[3] instanceof String ? (String) args[3] : null;
+            IServiceConnection connection = args[4] instanceof IServiceConnection
+                    ? (IServiceConnection) args[4] : null;
+
+            int userId = intent.getIntExtra("_G_|_UserId", -1);
+            userId = userId == -1 ? BActivityThread.getUserId() : userId;
+            ResolveInfo resolveInfo = BlackBoxCore.getBPackageManager().resolveService(
+                    intent, 0, resolvedType, userId);
+            if (resolveInfo == null) {
+                return 0;
+            }
+
+            Intent bindService = BlackBoxCore.getBActivityManager().bindService(
+                    intent,
+                    connection == null ? null : connection.asBinder(),
+                    resolvedType,
+                    userId);
+
+            if (connection != null) {
+                if (intent.getComponent() == null) {
+                    intent.setComponent(new ComponentName(
+                            resolveInfo.serviceInfo.packageName,
+                            resolveInfo.serviceInfo.name));
+                }
+                IServiceConnection proxy = ServiceConnectionDelegate.createProxy(connection, intent);
+                args[4] = proxy;
+
+                WeakReference<?> weakReference =
+                        BRLoadedApkServiceDispatcherInnerConnection.get(connection).mDispatcher();
+                if (weakReference != null) {
+                    BRLoadedApkServiceDispatcher.get(weakReference.get())._set_mConnection(proxy);
+                }
+            }
+
+            if (bindService != null) {
+                args[2] = bindService;
+                return method.invoke(who, args);
+            }
+            return 0;
         }
     }
 
@@ -218,7 +301,8 @@ public class ActivityManagerCommonProxy {
     public static class getCallingPackage extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            return BlackBoxCore.getBActivityManager().getCallingPackage((IBinder) args[0], BActivityThread.getUserId());
+            return BlackBoxCore.getBActivityManager().getCallingPackage(
+                    (IBinder) args[0], BActivityThread.getUserId());
         }
     }
 
@@ -226,7 +310,8 @@ public class ActivityManagerCommonProxy {
     public static class getCallingActivity extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            return BlackBoxCore.getBActivityManager().getCallingActivity((IBinder) args[0], BActivityThread.getUserId());
+            return BlackBoxCore.getBActivityManager().getCallingActivity(
+                    (IBinder) args[0], BActivityThread.getUserId());
         }
     }
 }
