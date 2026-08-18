@@ -84,6 +84,9 @@ tasks.withType(Javadoc) {
 
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.1'
+    // Auth Tab captures custom-scheme OAuth redirects without requiring the
+    // virtual/cloned package to be installed in Android's real PackageManager.
+    implementation 'androidx.browser:browser:1.9.0'
     implementation 'com.github.tiann:FreeReflection:3.2.2'
     implementation 'com.github.CodingGay.BlackReflection:core:1.1.2'
     annotationProcessor 'com.github.CodingGay.BlackReflection:compiler:1.1.2'
