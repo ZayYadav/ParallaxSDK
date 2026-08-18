@@ -13,6 +13,7 @@ import java.lang.reflect.Method;
 
 import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.BActivityThread;
+import top.niunaijun.blackbox.compat.oauth.VirtualOAuthRouter;
 import top.niunaijun.blackbox.fake.hook.MethodHook;
 import top.niunaijun.blackbox.fake.hook.ProxyMethod;
 import top.niunaijun.blackbox.fake.provider.FileProviderHandler;
@@ -68,6 +69,19 @@ public class ActivityManagerCommonProxy {
             if (dataString != null && dataString.equals("package:" + BActivityThread.getAppPackageName())) {
                 intent.setData(Uri.parse("package:" + BlackBoxCore.getHostPkg()));
             }
+
+            // Browser OAuth compatibility for virtual/cloned apps. If the app opens
+            // a Google/Facebook/X authorization URL with a custom redirect that is
+            // declared by the virtual package, launch a host Auth Tab bridge. The
+            // bridge returns the final URI directly to the same virtual package.
+            Intent oauthBridge = VirtualOAuthRouter.createBridgeIntent(
+                    intent,
+                    BActivityThread.getUserId(),
+                    BActivityThread.getAppPackageName());
+            if (oauthBridge != null) {
+                replaceIntent(args, oauthBridge);
+                return method.invoke(who, args);
+            }
             
             ResolveInfo resolveInfo = BlackBoxCore.getBPackageManager().resolveActivity(intent, FileUtils.FileMode.MODE_IWUSR, StartActivityCompat.getResolvedType(args), BActivityThread.getUserId());
             if (resolveInfo == null) {
@@ -110,6 +124,21 @@ public class ActivityManagerCommonProxy {
                 }
             }
             return null;
+        }
+
+        private void replaceIntent(Object[] args, Intent replacement) {
+            if (args == null || replacement == null) return;
+            int index = BuildCompat.isR() ? 3 : 2;
+            if (index < args.length && args[index] instanceof Intent) {
+                args[index] = replacement;
+                return;
+            }
+            for (int i = 0; i < args.length; i++) {
+                if (args[i] instanceof Intent) {
+                    args[i] = replacement;
+                    return;
+                }
+            }
         }
     }
 
