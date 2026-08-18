@@ -13,6 +13,7 @@ import java.lang.reflect.Method;
 
 import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.BActivityThread;
+import top.niunaijun.blackbox.compat.auth.ExternalAuthRouter;
 import top.niunaijun.blackbox.compat.oauth.VirtualOAuthRouter;
 import top.niunaijun.blackbox.fake.hook.MethodHook;
 import top.niunaijun.blackbox.fake.hook.ProxyMethod;
@@ -25,17 +26,13 @@ import top.niunaijun.blackbox.utils.compat.BuildCompat;
 import top.niunaijun.blackbox.utils.compat.StartActivityCompat;
 import static android.content.pm.PackageManager.GET_META_DATA;
 import org.lsposed.lsparanoid.Obfuscate;
+
 /**
  * Created by @RIYAZXERO on 3/30/21.
- * * ∧＿∧
- * (`･ω･∥
- * 丶　つ０
- * しーＪ
- * 此处无Bug
  */
 @Obfuscate
 public class ActivityManagerCommonProxy {
-    
+
     public static final String TAG = "ActivityManagerCommonProxy";
 
     @ProxyMethod("startActivity")
@@ -44,20 +41,26 @@ public class ActivityManagerCommonProxy {
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             MethodParameterUtils.replaceFirstAppPkg(args);
             Intent intent = getIntent(args);
-            
-            // NULL CHECK - FIX CRASH
+
             if (intent == null) {
                 Slog.e(TAG, "Intent is null, calling original method");
                 return method.invoke(who, args);
             }
-            
+
+            // One-shot native provider dispatch from the same-process auth bridge.
+            // Remove the marker before crossing into the real provider so it is
+            // never exposed to Google/Facebook/X.
+            if (ExternalAuthRouter.isDirectProviderDispatch(intent)) {
+                ExternalAuthRouter.clearDirectProviderDispatch(intent);
+                return method.invoke(who, args);
+            }
+
             if (intent.getParcelableExtra("_G_|_target_") != null) {
                 return method.invoke(who, args);
             }
             if (ComponentUtils.isRequestInstall(intent)) {
                 File file = FileProviderHandler.convertFile(BActivityThread.getApplication(), intent.getData());
                 if (BlackBoxCore.get().requestInstallPackage(file)) {
-                    // FIX: Don't return 0, let system handle it
                     intent.setData(FileProviderHandler.convertFileUri(BActivityThread.getApplication(), intent.getData()));
                     return method.invoke(who, args);
                 }
@@ -69,9 +72,22 @@ public class ActivityManagerCommonProxy {
                 intent.setData(Uri.parse("package:" + BlackBoxCore.getHostPkg()));
             }
 
+            // Native Google/Facebook/X app sign-in. The provider app remains the
+            // real phone-installed package; only the Activity result is bridged
+            // back to the original virtual Activity token.
+            Intent externalAuthBridge = ExternalAuthRouter.createResultBridgeIntent(
+                    intent,
+                    StartActivityCompat.getResultTo(args),
+                    StartActivityCompat.getResultWho(args),
+                    StartActivityCompat.getRequestCode(args),
+                    BActivityThread.getAppPackageName());
+            if (externalAuthBridge != null) {
+                replaceIntent(args, externalAuthBridge);
+                return method.invoke(who, args);
+            }
+
             // Browser OAuth compatibility for virtual/cloned apps. Handle this
-            // before the generic intent log below so OAuth state/request tokens are
-            // never written to logcat by this hook.
+            // before generic logging so OAuth state/request tokens are not logged.
             Intent oauthBridge = VirtualOAuthRouter.createBridgeIntent(
                     intent,
                     BActivityThread.getUserId(),
@@ -82,8 +98,12 @@ public class ActivityManagerCommonProxy {
             }
 
             Slog.d(TAG, "Hook in : " + intent);
-            
-            ResolveInfo resolveInfo = BlackBoxCore.getBPackageManager().resolveActivity(intent, FileUtils.FileMode.MODE_IWUSR, StartActivityCompat.getResolvedType(args), BActivityThread.getUserId());
+
+            ResolveInfo resolveInfo = BlackBoxCore.getBPackageManager().resolveActivity(
+                    intent,
+                    FileUtils.FileMode.MODE_IWUSR,
+                    StartActivityCompat.getResolvedType(args),
+                    BActivityThread.getUserId());
             if (resolveInfo == null) {
                 String origPackage = intent.getPackage();
                 if (intent.getPackage() == null && intent.getComponent() == null) {
@@ -91,7 +111,11 @@ public class ActivityManagerCommonProxy {
                 } else {
                     origPackage = intent.getPackage();
                 }
-                resolveInfo = BlackBoxCore.getBPackageManager().resolveActivity(intent, FileUtils.FileMode.MODE_IWUSR, StartActivityCompat.getResolvedType(args), BActivityThread.getUserId());
+                resolveInfo = BlackBoxCore.getBPackageManager().resolveActivity(
+                        intent,
+                        FileUtils.FileMode.MODE_IWUSR,
+                        StartActivityCompat.getResolvedType(args),
+                        BActivityThread.getUserId());
                 if (resolveInfo == null) {
                     intent.setPackage(origPackage);
                     return method.invoke(who, args);
@@ -100,21 +124,21 @@ public class ActivityManagerCommonProxy {
 
             intent.setExtrasClassLoader(who.getClass().getClassLoader());
             intent.setComponent(new ComponentName(resolveInfo.activityInfo.packageName, resolveInfo.activityInfo.name));
-            BlackBoxCore.getBActivityManager().startActivityAms(BActivityThread.getUserId(),StartActivityCompat.getIntent(args),StartActivityCompat.getResolvedType(args),StartActivityCompat.getResultTo(args),
-		    StartActivityCompat.getResultWho(args),StartActivityCompat.getRequestCode(args),StartActivityCompat.getFlags(args),StartActivityCompat.getOptions(args));
+            BlackBoxCore.getBActivityManager().startActivityAms(
+                    BActivityThread.getUserId(),
+                    StartActivityCompat.getIntent(args),
+                    StartActivityCompat.getResolvedType(args),
+                    StartActivityCompat.getResultTo(args),
+                    StartActivityCompat.getResultWho(args),
+                    StartActivityCompat.getRequestCode(args),
+                    StartActivityCompat.getFlags(args),
+                    StartActivityCompat.getOptions(args));
             return 0;
         }
 
         private Intent getIntent(Object[] args) {
-            // FIX: Add null check
             if (args == null) return null;
-            
-            int index;
-            if (BuildCompat.isR()) {
-                index = 3;
-            } else {
-                index = 2;
-            }
+            int index = BuildCompat.isR() ? 3 : 2;
             if (index < args.length && args[index] instanceof Intent) {
                 return (Intent) args[index];
             }
@@ -151,7 +175,6 @@ public class ActivityManagerCommonProxy {
             String[] resolvedTypes = (String[]) args[index++];
             IBinder resultTo = (IBinder) args[index++];
             Bundle options = (Bundle) args[index];
-            // todo ??
             if (!ComponentUtils.isSelf(intents)) {
                 return method.invoke(who, args);
             }
@@ -159,14 +182,12 @@ public class ActivityManagerCommonProxy {
             for (Intent intent : intents) {
                 intent.setExtrasClassLoader(who.getClass().getClassLoader());
             }
-            return BlackBoxCore.getBActivityManager().startActivities(BActivityThread.getUserId(),intents, resolvedTypes, resultTo, options);
+            return BlackBoxCore.getBActivityManager().startActivities(
+                    BActivityThread.getUserId(), intents, resolvedTypes, resultTo, options);
         }
 
         public int getIntents() {
-            if (BuildCompat.isR()) {
-                return 3;
-            }
-            return 2;
+            return BuildCompat.isR() ? 3 : 2;
         }
     }
 
