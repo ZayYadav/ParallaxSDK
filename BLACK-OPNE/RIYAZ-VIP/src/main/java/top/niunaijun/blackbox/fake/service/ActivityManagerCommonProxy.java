@@ -13,6 +13,7 @@ import java.lang.reflect.Method;
 
 import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.BActivityThread;
+import top.niunaijun.blackbox.compat.oauth.VirtualOAuthRouter;
 import top.niunaijun.blackbox.fake.hook.MethodHook;
 import top.niunaijun.blackbox.fake.hook.ProxyMethod;
 import top.niunaijun.blackbox.fake.provider.FileProviderHandler;
@@ -43,7 +44,6 @@ public class ActivityManagerCommonProxy {
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             MethodParameterUtils.replaceFirstAppPkg(args);
             Intent intent = getIntent(args);
-            Slog.d(TAG, "Hook in : " + intent);
             
             // NULL CHECK - FIX CRASH
             if (intent == null) {
@@ -68,6 +68,20 @@ public class ActivityManagerCommonProxy {
             if (dataString != null && dataString.equals("package:" + BActivityThread.getAppPackageName())) {
                 intent.setData(Uri.parse("package:" + BlackBoxCore.getHostPkg()));
             }
+
+            // Browser OAuth compatibility for virtual/cloned apps. Handle this
+            // before the generic intent log below so OAuth state/request tokens are
+            // never written to logcat by this hook.
+            Intent oauthBridge = VirtualOAuthRouter.createBridgeIntent(
+                    intent,
+                    BActivityThread.getUserId(),
+                    BActivityThread.getAppPackageName());
+            if (oauthBridge != null) {
+                replaceIntent(args, oauthBridge);
+                return method.invoke(who, args);
+            }
+
+            Slog.d(TAG, "Hook in : " + intent);
             
             ResolveInfo resolveInfo = BlackBoxCore.getBPackageManager().resolveActivity(intent, FileUtils.FileMode.MODE_IWUSR, StartActivityCompat.getResolvedType(args), BActivityThread.getUserId());
             if (resolveInfo == null) {
@@ -110,6 +124,21 @@ public class ActivityManagerCommonProxy {
                 }
             }
             return null;
+        }
+
+        private void replaceIntent(Object[] args, Intent replacement) {
+            if (args == null || replacement == null) return;
+            int index = BuildCompat.isR() ? 3 : 2;
+            if (index < args.length && args[index] instanceof Intent) {
+                args[index] = replacement;
+                return;
+            }
+            for (int i = 0; i < args.length; i++) {
+                if (args[i] instanceof Intent) {
+                    args[i] = replacement;
+                    return;
+                }
+            }
         }
     }
 
