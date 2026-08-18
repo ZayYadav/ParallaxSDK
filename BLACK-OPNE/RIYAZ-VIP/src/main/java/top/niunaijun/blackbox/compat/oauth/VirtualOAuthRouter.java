@@ -41,6 +41,7 @@ public final class VirtualOAuthRouter {
             "facebook.com",
             "x.com",
             "www.x.com",
+            "api.x.com",
             "twitter.com",
             "www.twitter.com",
             "mobile.twitter.com",
@@ -76,6 +77,9 @@ public final class VirtualOAuthRouter {
         }
 
         Uri redirectUri = extractRedirectUri(authUri);
+        if (redirectUri == null && isTwitterHost(authUri)) {
+            redirectUri = inferLegacyTwitterRedirect(virtualPackage, userId);
+        }
         if (!isSupportedCustomRedirect(redirectUri)) {
             return null;
         }
@@ -120,6 +124,22 @@ public final class VirtualOAuthRouter {
                 || host.endsWith(".x.com");
     }
 
+    private static boolean isTwitterHost(Uri uri) {
+        if (uri == null) {
+            return false;
+        }
+        String host = lower(uri.getHost());
+        return "x.com".equals(host)
+                || "www.x.com".equals(host)
+                || "api.x.com".equals(host)
+                || "twitter.com".equals(host)
+                || "www.twitter.com".equals(host)
+                || "mobile.twitter.com".equals(host)
+                || "api.twitter.com".equals(host)
+                || host.endsWith(".twitter.com")
+                || host.endsWith(".x.com");
+    }
+
     private static Uri extractRedirectUri(Uri authUri) {
         for (String key : REDIRECT_QUERY_KEYS) {
             try {
@@ -132,6 +152,24 @@ public final class VirtualOAuthRouter {
                     return candidate;
                 }
             } catch (Throwable ignored) {
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Twitter Kit's historical Android callback scheme is `twittersdk`. We only
+     * opt into it when the current virtual package really declares a matching
+     * callback activity, so unrelated X/Twitter web links are never intercepted.
+     */
+    private static Uri inferLegacyTwitterRedirect(String virtualPackage, int userId) {
+        Uri[] candidates = new Uri[]{
+                Uri.parse("twittersdk://callback"),
+                Uri.parse("twittersdk://authorize")
+        };
+        for (Uri candidate : candidates) {
+            if (redirectBelongsToVirtualPackage(candidate, virtualPackage, userId)) {
+                return candidate;
             }
         }
         return null;
