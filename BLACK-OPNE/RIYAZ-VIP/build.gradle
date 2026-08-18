@@ -1,6 +1,5 @@
 plugins {
     id 'com.android.library'
-    id 'org.lsposed.lsparanoid'
     id 'org.jetbrains.kotlin.android'
 }
 
@@ -24,16 +23,16 @@ android {
             abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
         }
     }
-    
+
     buildTypes {
-    
         debug {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
-    
+
         release {
-            minifyEnabled true
+            // Stability mode: keep the SDK bytecode untouched while loader startup is debugged.
+            minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
@@ -43,13 +42,13 @@ android {
            path "src/main/cpp/Android.mk"
         }
     }
-    
+
     compileOptions {
         encoding "UTF-8"
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
-    
+
     kotlinOptions {
         jvmTarget = "17"
     }
@@ -75,8 +74,6 @@ android {
 
     namespace "top.niunaijun.blackbox"
     ndkVersion rootProject.ext.ndkVersion
-    
-    
 }
 
 tasks.withType(Javadoc) {
@@ -87,15 +84,10 @@ tasks.withType(Javadoc) {
 
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.1'
-    //implementation 'com.android.tools.build:apksig:4.2.0'
-    //implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:6.1'
     implementation 'com.github.tiann:FreeReflection:3.2.2'
-   // implementation project(":black-reflection")
-   // annotationProcessor project(":black-reflection")
     implementation 'com.github.CodingGay.BlackReflection:core:1.1.2'
     annotationProcessor 'com.github.CodingGay.BlackReflection:compiler:1.1.2'
-    
-    // Code number 1 se add kiye gaye dependencies
+
     compileOnly "com.google.auto.service:auto-service:1.1.1"
     annotationProcessor "com.google.auto.service:auto-service:1.1.1"
     implementation "com.squareup:javapoet:1.13.0"

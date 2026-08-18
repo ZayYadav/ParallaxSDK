@@ -18,11 +18,6 @@ import top.niunaijun.blackbox.core.system.user.BUserManagerService;
 
 /**
  * Created by Milk on 3/31/21.
- * * ∧＿∧
- * (`･ω･∥
- * 丶　つ０
- * しーＪ
- * 此处无Bug
  */
 public class ServiceManager {
     private static ServiceManager sServiceManager = null;
@@ -69,7 +64,19 @@ public class ServiceManager {
         return mCaches.get(name);
     }
 
+    /**
+     * Warm virtual services only in virtual-app processes.
+     *
+     * <p>The host/loader main process does not need all nine Binder services just to draw its
+     * splash/login UI. Eagerly resolving every service performs synchronous provider/Binder calls
+     * during Application.onCreate() and can stall startup while the server process is coming up.
+     * BlackManager already resolves each service lazily when a loader action actually needs it.</p>
+     */
     public static void initBlackManager() {
+        if (BlackBoxCore.get().isMainProcess()) {
+            return;
+        }
+
         BlackBoxCore.get().getService(ACTIVITY_MANAGER);
         BlackBoxCore.get().getService(JOB_MANAGER);
         BlackBoxCore.get().getService(PACKAGE_MANAGER);

@@ -9,7 +9,7 @@ import androidx.annotation.StringRes;
 
 import com.onecore.loader.R;
 
-/** Performs supported, user-visible runtime environment checks. */
+/** Performs lightweight, user-visible runtime environment checks on the UI thread. */
 public final class SecurityThreatDetector {
     public enum Threat {
         NONE(0),
@@ -31,10 +31,14 @@ public final class SecurityThreatDetector {
     private SecurityThreatDetector() {
     }
 
+    /**
+     * Only performs checks that are safe to run during Activity startup.
+     *
+     * <p>APK signature verification is intentionally handled by {@link IntegrityEnforcer} on a
+     * background worker. Calling AppIntegrity.verify() here used to scan the full APK from
+     * SplashActivity/LoginActivity on the main thread and could stall the first frame.</p>
+     */
     public static Threat detect(Context context) {
-        if (!AppIntegrity.isSignatureValid(context)) {
-            return Threat.INVALID_SIGNATURE;
-        }
         if (isVpnActive(context)) {
             return Threat.VPN_ACTIVE;
         }

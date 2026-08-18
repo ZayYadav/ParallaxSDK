@@ -280,61 +280,37 @@ jobs:
               -dname "CN=CI,O=SdkLodaLasan,C=US"
           fi
 
-      - name: Build signed and flattened loader release APK
+      - name: Build signed loader release APK without obfuscation
         working-directory: ${{ env.LOADER_PROJECT_DIR }}
         run: |
           set -o pipefail
           ./gradlew :app:assembleRelease \
-            -PblackObfuscatorEnabled=true \
-            -PblackObfuscatorDepth=2 \
             --no-daemon --stacktrace 2>&1 | tee "../${BUILD_LOG_DIR}/loader-release-apk.log"
 
-      - name: Verify BlackObfuscator and packaged DEX
+      - name: Verify release APK and packaged DEX
         shell: bash
         run: |
           set -euo pipefail
-          LOG="${BUILD_LOG_DIR}/loader-release-apk.log"
           RELEASE_APK=$(find "${LOADER_PROJECT_DIR}/app/build/outputs/apk/release" -name '*.apk' -print -quit)
           test -n "$RELEASE_APK"
-          TRANSFORMED=$(grep -c '^BlackObf Class:' "$LOG" || true)
-          if [ "$TRANSFORMED" -lt 50 ]; then
-            echo "BlackObfuscator transformed only ${TRANSFORMED} methods; refusing unobfuscated release" >&2
-            exit 1
-          fi
-          if grep -Eq 'Obfuscator Class not found|No classes found|^[A-Za-z0-9_.]+(Exception|Error):|^[[:space:]]+at [A-Za-z0-9_.$]+\(' "$LOG"; then
-            echo "BlackObfuscator reported a conversion failure" >&2
-            exit 1
-          fi
           DEX_DIR=$(mktemp -d)
           unzip -qq "$RELEASE_APK" 'classes*.dex' -d "$DEX_DIR"
           DEX_COUNT=0
           for dex in "$DEX_DIR"/classes*.dex; do
             "${ANDROID_HOME}/build-tools/36.0.0/dexdump" -f "$dex" >/dev/null
-            for forbidden in \
-              'https://parallaxloader.parallaxserver.online/api/v2/connect' \
-              'parallax-license-v2-request' \
-              'parallax-license-v2-response:' \
-              'Licensing TLS pins are not configured'; do
-              if grep -aFq "$forbidden" "$dex"; then
-                echo "Sensitive loader string remained in plaintext DEX: ${forbidden}" >&2
-                exit 1
-              fi
-            done
             DEX_COUNT=$((DEX_COUNT + 1))
           done
           test "$DEX_COUNT" -gt 0
           "${ANDROID_HOME}/build-tools/36.0.0/apksigner" verify --verbose "$RELEASE_APK"
           "${ANDROID_HOME}/build-tools/36.0.0/zipalign" -c -v 4 "$RELEASE_APK" >/dev/null
-          printf 'black_obfuscator_commit=%s\ndepth=%s\ntransformed_methods=%s\ndex_files=%s\n' \
-            '67aec4c457be0d2644224100fa85aed7eac87cb6' '2' "$TRANSFORMED" "$DEX_COUNT" \
-            | tee "${BUILD_LOG_DIR}/black-obfuscator-report.txt"
+          printf 'loader_obfuscation=disabled\nr8_minify=disabled\nresource_shrinking=disabled\ndex_files=%s\n' "$DEX_COUNT" \
+            | tee "${BUILD_LOG_DIR}/loader-stability-report.txt"
 
       - name: Build loader debug APK
         working-directory: ${{ env.LOADER_PROJECT_DIR }}
         run: |
           set -o pipefail
           ./gradlew :app:assembleDebug \
-            -PblackObfuscatorEnabled=false \
             --no-daemon --stacktrace 2>&1 | tee "../${BUILD_LOG_DIR}/loader-debug-apk.log"
 
       - name: Verify debug APK
@@ -364,6 +340,7 @@ jobs:
             printf 'artifact_tier=%s\n' "${PARALLAX_ARTIFACT_TIER}"
             printf 'production_transport=%s\n' "${PARALLAX_HAS_RELEASE_TRANSPORT}"
             printf 'production_signing=%s\n' "${PARALLAX_HAS_RELEASE_SIGNING}"
+            printf 'loader_obfuscation=disabled\n'
             printf 'commit=%s\n' "${GITHUB_SHA}"
             if [ "${PARALLAX_ARTIFACT_TIER}" != 'production' ]; then
               printf 'warning=CI verification build only; configure production transport and signing before distribution.\n'
@@ -406,6 +383,6 @@ jobs:
           name: build-logs
           path: |
             ${{ env.BUILD_LOG_DIR }}/*.log
-            ${{ env.BUILD_LOG_DIR }}/black-obfuscator-report.txt
+            ${{ env.BUILD_LOG_DIR }}/loader-stability-report.txt
             ${{ env.BUILD_LOG_DIR }}/apk-artifact-info.txt
           if-no-files-found: warn

@@ -2,20 +2,20 @@ package com.onecore.loader;
 
 import android.app.Application;
 import android.content.Context;
-import android.content.pm.PackageInfo;
+
 import androidx.appcompat.app.AppCompatDelegate;
-import com.onecore.loader.utils.CrashHandler;
+
 import com.Jagdish.tastytoast.TastyToast;
+import com.google.android.material.color.DynamicColors;
+import com.onecore.loader.security.IntegrityEnforcer;
+import com.onecore.loader.utils.CrashHandler;
 import com.onecore.loader.utils.FLog;
 import com.onecore.loader.utils.NetworkConnection;
-import com.onecore.loader.utils.FPrefs;
-import com.onecore.loader.security.SecurityThreatDetector;
-import com.onecore.loader.security.IntegrityEnforcer;
-import com.google.android.material.color.DynamicColors;
 import com.topjohnwu.superuser.Shell;
+
 import java.io.IOException;
+
 import top.niunaijun.blackbox.BlackBoxCore;
-import top.niunaijun.blackbox.app.configuration.AppLifecycleCallback;
 import top.niunaijun.blackbox.app.configuration.ClientConfiguration;
 import top.niunaijun.blackbox.core.system.api.MetaActivationManager;
 
@@ -23,91 +23,107 @@ public class BoxApplication extends Application {
     public static final String STATUS_BY = "online";
     private native String BoxApp();
     public static BoxApplication gApp;
-    
+
     private boolean isNetworkConnected = false;
-    
+
     public static BoxApplication get() {
         return gApp;
     }
-    
+
     public boolean isInternetAvailable() {
         return isNetworkConnected;
     }
-    
+
     public void setInternetAvailable(boolean b) {
         isNetworkConnected = b;
     }
-    
+
     static {
         try {
             System.loadLibrary("ParallaxLoader");
-        } catch (UnsatisfiedLinkError w) {
-            FLog.error(w.getMessage());
+        } catch (UnsatisfiedLinkError error) {
+            FLog.error("ParallaxLoader native library could not be loaded: " + error.getMessage());
         }
     }
-    
+
     @Override
     protected void attachBaseContext(Context base) {
         super.attachBaseContext(base);
         FLog.initialize(base);
         Thread.setDefaultUncaughtExceptionHandler(new CrashHandler(base));
+
         try {
+            FLog.info("Startup: attaching BlackBox core");
             BlackBoxCore.get().doAttachBaseContext(base, new ClientConfiguration() {
                 @Override
                 public String getHostPackageName() {
                     return base.getPackageName();
                 }
-         /*       @Override
-                public boolean setHideRoot() {
-                    return true;
-                } 
 
                 @Override
-                public boolean setHideXposed() {
-                    return true;
-                } */
-
-                @Override
-                public boolean isEnableDaemonService(){
+                public boolean isEnableDaemonService() {
                     return true;
                 }
             });
-        } catch (Exception e) {
-            e.printStackTrace();
+            FLog.info("Startup: BlackBox attach complete");
+        } catch (Throwable error) {
+            // Do not leave the process in a silent startup loop. The UI can still launch and
+            // surface a useful error/log instead of being killed by an initialization exception.
+            FLog.error("BlackBox attach failed", error);
         }
-        
     }
 
     @Override
     public void onCreate() {
         super.onCreate();
         gApp = this;
-        if (!IntegrityEnforcer.install(this)) {
-            FLog.error("Application signing identity validation failed");
-            return;
-        }
-        if (SecurityThreatDetector.detect(this) != SecurityThreatDetector.Threat.NONE) {
-            FLog.error("Application security policy validation failed");
-            return;
-        }
-        BlackBoxCore.get().doCreate();
+        FLog.info("Startup: Application.onCreate begin");
+
+        // Full APK cryptographic verification is expensive. IntegrityEnforcer performs it on a
+        // background worker and enforces an invalid result after the first UI frame is available.
+        IntegrityEnforcer.install(this);
+
         try {
-            MetaActivationManager.activateSdk(BoxApp());
-        } catch (Exception exception) {
-            exception.printStackTrace();
+            FLog.info("Startup: creating BlackBox services");
+            BlackBoxCore.get().doCreate();
+            FLog.info("Startup: BlackBox services ready");
+        } catch (Throwable error) {
+            FLog.error("BlackBox service initialization failed", error);
         }
-        DynamicColors.applyToActivitiesIfAvailable(this);
+
+        // Native key retrieval + SDK activation must never delay Application.onCreate().
+        new Thread(() -> {
+            try {
+                MetaActivationManager.activateSdk(BoxApp());
+            } catch (Throwable error) {
+                FLog.error("Background SDK activation failed", error);
+            }
+        }, "OneCore-SdkActivation").start();
+
+        try {
+            DynamicColors.applyToActivitiesIfAvailable(this);
+        } catch (Throwable error) {
+            FLog.error("Dynamic color initialization failed", error);
+        }
+
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
-        NetworkConnection.CheckInternet network = new NetworkConnection.CheckInternet(this);
-        network.registerNetworkCallback();
+
+        try {
+            NetworkConnection.CheckInternet network = new NetworkConnection.CheckInternet(this);
+            network.registerNetworkCallback();
+        } catch (Throwable error) {
+            FLog.error("Network callback registration failed", error);
+        }
+
+        FLog.info("Startup: Application.onCreate complete");
     }
-    
+
     public void showToastWithImage(String msg, int type) {
         TastyToast.makeText(BoxApplication.get(), msg, TastyToast.LENGTH_LONG, type).show();
     }
-    
+
     public static boolean checkRootAccess() {
-        if (Shell.rootAccess()){
+        if (Shell.rootAccess()) {
             FLog.info("Root granted");
             return true;
         } else {
@@ -115,7 +131,7 @@ public class BoxApplication extends Application {
             return false;
         }
     }
-    
+
     public static void doExe(String shell) {
         if (checkRootAccess()) {
             Shell.su(shell).exec();
@@ -128,7 +144,7 @@ public class BoxApplication extends Application {
             }
         }
     }
-    
+
     public void doExecute(String shell) {
         doChmod(shell, 777);
         doExe(shell);
@@ -137,5 +153,4 @@ public class BoxApplication extends Application {
     public static void doChmod(String shell, int mask) {
         doExe("chmod " + mask + " " + shell);
     }
-    
 }
