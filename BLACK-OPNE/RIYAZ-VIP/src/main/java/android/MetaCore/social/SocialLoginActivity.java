@@ -5,7 +5,6 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.view.Gravity;
-import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -39,6 +38,12 @@ public final class SocialLoginActivity extends Activity {
             statusText.setText(error);
             statusText.setTextColor(Color.rgb(255, 120, 130));
         }
+    }
+
+    @Override
+    public void onBackPressed() {
+        SocialAuthManager.cancelActiveLogin(this);
+        super.onBackPressed();
     }
 
     private void render() {
@@ -80,7 +85,7 @@ public final class SocialLoginActivity extends Activity {
         root.addView(xButton, buttonParams());
 
         statusText = new TextView(this);
-        statusText.setText("No password is shared with Parallax.");
+        statusText.setText("No provider password is shared with Parallax.");
         statusText.setTextColor(Color.rgb(150, 160, 180));
         statusText.setTextSize(13f);
         statusText.setGravity(Gravity.CENTER);
@@ -92,7 +97,7 @@ public final class SocialLoginActivity extends Activity {
         cancel.setText("Cancel");
         cancel.setAllCaps(false);
         cancel.setOnClickListener(v -> {
-            SocialAuthManager.Listener listener = null;
+            SocialAuthManager.cancelActiveLogin(this);
             finish();
         });
         root.addView(cancel, buttonParams());
