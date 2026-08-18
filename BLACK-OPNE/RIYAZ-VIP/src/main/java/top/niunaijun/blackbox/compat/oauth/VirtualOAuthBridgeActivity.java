@@ -1,14 +1,11 @@
 package top.niunaijun.blackbox.compat.oauth;
 
+import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Bundle;
-
-import androidx.activity.ComponentActivity;
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.browser.auth.AuthTabIntent;
 
 import java.util.Locale;
 
@@ -19,14 +16,23 @@ import top.niunaijun.blackbox.utils.FileUtils;
 /**
  * Host-side trampoline for browser OAuth started by a virtual application.
  *
- * AuthTab captures the provider redirect without requiring the virtual package to
- * be installed in Android's real PackageManager. The final URI is immediately
- * forwarded into BlackBox's virtual PackageManager/ActivityManager and is never
- * persisted or logged by this bridge.
+ * The Auth Tab protocol is emitted directly so the SDK AAR stays self-contained
+ * when it is copied into a host app as a raw local AAR. The browser returns the
+ * final redirect URI through Activity result data; this bridge immediately routes
+ * that URI into BlackBox's virtual PackageManager/ActivityManager.
  */
-public final class VirtualOAuthBridgeActivity extends ComponentActivity {
-    private final ActivityResultLauncher<Intent> authLauncher =
-            AuthTabIntent.registerActivityResultLauncher(this, this::handleAuthResult);
+public final class VirtualOAuthBridgeActivity extends Activity {
+    private static final int REQUEST_AUTH_TAB = 0x5041;
+
+    // Public AndroidX Browser Auth Tab protocol constants. These are browser-facing
+    // Intent extras documented by AndroidX; using the protocol directly avoids a
+    // transitive Maven dependency that a raw local AAR cannot carry by itself.
+    private static final String EXTRA_LAUNCH_AUTH_TAB =
+            "androidx.browser.auth.extra.LAUNCH_AUTH_TAB";
+    private static final String EXTRA_REDIRECT_SCHEME =
+            "androidx.browser.auth.extra.REDIRECT_SCHEME";
+    private static final String EXTRA_CUSTOM_TABS_SESSION =
+            "android.support.customtabs.extra.SESSION";
 
     private String virtualPackage;
     private String expectedRedirectScheme;
@@ -61,24 +67,40 @@ public final class VirtualOAuthBridgeActivity extends ComponentActivity {
         }
 
         if (savedInstanceState == null) {
-            try {
-                AuthTabIntent authTab = new AuthTabIntent.Builder().build();
-                authTab.launch(authLauncher, authUri, expectedRedirectScheme);
-            } catch (Throwable ignored) {
-                finish();
-            }
+            launchAuthTab(authUri, expectedRedirectScheme);
         }
     }
 
-    private void handleAuthResult(AuthTabIntent.AuthResult result) {
-        if (result == null
-                || result.resultCode != AuthTabIntent.RESULT_OK
-                || result.resultUri == null) {
+    private void launchAuthTab(Uri authUri, String redirectScheme) {
+        try {
+            Intent authIntent = new Intent(Intent.ACTION_VIEW, authUri);
+            authIntent.putExtra(EXTRA_LAUNCH_AUTH_TAB, true);
+            authIntent.putExtra(EXTRA_REDIRECT_SCHEME, redirectScheme);
+
+            // AndroidX AuthTabIntent.Builder adds a null Custom Tabs session so
+            // browsers also recognize this as a Custom Tab-style request.
+            Bundle session = new Bundle();
+            session.putBinder(EXTRA_CUSTOM_TABS_SESSION, null);
+            authIntent.putExtras(session);
+
+            startActivityForResult(authIntent, REQUEST_AUTH_TAB);
+        } catch (Throwable ignored) {
+            finish();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQUEST_AUTH_TAB) {
+            return;
+        }
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) {
             finish();
             return;
         }
 
-        Uri callbackUri = result.resultUri;
+        Uri callbackUri = data.getData();
         if (!expectedRedirectScheme.equals(lower(callbackUri.getScheme()))) {
             finish();
             return;
