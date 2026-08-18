@@ -16,7 +16,6 @@ import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -29,10 +28,7 @@ import javax.net.ssl.HttpsURLConnection;
 
 /**
  * Social authentication entry point shipped inside the SDK AAR.
- *
- * Provider client secrets never live in the APK. The SDK opens the system browser,
- * the SDK panel completes the provider OAuth exchange over HTTPS, then redirects a
- * one-time ticket back to SocialAuthCallbackActivity.
+ * Provider secrets stay on the SDK panel, never inside the APK/AAR.
  */
 public final class SocialAuthManager {
     private static final String DEFAULT_BASE_URL =
@@ -53,21 +49,18 @@ public final class SocialAuthManager {
 
     private static final int CONNECT_TIMEOUT_MS = 15_000;
     private static final int READ_TIMEOUT_MS = 25_000;
-    private static final int MAX_RESPONSE_BYTES = 128 * 1024;
+    private static final int MAX_RESPONSE_CHARS = 128 * 1024;
 
     private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool();
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final SecureRandom RANDOM = new SecureRandom();
-
     private static volatile Listener activeListener;
 
     private SocialAuthManager() {
     }
 
     public enum Provider {
-        GOOGLE("google"),
-        FACEBOOK("facebook"),
-        X("x");
+        GOOGLE("google"), FACEBOOK("facebook"), X("x");
 
         private final String wireName;
 
@@ -78,24 +71,11 @@ public final class SocialAuthManager {
         public String wireName() {
             return wireName;
         }
-
-        static Provider fromWireName(String value) {
-            if (value != null) {
-                for (Provider provider : values()) {
-                    if (provider.wireName.equalsIgnoreCase(value)) {
-                        return provider;
-                    }
-                }
-            }
-            return null;
-        }
     }
 
     public interface Listener {
         void onSuccess(SocialUser user);
-
         void onError(String code, String message);
-
         void onCancelled();
     }
 
@@ -118,26 +98,24 @@ public final class SocialAuthManager {
         }
 
         public JSONObject toJson() {
-            JSONObject object = new JSONObject();
+            JSONObject value = new JSONObject();
             try {
-                object.put("provider", provider);
-                object.put("id", id);
-                object.put("email", email);
-                object.put("name", name);
-                object.put("avatar_url", avatarUrl);
-                object.put("session_expires", sessionExpiresAtEpochSeconds);
+                value.put("provider", provider);
+                value.put("id", id);
+                value.put("email", email);
+                value.put("name", name);
+                value.put("avatar_url", avatarUrl);
+                value.put("session_expires", sessionExpiresAtEpochSeconds);
             } catch (Exception ignored) {
             }
-            return object;
+            return value;
         }
     }
 
     public static void configure(Context context, String baseUrl) {
-        if (context == null) {
-            return;
+        if (context != null) {
+            prefs(context).edit().putString(KEY_BASE_URL, normalizeBaseUrl(baseUrl)).apply();
         }
-        String normalized = normalizeBaseUrl(baseUrl);
-        prefs(context).edit().putString(KEY_BASE_URL, normalized).apply();
     }
 
     public static void showLogin(Activity activity, Listener listener) {
@@ -161,29 +139,20 @@ public final class SocialAuthManager {
             notifyError(activity, "INVALID_REQUEST", "Login provider is missing.");
             return;
         }
-
         Context app = activity.getApplicationContext();
         prefs(app).edit().putBoolean(KEY_AUTH_PENDING, true).remove(KEY_LAST_ERROR).apply();
-
         EXECUTOR.execute(() -> {
             try {
                 JSONObject request = identityEnvelope(app);
                 request.put("provider", provider.wireName());
                 request.put("return_uri", callbackUri(app));
-
-                JSONObject response = postJson(endpoint(app, "start.php"), request);
-                if (!"success".equalsIgnoreCase(response.optString("status"))) {
-                    throw new AuthException(
-                            response.optString("code", "START_FAILED"),
-                            response.optString("message", "Unable to start sign in."));
-                }
-
+                JSONObject response = postAction(app, "start", request);
                 String authorizationUrl = response.optString("authorization_url", "");
                 Uri authorizationUri = Uri.parse(authorizationUrl);
-                if (!"https".equalsIgnoreCase(authorizationUri.getScheme())) {
+                if (!"https".equalsIgnoreCase(authorizationUri.getScheme())
+                        || authorizationUri.getHost() == null) {
                     throw new AuthException("INVALID_AUTH_URL", "Provider authorization URL is invalid.");
                 }
-
                 MAIN.post(() -> {
                     try {
                         Intent intent = new Intent(Intent.ACTION_VIEW, authorizationUri);
@@ -201,6 +170,18 @@ public final class SocialAuthManager {
         });
     }
 
+    static void cancelActiveLogin(Context context) {
+        if (context != null) {
+            prefs(context).edit().putBoolean(KEY_AUTH_PENDING, false)
+                    .putString(KEY_LAST_ERROR, "Sign in cancelled.").apply();
+        }
+        Listener listener = activeListener;
+        activeListener = null;
+        if (listener != null) {
+            MAIN.post(listener::onCancelled);
+        }
+    }
+
     static void handleCallback(Activity activity, Uri uri) {
         if (activity == null) {
             return;
@@ -216,12 +197,7 @@ public final class SocialAuthManager {
         String error = uri.getQueryParameter("error");
         if (error != null && !error.isEmpty()) {
             if ("cancelled".equalsIgnoreCase(error) || "access_denied".equalsIgnoreCase(error)) {
-                prefs(app).edit().putBoolean(KEY_AUTH_PENDING, false)
-                        .putString(KEY_LAST_ERROR, "Sign in cancelled.").apply();
-                Listener listener = activeListener;
-                if (listener != null) {
-                    MAIN.post(listener::onCancelled);
-                }
+                cancelActiveLogin(app);
             } else {
                 notifyError(app, "PROVIDER_ERROR", sanitizeMessage(error));
             }
@@ -241,26 +217,23 @@ public final class SocialAuthManager {
                 JSONObject request = identityEnvelope(app);
                 request.put("ticket", ticket);
                 request.put("provider", safe(provider));
-                JSONObject response = postJson(endpoint(app, "complete.php"), request);
-                if (!"success".equalsIgnoreCase(response.optString("status"))) {
-                    throw new AuthException(
-                            response.optString("code", "COMPLETE_FAILED"),
-                            response.optString("message", "Sign in could not be completed."));
-                }
+                JSONObject response = postAction(app, "complete", request);
                 saveSession(app, response);
                 SocialUser user = currentUser(app);
+                if (user == null) {
+                    throw new AuthException("SESSION_INVALID", "Sign in session was not created.");
+                }
                 prefs(app).edit().putBoolean(KEY_AUTH_PENDING, false).remove(KEY_LAST_ERROR).apply();
                 Listener listener = activeListener;
                 activeListener = null;
-                if (listener != null && user != null) {
+                if (listener != null) {
                     MAIN.post(() -> listener.onSuccess(user));
                 }
-                MAIN.post(activity::finish);
-            } catch (AuthException error) {
-                notifyError(app, error.code, error.getMessage());
-                MAIN.post(activity::finish);
-            } catch (Throwable error) {
+            } catch (AuthException errorValue) {
+                notifyError(app, errorValue.code, errorValue.getMessage());
+            } catch (Throwable errorValue) {
                 notifyError(app, "NETWORK_ERROR", "Unable to complete sign in.");
+            } finally {
                 MAIN.post(activity::finish);
             }
         });
@@ -273,7 +246,7 @@ public final class SocialAuthManager {
         SharedPreferences preferences = prefs(context);
         String token = preferences.getString(KEY_SESSION, "");
         long expires = preferences.getLong(KEY_SESSION_EXPIRES, 0L);
-        return token != null && !token.isEmpty() && expires > (System.currentTimeMillis() / 1000L);
+        return token != null && !token.isEmpty() && expires > System.currentTimeMillis() / 1000L;
     }
 
     public static SocialUser currentUser(Context context) {
@@ -305,24 +278,21 @@ public final class SocialAuthManager {
             }
             return;
         }
-
         EXECUTOR.execute(() -> {
             try {
                 JSONObject request = identityEnvelope(app);
                 request.put("session_token", session);
-                JSONObject response = postJson(endpoint(app, "session.php"), request);
-                if (!"success".equalsIgnoreCase(response.optString("status"))) {
-                    clearSession(app);
-                    throw new AuthException(
-                            response.optString("code", "SESSION_INVALID"),
-                            response.optString("message", "Session is no longer valid."));
-                }
+                JSONObject response = postAction(app, "session", request);
                 saveSession(app, response);
                 SocialUser user = currentUser(app);
-                if (listener != null && user != null) {
+                if (user == null) {
+                    throw new AuthException("SESSION_INVALID", "Session is no longer valid.");
+                }
+                if (listener != null) {
                     MAIN.post(() -> listener.onSuccess(user));
                 }
             } catch (AuthException error) {
+                clearSession(app);
                 if (listener != null) {
                     MAIN.post(() -> listener.onError(error.code, error.getMessage()));
                 }
@@ -348,15 +318,10 @@ public final class SocialAuthManager {
             try {
                 JSONObject request = identityEnvelope(app);
                 request.put("session_token", session);
-                postJson(endpoint(app, "logout.php"), request);
+                postAction(app, "logout", request);
             } catch (Throwable ignored) {
-                // Local logout is authoritative for the client. Server session expiry remains bounded.
             }
         });
-    }
-
-    static boolean authPending(Context context) {
-        return context != null && prefs(context).getBoolean(KEY_AUTH_PENDING, false);
     }
 
     static String consumeLastError(Context context) {
@@ -377,17 +342,27 @@ public final class SocialAuthManager {
         return request;
     }
 
+    private static JSONObject postAction(Context context, String action, JSONObject request) throws Exception {
+        request.put("action", action);
+        JSONObject response = postJson(endpoint(context), request);
+        if (!"success".equalsIgnoreCase(response.optString("status"))) {
+            throw new AuthException(
+                    response.optString("code", "AUTH_FAILED"),
+                    response.optString("message", "Social sign in failed."));
+        }
+        return response;
+    }
+
     private static void saveSession(Context context, JSONObject response) {
         JSONObject user = response.optJSONObject("user");
         if (user == null) {
             return;
         }
-        String session = response.optString("session_token",
-                prefs(context).getString(KEY_SESSION, ""));
-        long expires = response.optLong("session_expires", 0L);
-        prefs(context).edit()
-                .putString(KEY_SESSION, session)
-                .putLong(KEY_SESSION_EXPIRES, expires)
+        SharedPreferences preferences = prefs(context);
+        preferences.edit()
+                .putString(KEY_SESSION, response.optString("session_token",
+                        preferences.getString(KEY_SESSION, "")))
+                .putLong(KEY_SESSION_EXPIRES, response.optLong("session_expires", 0L))
                 .putString(KEY_PROVIDER, user.optString("provider", ""))
                 .putString(KEY_USER_ID, user.optString("id", ""))
                 .putString(KEY_EMAIL, user.optString("email", ""))
@@ -398,28 +373,21 @@ public final class SocialAuthManager {
 
     private static void clearSession(Context context) {
         prefs(context).edit()
-                .remove(KEY_SESSION)
-                .remove(KEY_SESSION_EXPIRES)
-                .remove(KEY_PROVIDER)
-                .remove(KEY_USER_ID)
-                .remove(KEY_EMAIL)
-                .remove(KEY_NAME)
-                .remove(KEY_AVATAR)
-                .putBoolean(KEY_AUTH_PENDING, false)
-                .apply();
+                .remove(KEY_SESSION).remove(KEY_SESSION_EXPIRES)
+                .remove(KEY_PROVIDER).remove(KEY_USER_ID).remove(KEY_EMAIL)
+                .remove(KEY_NAME).remove(KEY_AVATAR)
+                .putBoolean(KEY_AUTH_PENDING, false).apply();
     }
 
     private static void notifyError(Context context, String code, String message) {
         String safeMessage = sanitizeMessage(message);
         if (context != null) {
-            prefs(context).edit()
-                    .putBoolean(KEY_AUTH_PENDING, false)
-                    .putString(KEY_LAST_ERROR, safeMessage)
-                    .apply();
+            prefs(context).edit().putBoolean(KEY_AUTH_PENDING, false)
+                    .putString(KEY_LAST_ERROR, safeMessage).apply();
         }
         Listener listener = activeListener;
+        activeListener = null;
         if (listener != null) {
-            activeListener = null;
             MAIN.post(() -> listener.onError(safe(code), safeMessage));
         }
     }
@@ -428,14 +396,14 @@ public final class SocialAuthManager {
         return context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
 
-    private static String endpoint(Context context, String path) {
+    private static String endpoint(Context context) {
         String base = prefs(context).getString(KEY_BASE_URL, DEFAULT_BASE_URL);
-        return normalizeBaseUrl(base) + "/" + path;
+        return normalizeBaseUrl(base) + "/connect.php";
     }
 
     private static String normalizeBaseUrl(String value) {
         String base = value == null ? "" : value.trim();
-        if (base.endsWith("/")) {
+        while (base.endsWith("/")) {
             base = base.substring(0, base.length() - 1);
         }
         Uri uri = Uri.parse(base);
@@ -472,8 +440,7 @@ public final class SocialAuthManager {
     }
 
     private static String deviceId(Context context) throws Exception {
-        String androidId = Settings.Secure.getString(
-                context.getContentResolver(), Settings.Secure.ANDROID_ID);
+        String androidId = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ANDROID_ID);
         if (androidId == null || androidId.trim().isEmpty()) {
             SharedPreferences preferences = prefs(context);
             androidId = preferences.getString(KEY_FALLBACK_DEVICE, "");
@@ -485,15 +452,13 @@ public final class SocialAuthManager {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         byte[] value = digest.digest((androidId + "|" + context.getPackageName()
                 + "|parallax-social-v1").getBytes(StandardCharsets.UTF_8));
-        return Base64.encodeToString(value,
-                Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
+        return Base64.encodeToString(value, Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
     }
 
     private static String randomToken(int bytes) {
         byte[] value = new byte[bytes];
         RANDOM.nextBytes(value);
-        return Base64.encodeToString(value,
-                Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
+        return Base64.encodeToString(value, Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
     }
 
     private static JSONObject postJson(String endpoint, JSONObject payload) throws Exception {
@@ -501,7 +466,6 @@ public final class SocialAuthManager {
         if (!"https".equalsIgnoreCase(url.getProtocol())) {
             throw new AuthException("HTTPS_REQUIRED", "Social auth requires HTTPS.");
         }
-
         HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
         connection.setRequestMethod("POST");
         connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
@@ -512,49 +476,44 @@ public final class SocialAuthManager {
         connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
         connection.setRequestProperty("Accept", "application/json");
         connection.setRequestProperty("User-Agent", "Parallax-SocialAuth/1.0");
-
         byte[] body = payload.toString().getBytes(StandardCharsets.UTF_8);
         connection.setFixedLengthStreamingMode(body.length);
         try (OutputStream output = connection.getOutputStream()) {
             output.write(body);
         }
-
         int status = connection.getResponseCode();
-        InputStream stream = status >= 200 && status < 300
+        InputStream input = status >= 200 && status < 300
                 ? connection.getInputStream() : connection.getErrorStream();
-        String text = readLimited(stream);
+        String text = readLimited(input);
         connection.disconnect();
         if (text.isEmpty()) {
             throw new AuthException("EMPTY_RESPONSE", "Sign-in server returned an empty response.");
         }
-        JSONObject json = new JSONObject(text);
+        JSONObject response = new JSONObject(text);
         if (status < 200 || status >= 300) {
-            throw new AuthException(
-                    json.optString("code", "HTTP_" + status),
-                    json.optString("message", "Sign-in server rejected the request."));
+            throw new AuthException(response.optString("code", "HTTP_" + status),
+                    response.optString("message", "Sign-in server rejected the request."));
         }
-        return json;
+        return response;
     }
 
     private static String readLimited(InputStream stream) throws Exception {
         if (stream == null) {
             return "";
         }
-        StringBuilder builder = new StringBuilder();
-        int total = 0;
+        StringBuilder value = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(stream, StandardCharsets.UTF_8))) {
             char[] buffer = new char[4096];
             int read;
             while ((read = reader.read(buffer)) != -1) {
-                total += read;
-                if (total > MAX_RESPONSE_BYTES) {
+                if (value.length() + read > MAX_RESPONSE_CHARS) {
                     throw new AuthException("RESPONSE_TOO_LARGE", "Sign-in response was too large.");
                 }
-                builder.append(buffer, 0, read);
+                value.append(buffer, 0, read);
             }
         }
-        return builder.toString();
+        return value.toString();
     }
 
     private static String sanitizeMessage(String value) {
@@ -571,7 +530,6 @@ public final class SocialAuthManager {
 
     private static final class AuthException extends Exception {
         final String code;
-
         AuthException(String code, String message) {
             super(message);
             this.code = safe(code);
