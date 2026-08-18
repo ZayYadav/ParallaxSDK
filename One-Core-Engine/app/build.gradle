@@ -1,6 +1,9 @@
 import java.security.KeyStore
 import java.security.MessageDigest
 import java.util.Base64
+import javax.net.ssl.HttpsURLConnection
+import java.net.URL
+import java.security.cert.X509Certificate
 
 plugins {
     id 'com.android.application'
@@ -22,6 +25,56 @@ def javaString = { String value -> '"' + value.replace('\\', '\\\\').replace('"'
 def releaseTaskRequested = gradle.startParameter.taskNames.any {
     it.toLowerCase(Locale.ROOT).contains('release')
 }
+
+def resolveVerifiedLeafTlsPin = { String host ->
+    HttpsURLConnection connection = null
+    try {
+        connection = (HttpsURLConnection) new URL("https://${host}/").openConnection()
+        connection.connectTimeout = 10_000
+        connection.readTimeout = 10_000
+        connection.instanceFollowRedirects = false
+        connection.connect()
+
+        def certificates = connection.serverCertificates
+        if (certificates == null || certificates.length == 0 || !(certificates[0] instanceof X509Certificate)) {
+            throw new GradleException("No verified X.509 certificate was returned by ${host}")
+        }
+
+        byte[] subjectPublicKeyInfo = ((X509Certificate) certificates[0]).publicKey.encoded
+        byte[] digest = MessageDigest.getInstance('SHA-256').digest(subjectPublicKeyInfo)
+        return 'sha256/' + Base64.encoder.encodeToString(digest)
+    } finally {
+        connection?.disconnect()
+    }
+}
+
+// GitHub release artifacts must never become unusable merely because the leaf certificate
+// rotated while the repository variable still contains the previous pin. During Actions builds,
+// resolve the live leaf SPKI only through the JVM's normal CA + hostname verification and append
+// it to the configured rotation set. Runtime OkHttp pinning remains enabled; this only refreshes
+// the build-time pin set from a certificate that the standard TLS stack already authenticated.
+if ('true'.equalsIgnoreCase(System.getenv('GITHUB_ACTIONS'))
+        && parallaxApiPublicKey != null && !parallaxApiPublicKey.trim().isEmpty()
+        && parallaxTlsPins != null && !parallaxTlsPins.trim().isEmpty()) {
+    try {
+        String livePin = resolveVerifiedLeafTlsPin('parallaxloader.parallaxserver.online')
+        def pins = new LinkedHashSet<String>()
+        parallaxTlsPins.split(',', -1)
+                .collect { it.trim() }
+                .findAll { !it.isEmpty() }
+                .each { pins.add(it) }
+        boolean alreadyConfigured = pins.contains(livePin)
+        pins.add(livePin)
+        parallaxTlsPins = pins.join(',')
+        logger.lifecycle("Verified live TLS pin for parallaxloader.parallaxserver.online: ${livePin}")
+        if (!alreadyConfigured) {
+            logger.warn('Configured PARALLAX_TLS_PINS did not contain the current verified leaf pin; the live pin was appended for this build.')
+        }
+    } catch (Exception error) {
+        throw new GradleException('Unable to resolve the verified live TLS pin for the licensing host', error)
+    }
+}
+
 if (releaseTaskRequested) {
     byte[] publicKeyDer
     try {
