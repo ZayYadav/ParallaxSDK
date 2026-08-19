@@ -1,8 +1,10 @@
 package top.niunaijun.blackbox.core;
 
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.ProviderInfo;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.Bundle;
@@ -61,10 +63,6 @@ public class GmsCore {
         return GOOGLE_APP.contains(str) || GOOGLE_SERVICE.contains(str);
     }
 
-    /**
-     * Runtime-process view: only touch the package that is currently executing
-     * virtually. This is used by the context-local PackageManager wrapper.
-     */
     public static ApplicationInfo applyVirtualAppGmsSafety(ApplicationInfo info) {
         if (info == null || info.packageName == null || Build.VERSION.SDK_INT < 36) {
             return info;
@@ -77,14 +75,6 @@ public class GmsCore {
         return applyAnalyticsSafety(info);
     }
 
-    /**
-     * Package-manager-server view. PackageManagerCompat already knows it is
-     * generating metadata for a virtual package, so this path does not depend on
-     * BActivityThread being initialized in the server process. Keeping these
-     * flags visible from the first ApplicationInfo read prevents recent Play
-     * Services measurement Dynamite from initializing with a virtual package name
-     * against the host UID on Android 16.
-     */
     public static ApplicationInfo applyGeneratedVirtualAppGmsSafety(ApplicationInfo info) {
         if (info == null || info.packageName == null || Build.VERSION.SDK_INT < 36) {
             return info;
@@ -109,13 +99,6 @@ public class GmsCore {
         return info;
     }
 
-    /**
-     * FirebaseApp itself is still allowed to initialize so Firebase Auth and other
-     * core Firebase APIs keep working. We only remove Analytics/measurement
-     * registrars from ComponentDiscoveryService on Android 16. That keeps the
-     * measurement Dynamite module out of the virtual process without disabling
-     * Google/Firebase authentication.
-     */
     public static ServiceInfo applyGeneratedVirtualServiceGmsSafety(ServiceInfo info) {
         if (info == null || Build.VERSION.SDK_INT < 36 || info.packageName == null) {
             return info;
@@ -137,15 +120,48 @@ public class GmsCore {
             info.metaData = filtered;
         }
 
-        if (info.name != null) {
-            String lowerName = info.name.toLowerCase(Locale.US);
-            if (lowerName.startsWith("com.google.android.gms.measurement.")
-                    || lowerName.contains("appmeasurementservice")
-                    || lowerName.contains("appmeasurementjobservice")) {
-                info.enabled = false;
-            }
+        if (isMeasurementComponentName(info.name)) {
+            info.enabled = false;
         }
         return info;
+    }
+
+    public static ProviderInfo applyGeneratedVirtualProviderGmsSafety(ProviderInfo info) {
+        if (info == null || Build.VERSION.SDK_INT < 36 || info.packageName == null) {
+            return info;
+        }
+        if (info.packageName.equals(BlackBoxCore.getHostPkg())
+                || isGoogleAppOrService(info.packageName)) {
+            return info;
+        }
+        if (isMeasurementComponentName(info.name)) {
+            info.enabled = false;
+        }
+        return info;
+    }
+
+    public static ActivityInfo applyGeneratedVirtualActivityGmsSafety(ActivityInfo info) {
+        if (info == null || Build.VERSION.SDK_INT < 36 || info.packageName == null) {
+            return info;
+        }
+        if (info.packageName.equals(BlackBoxCore.getHostPkg())
+                || isGoogleAppOrService(info.packageName)) {
+            return info;
+        }
+        if (isMeasurementComponentName(info.name)) {
+            info.enabled = false;
+        }
+        return info;
+    }
+
+    private static boolean isMeasurementComponentName(String name) {
+        if (name == null) {
+            return false;
+        }
+        String lower = name.toLowerCase(Locale.US);
+        return lower.startsWith("com.google.android.gms.measurement.")
+                || lower.contains("appmeasurement")
+                || lower.contains("firebaseanalytics");
     }
 
     public static boolean setGoogleAppOrService(String pkg) {
