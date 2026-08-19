@@ -8,6 +8,7 @@ import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.os.IInterface;
 
 import java.io.File;
 import java.lang.ref.WeakReference;
@@ -22,6 +23,7 @@ import top.niunaijun.blackbox.compat.auth.ExternalAuthServiceConnectionDelegate;
 import top.niunaijun.blackbox.compat.oauth.VirtualOAuthRouter;
 import top.niunaijun.blackbox.core.env.AppSystemEnv;
 import top.niunaijun.blackbox.fake.delegate.ServiceConnectionDelegate;
+import top.niunaijun.blackbox.fake.frameworks.BActivityManager;
 import top.niunaijun.blackbox.fake.hook.MethodHook;
 import top.niunaijun.blackbox.fake.hook.ProxyMethod;
 import top.niunaijun.blackbox.fake.hook.ProxyMethods;
@@ -218,9 +220,6 @@ public class ActivityManagerCommonProxy {
                     ? null : (IServiceConnection) args[connectionIndex];
 
             if (AppSystemEnv.isOpenPackage(intent)) {
-                // Refresh the outbound Context right at the provider boundary.
-                // This is best-effort and keeps Android 16 package/UID attribution
-                // paired even when a provider client cached Context state earlier.
                 ContextCompat.fix(BActivityThread.getApplication());
 
                 if (connection != null) {
@@ -290,8 +289,6 @@ public class ActivityManagerCommonProxy {
                     BRLoadedApkServiceDispatcher.get(weakReference.get())._set_mConnection(proxy);
                 }
             } catch (Throwable ignored) {
-                // OEM framework internals can vary; the actual system bind still
-                // receives the proxy even when this local dispatcher field differs.
             }
         }
     }
@@ -322,9 +319,6 @@ public class ActivityManagerCommonProxy {
                 return method.invoke(who, args);
             }
 
-            // AOSP layout from the fill-in Intent onward is stable:
-            // Intent, resolvedType, resultTo, resultWho, requestCode,
-            // flagsMask, flagsValues, options.
             int resultToIndex = fillInIndex + 2;
             int resultWhoIndex = fillInIndex + 3;
             int requestCodeIndex = fillInIndex + 4;
@@ -369,8 +363,6 @@ public class ActivityManagerCommonProxy {
                 BlackBoxCore.getContext().startActivity(bridge);
                 return 0;
             } catch (Throwable ignored) {
-                // If the host bridge cannot be started on an OEM build, preserve
-                // normal Android behavior rather than swallowing the provider flow.
                 return method.invoke(who, args);
             }
         }
@@ -422,6 +414,50 @@ public class ActivityManagerCommonProxy {
             } catch (Throwable ignored) {
             }
             return false;
+        }
+    }
+
+    /**
+     * The legacy hook in IActivityManagerProxy assumes every IntentSender belongs
+     * to the virtual namespace. For real Google/Facebook/X PendingIntents that can
+     * hide the creator package from IntentSender.getCreatorPackage(). Since this
+     * ScanClass is registered after the legacy hooks, use a virtual answer only
+     * when the virtual manager actually knows the sender; otherwise delegate to
+     * Android so provider-owned creator metadata remains authentic.
+     */
+    @ProxyMethod("getPackageForIntentSender")
+    public static class GetPackageForIntentSenderCompat extends MethodHook {
+        @Override
+        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+            if (args != null && args.length > 0 && args[0] instanceof IInterface) {
+                try {
+                    String virtualPackage = BActivityManager.get().getPackageForIntentSender(
+                            ((IInterface) args[0]).asBinder());
+                    if (virtualPackage != null && !virtualPackage.trim().isEmpty()) {
+                        return virtualPackage;
+                    }
+                } catch (Throwable ignored) {
+                }
+            }
+            return method.invoke(who, args);
+        }
+    }
+
+    @ProxyMethod("getUidForIntentSender")
+    public static class GetUidForIntentSenderCompat extends MethodHook {
+        @Override
+        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+            if (args != null && args.length > 0 && args[0] instanceof IInterface) {
+                try {
+                    int virtualUid = BActivityManager.get().getUidForIntentSender(
+                            ((IInterface) args[0]).asBinder());
+                    if (virtualUid >= 0) {
+                        return virtualUid;
+                    }
+                } catch (Throwable ignored) {
+                }
+            }
+            return method.invoke(who, args);
         }
     }
 
