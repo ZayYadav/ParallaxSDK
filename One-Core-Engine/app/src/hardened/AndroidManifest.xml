@@ -3,30 +3,34 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Hardened distribution does not install packages, copy external app data,
-         or draw overlays. Remove those permissions from the merged manifest. -->
+         or draw overlays. Remove those capabilities from the merged manifest. -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:node="remove" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" tools:node="remove" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:node="remove" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" tools:node="remove" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" tools:node="remove" />
 
     <application>
-        <!-- Remove the feature-rich activity from this variant and keep its
-             component name as an alias so existing login/splash navigation still
-             lands on the hardened launcher without changing shared source. -->
+        <!-- Remove the setup/patch UI roots so R8 can discard their code and resources. -->
+        <activity android:name=".activity.SplashActivity" tools:node="remove" />
+        <activity android:name=".activity.LoginActivity" tools:node="remove" />
+        <activity android:name=".activity.MainActivity" tools:node="remove" />
+
         <activity
-            android:name=".activity.MainActivity"
-            tools:node="remove" />
+            android:name=".activity.HardenedLoginActivity"
+            android:exported="true"
+            android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
 
         <activity
             android:name=".activity.HardenedMainActivity"
-            android:exported="false" />
-
-        <activity-alias
-            android:name=".activity.MainActivity"
-            android:enabled="true"
             android:exported="false"
-            android:targetActivity=".activity.HardenedMainActivity" />
+            android:theme="@style/AppTheme" />
 
         <service
             android:name=".floating.Overlay"
