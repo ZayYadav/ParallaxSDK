@@ -144,8 +144,8 @@ public final class HardenedMainActivity extends Activity {
     }
 
     private void openLogin() {
-        Intent login = new Intent(this, LoginActivity.class);
-        login.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        Intent login = new Intent(this, HardenedLoginActivity.class);
+        login.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
         startActivity(login);
         finish();
     }
