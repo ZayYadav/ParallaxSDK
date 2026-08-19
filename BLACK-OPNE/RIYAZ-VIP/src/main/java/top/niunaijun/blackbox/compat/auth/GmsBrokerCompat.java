@@ -15,6 +15,7 @@ import java.util.WeakHashMap;
 
 import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.BActivityThread;
+import top.niunaijun.blackbox.utils.Slog;
 import top.niunaijun.blackbox.utils.compat.ContextCompat;
 
 /**
@@ -30,6 +31,7 @@ import top.niunaijun.blackbox.utils.compat.ContextCompat;
  * modified here. Provider-side authorization remains authoritative.
  */
 public final class GmsBrokerCompat {
+    private static final String TAG = "GmsBrokerCompat";
     private static final String BROKER_DESCRIPTOR =
             "com.google.android.gms.common.internal.IGmsServiceBroker";
     private static final String SERVICE_REQUEST_CLASS =
@@ -39,6 +41,8 @@ public final class GmsBrokerCompat {
             Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<IBinder, IInterface> BROKER_CACHE =
             Collections.synchronizedMap(new WeakHashMap<>());
+
+    private static volatile boolean sLoggedTypedProxyFailure;
 
     private GmsBrokerCompat() {
     }
@@ -72,6 +76,7 @@ public final class GmsBrokerCompat {
             BINDER_CACHE.put(base, wrapper);
             return wrapper;
         } catch (Throwable ignored) {
+            logTypedProxyFailure(ignored);
             return base;
         }
     }
@@ -114,8 +119,29 @@ public final class GmsBrokerCompat {
             IInterface result = (IInterface) proxy;
             BROKER_CACHE.put(base, result);
             return result;
-        } catch (Throwable ignored) {
+        } catch (Throwable failure) {
+            // R8/minified clients may not expose the source-level broker interface
+            // class name even though the Binder descriptor is stable. Do not fall
+            // back to raw Parcel rewriting: provider caller verification remains
+            // authoritative. Native Activity/IntentSender and OAuth routing can
+            // still handle provider-controlled interactive sign-in surfaces.
+            logTypedProxyFailure(failure);
             return null;
+        }
+    }
+
+    private static void logTypedProxyFailure(Throwable failure) {
+        if (sLoggedTypedProxyFailure) {
+            return;
+        }
+        synchronized (GmsBrokerCompat.class) {
+            if (sLoggedTypedProxyFailure) {
+                return;
+            }
+            sLoggedTypedProxyFailure = true;
+            String reason = failure == null ? "unknown" : failure.getClass().getSimpleName();
+            Slog.w(TAG, "Typed GMS broker proxy unavailable (" + reason
+                    + "); keeping provider verification intact and using external auth routing where supported");
         }
     }
 
