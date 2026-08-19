@@ -120,10 +120,7 @@ public class GmsCore {
             info.metaData = filtered;
         }
 
-        if (isMeasurementComponentName(info.name)) {
-            info.enabled = false;
-        }
-        return info;
+        return isMeasurementComponentName(info.name) ? null : info;
     }
 
     public static ProviderInfo applyGeneratedVirtualProviderGmsSafety(ProviderInfo info) {
@@ -134,10 +131,7 @@ public class GmsCore {
                 || isGoogleAppOrService(info.packageName)) {
             return info;
         }
-        if (isMeasurementComponentName(info.name)) {
-            info.enabled = false;
-        }
-        return info;
+        return isMeasurementComponentName(info.name) ? null : info;
     }
 
     public static ActivityInfo applyGeneratedVirtualActivityGmsSafety(ActivityInfo info) {
@@ -148,10 +142,7 @@ public class GmsCore {
                 || isGoogleAppOrService(info.packageName)) {
             return info;
         }
-        if (isMeasurementComponentName(info.name)) {
-            info.enabled = false;
-        }
-        return info;
+        return isMeasurementComponentName(info.name) ? null : info;
     }
 
     private static boolean isMeasurementComponentName(String name) {
