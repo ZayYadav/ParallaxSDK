@@ -2,6 +2,8 @@ package top.niunaijun.blackbox.compat.auth;
 
 import android.content.ComponentName;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.os.Bundle;
 import android.os.IBinder;
 
@@ -85,6 +87,12 @@ public final class ExternalAuthRouter {
         }
 
         Intent providerIntent = new Intent(source);
+        // Pin an otherwise implicit auth intent to the real provider that Android
+        // resolved. This avoids both losing legitimate Facebook/X provider flows
+        // and accidentally handing an auth result bridge to an unrelated handler.
+        if (providerIntent.getComponent() == null && providerIntent.getPackage() == null) {
+            providerIntent.setPackage(providerPackage);
+        }
         providerIntent.putExtra(EXTRA_DIRECT_PROVIDER_DISPATCH, true);
 
         Intent bridge = new Intent();
@@ -112,11 +120,27 @@ public final class ExternalAuthRouter {
         if (intent == null) {
             return null;
         }
+
         ComponentName component = intent.getComponent();
         String pkg = component != null ? component.getPackageName() : intent.getPackage();
-        if (pkg == null || !TRUSTED_PROVIDER_PACKAGES.contains(pkg)) {
-            return null;
+        if (TRUSTED_PROVIDER_PACKAGES.contains(pkg)) {
+            return pkg;
         }
-        return pkg;
+
+        // Some provider SDK versions use implicit auth intents. Resolve them with
+        // the real host PackageManager and accept the target only when it lands on
+        // the explicit allow-list above. No virtual PM result is trusted here.
+        if (pkg == null) {
+            try {
+                ResolveInfo resolved = BlackBoxCore.getPackageManager().resolveActivity(
+                        intent, PackageManager.MATCH_DEFAULT_ONLY);
+                if (resolved != null && resolved.activityInfo != null
+                        && TRUSTED_PROVIDER_PACKAGES.contains(resolved.activityInfo.packageName)) {
+                    return resolved.activityInfo.packageName;
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        return null;
     }
 }
