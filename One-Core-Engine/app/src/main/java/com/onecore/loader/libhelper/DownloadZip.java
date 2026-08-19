@@ -340,48 +340,51 @@ public class DownloadZip {
     }
 
     public void startDownload(String downloadUrl, DownloadCallback callback) {
-        // Show download animation
         showDownloadAnimation("Initializing download...");
-        
+
         if (callback != null) {
             callback.onStart();
         }
-        
+
         startTime = System.currentTimeMillis();
         downloadedBytes = 0;
 
         executor.execute(() -> {
-            boolean success = downloadFile(downloadUrl, callback);
-
-            handler.post(() -> {
-                if (success) {
-                    updateDownloadProgress(100, "Extracting files...", downloadedBytes, downloadedBytes);
-                    
-                    File zipFile = new File(context.getCacheDir(), ZIP_FILE_NAME);
-                    File stagingDirectory = new File(
-                            context.getCacheDir(), "native-staging-" + UUID.randomUUID());
-                    String password = PASSJKPAPA();
-
-                    if (unzipEncrypted(zipFile, stagingDirectory, password)
-                            && moveSoFiles(stagingDirectory)) {
-                        
-                        hideDownloadAnimation(true, "✓ Download Complete!\n✓ Files extracted successfully!");
-                        
-                        if (callback != null) {
-                            callback.onSuccess();
-                        }
-                    } else {
-                        hideDownloadAnimation(false, "✗ Failed to extract ZIP file");
-                        if (callback != null) {
-                            callback.onError("Failed to extract ZIP");
-                        }
-                    }
-                    deleteRecursively(stagingDirectory);
-                    zipFile.delete();
-                } else {
-                    hideDownloadAnimation(false, "✗ Download failed!\n✗ Check your internet connection");
+            boolean downloaded = downloadFile(downloadUrl, callback);
+            if (!downloaded) {
+                handler.post(() -> {
+                    hideDownloadAnimation(false, "✗ Download failed!\n✗ Check the HTTPS URL or connection");
                     if (callback != null) {
                         callback.onError("Download failed");
+                    }
+                });
+                return;
+            }
+
+            handler.post(() -> updateDownloadProgress(
+                    100, "Validating ZIP...", downloadedBytes, downloadedBytes));
+
+            File zipFile = new File(context.getCacheDir(), ZIP_FILE_NAME);
+            File stagingDirectory = new File(
+                    context.getCacheDir(), "native-staging-" + UUID.randomUUID());
+            String password = PASSJKPAPA();
+            ExtractionResult extractionResult = extractAndInstall(
+                    zipFile, stagingDirectory, password);
+
+            deleteRecursively(stagingDirectory);
+            zipFile.delete();
+
+            handler.post(() -> {
+                if (extractionResult.success) {
+                    hideDownloadAnimation(true,
+                            "✓ Download Complete!\n✓ Archive validated and installed successfully!");
+                    if (callback != null) {
+                        callback.onSuccess();
+                    }
+                } else {
+                    hideDownloadAnimation(false, "✗ " + extractionResult.message);
+                    if (callback != null) {
+                        callback.onError(extractionResult.message);
                     }
                 }
             });
@@ -454,16 +457,51 @@ public class DownloadZip {
         }
     }
 
-    private boolean unzipEncrypted(File zipPath, File outputDir, String password) {
+    private ExtractionResult extractAndInstall(File zipPath, File outputDir, String password) {
+        if (zipPath == null || !zipPath.isFile() || zipPath.length() == 0) {
+            return ExtractionResult.error("Downloaded archive is empty");
+        }
+
         try {
-            if (!outputDir.mkdirs()) {
-                return false;
+            ZipFile zipFile = password == null || password.isEmpty()
+                    ? new ZipFile(zipPath)
+                    : new ZipFile(zipPath, password.toCharArray());
+
+            if (!zipFile.isValidZipFile()) {
+                return ExtractionResult.error("Downloaded file is not a valid ZIP archive");
             }
-            ZipFile zipFile = new ZipFile(zipPath, password.toCharArray());
-            zipFile.extractAll(outputDir.getAbsolutePath());
-            return true;
-        } catch (Exception e) {
-            return false;
+            if (zipFile.isEncrypted() && (password == null || password.isEmpty())) {
+                return ExtractionResult.error("ZIP is encrypted but no password is configured");
+            }
+
+            if (outputDir.exists()) {
+                deleteRecursively(outputDir);
+            }
+            if (!outputDir.mkdirs() && !outputDir.isDirectory()) {
+                return ExtractionResult.error("Unable to create extraction directory");
+            }
+
+            try {
+                zipFile.extractAll(outputDir.getAbsolutePath());
+            } catch (Exception extractionFailure) {
+                String message = extractionFailure.getMessage();
+                String normalized = message == null ? "" : message.toLowerCase(Locale.US);
+                if (normalized.contains("password") || normalized.contains("decrypt")) {
+                    return ExtractionResult.error("ZIP password is incorrect or unsupported");
+                }
+                if (normalized.contains("corrupt") || normalized.contains("invalid")) {
+                    return ExtractionResult.error("ZIP archive is corrupt or unsupported");
+                }
+                return ExtractionResult.error("ZIP extraction failed");
+            }
+
+            if (!moveSoFiles(outputDir)) {
+                return ExtractionResult.error(
+                        "ZIP extracted, but no supported native artifact was installed");
+            }
+            return ExtractionResult.success();
+        } catch (Exception validationFailure) {
+            return ExtractionResult.error("Unable to validate ZIP archive");
         }
     }
 
@@ -486,7 +524,7 @@ public class DownloadZip {
                     NativeArtifactStore.install(file, new File(artifactDirectory, file.getName()));
                     installedAny = true;
                 } catch (java.io.IOException ignored) {
-                    // Report only a generic failure to avoid logging internal artifact details.
+                    // Keep internal file details out of logs/UI.
                 }
             }
         }
@@ -506,5 +544,23 @@ public class DownloadZip {
             }
         }
         fileOrDir.delete();
+    }
+
+    private static final class ExtractionResult {
+        final boolean success;
+        final String message;
+
+        private ExtractionResult(boolean success, String message) {
+            this.success = success;
+            this.message = message;
+        }
+
+        static ExtractionResult success() {
+            return new ExtractionResult(true, "OK");
+        }
+
+        static ExtractionResult error(String message) {
+            return new ExtractionResult(false, message);
+        }
     }
 }
