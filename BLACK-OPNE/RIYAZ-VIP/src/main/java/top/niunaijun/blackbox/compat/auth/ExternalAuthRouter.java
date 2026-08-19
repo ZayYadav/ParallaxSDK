@@ -2,6 +2,8 @@ package top.niunaijun.blackbox.compat.auth;
 
 import android.content.ComponentName;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.os.Bundle;
 import android.os.IBinder;
 
@@ -17,9 +19,9 @@ import top.niunaijun.blackbox.proxy.ProxyManifest;
  * Routes native sign-in activities to the real provider app installed on the
  * phone, while keeping the activity-result target inside the virtual process.
  *
- * This deliberately does not spoof package names, signatures, certificates or
- * provider responses. The external provider still sees the real host caller and
- * applies its normal security checks.
+ * Package/signature identity is never spoofed. Explicit provider intents are
+ * accepted directly; implicit intents are resolved with Android's real package
+ * manager and accepted only when the resolved app is on the trusted allowlist.
  */
 public final class ExternalAuthRouter {
     public static final String EXTRA_EXTERNAL_AUTH =
@@ -41,6 +43,7 @@ public final class ExternalAuthRouter {
             "com.google.android.gms",
             "com.google.android.play.games",
             "com.facebook.katana",
+            "com.facebook.wakizashi",
             "com.facebook.lite",
             "com.twitter.android",
             "com.twitter.android.lite",
@@ -85,6 +88,12 @@ public final class ExternalAuthRouter {
         }
 
         Intent providerIntent = new Intent(source);
+        if (providerIntent.getComponent() == null && providerIntent.getPackage() == null) {
+            // Lock an implicitly-resolved sign-in intent to the trusted provider
+            // Android selected. This prevents a second resolution from drifting
+            // to an unrelated application before startActivityForResult().
+            providerIntent.setPackage(providerPackage);
+        }
         providerIntent.putExtra(EXTRA_DIRECT_PROVIDER_DISPATCH, true);
 
         Intent bridge = new Intent();
@@ -112,11 +121,27 @@ public final class ExternalAuthRouter {
         if (intent == null) {
             return null;
         }
+
         ComponentName component = intent.getComponent();
-        String pkg = component != null ? component.getPackageName() : intent.getPackage();
-        if (pkg == null || !TRUSTED_PROVIDER_PACKAGES.contains(pkg)) {
+        String explicitPackage = component != null
+                ? component.getPackageName() : intent.getPackage();
+        if (explicitPackage != null) {
+            return TRUSTED_PROVIDER_PACKAGES.contains(explicitPackage)
+                    ? explicitPackage : null;
+        }
+
+        try {
+            PackageManager packageManager = BlackBoxCore.getContext().getPackageManager();
+            ResolveInfo resolved = packageManager.resolveActivity(
+                    new Intent(intent), PackageManager.MATCH_DEFAULT_ONLY);
+            if (resolved == null || resolved.activityInfo == null) {
+                return null;
+            }
+            String resolvedPackage = resolved.activityInfo.packageName;
+            return TRUSTED_PROVIDER_PACKAGES.contains(resolvedPackage)
+                    ? resolvedPackage : null;
+        } catch (Throwable ignored) {
             return null;
         }
-        return pkg;
     }
 }

@@ -16,7 +16,7 @@ import top.niunaijun.blackbox.utils.FileUtils;
 
 /**
  * Detects browser based OAuth launches made by a virtual/cloned application and
- * reroutes only the authentication browser step through an AndroidX Auth Tab.
+ * reroutes only the authentication browser step through an Android Auth Tab.
  *
  * The SDK never reads provider credentials, cookies, passwords, or access tokens.
  * It only carries the final redirect URI back to the virtual package that declared
@@ -41,11 +41,14 @@ public final class VirtualOAuthRouter {
             "facebook.com",
             "x.com",
             "www.x.com",
+            "mobile.x.com",
             "api.x.com",
+            "oauth.x.com",
             "twitter.com",
             "www.twitter.com",
             "mobile.twitter.com",
-            "api.twitter.com"
+            "api.twitter.com",
+            "oauth.twitter.com"
     ));
 
     private static final String[] REDIRECT_QUERY_KEYS = {
@@ -120,6 +123,7 @@ public final class VirtualOAuthRouter {
         }
         return host.endsWith(".facebook.com")
                 || host.endsWith(".google.com")
+                || host.endsWith(".googleapis.com")
                 || host.endsWith(".twitter.com")
                 || host.endsWith(".x.com");
     }
@@ -129,15 +133,7 @@ public final class VirtualOAuthRouter {
             return false;
         }
         String host = lower(uri.getHost());
-        return "x.com".equals(host)
-                || "www.x.com".equals(host)
-                || "api.x.com".equals(host)
-                || "twitter.com".equals(host)
-                || "www.twitter.com".equals(host)
-                || "mobile.twitter.com".equals(host)
-                || "api.twitter.com".equals(host)
-                || host.endsWith(".twitter.com")
-                || host.endsWith(".x.com");
+        return host.endsWith("twitter.com") || host.endsWith("x.com");
     }
 
     private static Uri extractRedirectUri(Uri authUri) {
@@ -147,9 +143,20 @@ public final class VirtualOAuthRouter {
                 if (value == null || value.trim().isEmpty()) {
                     continue;
                 }
-                Uri candidate = Uri.parse(value.trim());
+                String trimmed = value.trim();
+                Uri candidate = Uri.parse(trimmed);
                 if (candidate.getScheme() != null) {
                     return candidate;
+                }
+
+                // Some OAuth clients pre-encode redirect_uri before URL building,
+                // leaving one extra percent-encoding layer after query decoding.
+                String decoded = Uri.decode(trimmed);
+                if (!decoded.equals(trimmed)) {
+                    candidate = Uri.parse(decoded);
+                    if (candidate.getScheme() != null) {
+                        return candidate;
+                    }
                 }
             } catch (Throwable ignored) {
             }
