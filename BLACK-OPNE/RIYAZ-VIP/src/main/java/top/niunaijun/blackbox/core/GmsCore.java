@@ -37,6 +37,8 @@ public class GmsCore {
             "firebase_analytics_collection_enabled";
     private static final String GOOGLE_ANALYTICS_ADID_ENABLED =
             "google_analytics_adid_collection_enabled";
+    private static final String FIREBASE_INIT_PROVIDER =
+            "com.google.firebase.provider.FirebaseInitProvider";
     private static final String FIREBASE_COMPONENT_DISCOVERY_SERVICE =
             "com.google.firebase.components.ComponentDiscoveryService";
     private static final String FIREBASE_COMPONENT_PREFIX =
@@ -133,6 +135,16 @@ public class GmsCore {
         if (info.packageName.equals(BlackBoxCore.getHostPkg())
                 || isGoogleAppOrService(info.packageName)) {
             return info;
+        }
+
+        // FirebaseInitProvider initializes FirebaseApp before Application.onCreate,
+        // and FirebaseApp initializes Analytics for the process. On Android 16 a
+        // virtual package cannot safely initialize real GMS measurement under the
+        // host UID, so remove this automatic bootstrap. Google/Facebook/X auth is
+        // handled by the dedicated external/native auth bridge and does not depend
+        // on Firebase Analytics startup.
+        if (FIREBASE_INIT_PROVIDER.equals(info.name)) {
+            return null;
         }
         return isMeasurementComponentName(info.name) ? null : info;
     }
