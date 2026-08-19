@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import top.niunaijun.blackbox.BlackBoxCore;
+import top.niunaijun.blackbox.core.GmsCore;
 import org.lsposed.lsparanoid.Obfuscate;
 
 @Obfuscate
@@ -101,6 +102,13 @@ public class AppSystemEnv {
 
     public static boolean isOpenPackage(Intent intent) {
         if (intent == null) {
+            return false;
+        }
+        // Android 16: real GMS remains open for authentication, but measurement
+        // must not receive a virtual package identity over a real binder. Returning
+        // false here makes the existing virtual service path reject measurement
+        // cleanly while every other GMS/Facebook/X auth intent remains open.
+        if (GmsCore.isMeasurementIntent(intent)) {
             return false;
         }
         if (isOpenPackage(intent.getComponent())) {

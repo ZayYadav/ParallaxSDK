@@ -1,11 +1,13 @@
 package top.niunaijun.blackbox.core;
 
+import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ProviderInfo;
 import android.content.pm.ServiceInfo;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 
@@ -27,6 +29,7 @@ public class GmsCore {
     public static final String GMS_PKG = "com.google.android.gms";
     public static final String GSF_PKG = "com.google.android.gsf";
     public static final String VENDING_PKG = "com.android.vending";
+    public static final String GMS_DYNAMITE_AUTHORITY = "com.google.android.gms.chimera";
 
     private static final String FIREBASE_ANALYTICS_DEACTIVATED =
             "firebase_analytics_collection_deactivated";
@@ -34,6 +37,8 @@ public class GmsCore {
             "firebase_analytics_collection_enabled";
     private static final String GOOGLE_ANALYTICS_ADID_ENABLED =
             "google_analytics_adid_collection_enabled";
+    private static final String FIREBASE_INIT_PROVIDER =
+            "com.google.firebase.provider.FirebaseInitProvider";
     private static final String FIREBASE_COMPONENT_DISCOVERY_SERVICE =
             "com.google.firebase.components.ComponentDiscoveryService";
     private static final String FIREBASE_COMPONENT_PREFIX =
@@ -131,6 +136,16 @@ public class GmsCore {
                 || isGoogleAppOrService(info.packageName)) {
             return info;
         }
+
+        // FirebaseInitProvider initializes FirebaseApp before Application.onCreate,
+        // and FirebaseApp initializes Analytics for the process. On Android 16 a
+        // virtual package cannot safely initialize real GMS measurement under the
+        // host UID, so remove this automatic bootstrap. Google/Facebook/X auth is
+        // handled by the dedicated external/native auth bridge and does not depend
+        // on Firebase Analytics startup.
+        if (FIREBASE_INIT_PROVIDER.equals(info.name)) {
+            return null;
+        }
         return isMeasurementComponentName(info.name) ? null : info;
     }
 
@@ -145,14 +160,67 @@ public class GmsCore {
         return isMeasurementComponentName(info.name) ? null : info;
     }
 
+    /**
+     * Runtime guard for Android 16. A virtual package runs under the host UID, so
+     * Play Services measurement must not receive a virtual package identity over
+     * a real system/GMS binder. Authentication services are intentionally not
+     * matched here.
+     */
+    public static boolean isMeasurementIntent(Intent intent) {
+        if (intent == null || Build.VERSION.SDK_INT < 36) {
+            return false;
+        }
+
+        ComponentName component = intent.getComponent();
+        if (component != null && isMeasurementComponentName(component.getClassName())) {
+            return true;
+        }
+
+        String action = intent.getAction();
+        if (action == null) {
+            return false;
+        }
+        String lower = action.toLowerCase(Locale.US);
+        if (!isMeasurementName(lower)) {
+            return false;
+        }
+
+        String targetPackage = component != null ? component.getPackageName() : intent.getPackage();
+        return targetPackage == null
+                || GMS_PKG.equals(targetPackage)
+                || action.startsWith("com.google.android.gms.measurement");
+    }
+
+    /**
+     * Dynamite uses the GMS chimera provider to discover modules. Returning an
+     * empty result for the measurement module prevents explicit analytics calls
+     * from re-loading measurement after manifest components were removed, while
+     * leaving every other Dynamite module (including auth-related modules) alone.
+     */
+    public static boolean isMeasurementDynamiteUri(Uri uri) {
+        if (uri == null || Build.VERSION.SDK_INT < 36
+                || !GMS_DYNAMITE_AUTHORITY.equals(uri.getAuthority())) {
+            return false;
+        }
+        String lower = uri.toString().toLowerCase(Locale.US);
+        return lower.contains("measurementdynamite")
+                || lower.contains("/measurement")
+                || lower.contains("firebaseanalytics")
+                || lower.contains("appmeasurement");
+    }
+
     private static boolean isMeasurementComponentName(String name) {
         if (name == null) {
             return false;
         }
-        String lower = name.toLowerCase(Locale.US);
+        return isMeasurementName(name.toLowerCase(Locale.US));
+    }
+
+    private static boolean isMeasurementName(String lower) {
         return lower.startsWith("com.google.android.gms.measurement.")
                 || lower.contains("appmeasurement")
-                || lower.contains("firebaseanalytics");
+                || lower.contains("firebaseanalytics")
+                || lower.contains("measurementdynamite");
     }
 
     public static boolean setGoogleAppOrService(String pkg) {

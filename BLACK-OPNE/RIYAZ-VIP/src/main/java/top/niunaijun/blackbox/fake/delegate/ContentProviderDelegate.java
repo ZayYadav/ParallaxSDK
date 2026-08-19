@@ -1,5 +1,6 @@
 package top.niunaijun.blackbox.fake.delegate;
 
+import android.content.ContentProviderClient;
 import android.net.Uri;
 import android.os.Build;
 import android.os.IInterface;
@@ -20,21 +21,20 @@ import black.android.providers.BRSettingsNameValueCacheOreo;
 import black.android.providers.BRSettingsSecure;
 import black.android.providers.BRSettingsSystem;
 import top.niunaijun.blackbox.BlackBoxCore;
+import top.niunaijun.blackbox.core.GmsCore;
 import top.niunaijun.blackbox.fake.service.context.providers.ContentProviderStub;
+import top.niunaijun.blackbox.fake.service.context.providers.GmsDynamiteProviderStub;
 import top.niunaijun.blackbox.fake.service.context.providers.SystemProviderStub;
 import top.niunaijun.blackbox.utils.compat.BuildCompat;
 
-/**
- * Created by @RIYAZXERO on 3/31/21.
- * * ∧＿∧
- * (`･ω･∥
- * 丶　つ０
- * しーＪ
- * 此处无Bug
- */
+/** Created by @RIYAZXERO on 3/31/21. */
 public class ContentProviderDelegate {
     public static final String TAG = "ContentProviderDelegate";
-    private static Set<String> sInjected = new HashSet<>();
+    private static final Set<String> sInjected = new HashSet<>();
+
+    // Keep one stable reference for the process lifetime so ActivityThread keeps
+    // the wrapped GMS chimera provider cached after we install the proxy.
+    private static volatile ContentProviderClient sGmsDynamiteClient;
 
     public static void update(Object holder, String auth) {
         IInterface iInterface;
@@ -44,16 +44,19 @@ public class ContentProviderDelegate {
             iInterface = BRIActivityManagerContentProviderHolder.get(holder).provider();
         }
 
-        if (iInterface instanceof Proxy)
+        if (iInterface == null || iInterface instanceof Proxy) {
             return;
+        }
         IInterface bContentProvider;
-        switch (auth) {
-            case "settings":
-                bContentProvider = new SystemProviderStub().wrapper(iInterface, BlackBoxCore.getHostPkg());
-                break;
-            default:
-                bContentProvider = new ContentProviderStub().wrapper(iInterface, BlackBoxCore.getHostPkg());
-                break;
+        if (GmsCore.GMS_DYNAMITE_AUTHORITY.equals(auth)) {
+            bContentProvider = new GmsDynamiteProviderStub()
+                    .wrapper(iInterface, BlackBoxCore.getHostPkg());
+        } else if ("settings".equals(auth)) {
+            bContentProvider = new SystemProviderStub()
+                    .wrapper(iInterface, BlackBoxCore.getHostPkg());
+        } else {
+            bContentProvider = new ContentProviderStub()
+                    .wrapper(iInterface, BlackBoxCore.getHostPkg());
         }
         if (BuildCompat.isOreo()) {
             BRContentProviderHolderOreo.get(holder)._set_provider(bContentProvider);
@@ -65,9 +68,27 @@ public class ContentProviderDelegate {
     public static void init() {
         clearSettingProvider();
 
-        BlackBoxCore.getContext().getContentResolver().call(Uri.parse("content://settings"), "", null, null);
+        BlackBoxCore.getContext().getContentResolver().call(
+                Uri.parse("content://settings"), "", null, null);
+
+        // FirebaseInitProvider is removed from Android 16 virtual packages before
+        // this point. Prime GMS Dynamite now, under the real host identity, so the
+        // provider exists in ActivityThread's cache and can be wrapped before the
+        // virtual Application.onCreate/UE4 startup can explicitly request Analytics.
+        if (Build.VERSION.SDK_INT >= 36 && sGmsDynamiteClient == null) {
+            try {
+                sGmsDynamiteClient = BlackBoxCore.getContext()
+                        .getContentResolver()
+                        .acquireContentProviderClient(GmsCore.GMS_DYNAMITE_AUTHORITY);
+            } catch (Throwable ignored) {
+                // Play Services may be absent on some devices. Auth/browser paths
+                // continue without making provider setup fatal.
+            }
+        }
+
         Object activityThread = BlackBoxCore.mainThread();
-        ArrayMap<Object, Object> map = (ArrayMap<Object, Object>) BRActivityThread.get(activityThread).mProviderMap();
+        ArrayMap<Object, Object> map = (ArrayMap<Object, Object>)
+                BRActivityThread.get(activityThread).mProviderMap();
 
         for (Object value : map.values()) {
             String[] mNames = BRActivityThreadProviderClientRecordP.get(value).mNames();
@@ -75,12 +96,21 @@ public class ContentProviderDelegate {
                 continue;
             }
             String providerName = mNames[0];
-            if (!sInjected.contains(providerName)) {
-                sInjected.add(providerName);
-                final IInterface iInterface = BRActivityThreadProviderClientRecordP.get(value).mProvider();
-                BRActivityThreadProviderClientRecordP.get(value)._set_mProvider(new ContentProviderStub().wrapper(iInterface, BlackBoxCore.getHostPkg()));
-                BRActivityThreadProviderClientRecordP.get(value)._set_mNames(new String[]{providerName});
+            if (sInjected.contains(providerName)) {
+                continue;
             }
+
+            sInjected.add(providerName);
+            final IInterface iInterface = BRActivityThreadProviderClientRecordP.get(value).mProvider();
+            if (iInterface == null || iInterface instanceof Proxy) {
+                continue;
+            }
+
+            IInterface wrapper = GmsCore.GMS_DYNAMITE_AUTHORITY.equals(providerName)
+                    ? new GmsDynamiteProviderStub().wrapper(iInterface, BlackBoxCore.getHostPkg())
+                    : new ContentProviderStub().wrapper(iInterface, BlackBoxCore.getHostPkg());
+            BRActivityThreadProviderClientRecordP.get(value)._set_mProvider(wrapper);
+            BRActivityThreadProviderClientRecordP.get(value)._set_mNames(new String[]{providerName});
         }
     }
 
