@@ -36,11 +36,6 @@ import top.niunaijun.blackbox.utils.compat.BuildCompat;
 
 /**
  * Created by Milk on 4/15/21.
- * * ∧＿∧
- * (`･ω･∥
- * 丶　つ０
- * しーＪ
- * 此处无Bug
  */
 @SuppressLint({"SdCardPath", "NewApi"})
 public class PackageManagerCompat {
@@ -106,7 +101,10 @@ public class PackageManagerCompat {
                 final ActivityInfo[] res = new ActivityInfo[N];
                 for (int i = 0; i < N; i++) {
                     final BPackage.Activity a = p.activities.get(i);
-                    res[num++] = generateActivityInfo(a, flags, state, userId);
+                    ActivityInfo activityInfo = generateActivityInfo(a, flags, state, userId);
+                    if (activityInfo != null) {
+                        res[num++] = activityInfo;
+                    }
                 }
                 pi.activities = ArrayUtils.trimToSize(res, num);
             }
@@ -119,7 +117,10 @@ public class PackageManagerCompat {
                 final ActivityInfo[] res = new ActivityInfo[N];
                 for (int i = 0; i < N; i++) {
                     final BPackage.Activity a = p.receivers.get(i);
-                    res[num++] = generateActivityInfo(a, flags, state, userId);
+                    ActivityInfo receiverInfo = generateActivityInfo(a, flags, state, userId);
+                    if (receiverInfo != null) {
+                        res[num++] = receiverInfo;
+                    }
                 }
                 pi.receivers = ArrayUtils.trimToSize(res, num);
             }
@@ -221,7 +222,7 @@ public class PackageManagerCompat {
         ai.metaData = a.metaData;
         ai.processName = BPackageManagerService.fixProcessName(ai.packageName, ai.processName);
         ai.applicationInfo = generateApplicationInfo(a.owner, flags, state, userId);
-        return ai;
+        return GmsCore.applyGeneratedVirtualActivityGmsSafety(ai);
     }
 
     public static ServiceInfo generateServiceInfo(BPackage.Service s, int flags, BPackageUserState state, int userId) {
@@ -247,7 +248,7 @@ public class PackageManagerCompat {
             pi.uriPermissionPatterns = null;
         }
         pi.applicationInfo = generateApplicationInfo(p.owner, flags, state, userId);
-        return pi;
+        return GmsCore.applyGeneratedVirtualProviderGmsSafety(pi);
     }
 
     public static PermissionInfo generatePermissionInfo(BPackage.Permission p, int flags) {
@@ -289,11 +290,6 @@ public class PackageManagerCompat {
             ai.metaData = p.mAppMetaData;
         }
 
-        // Apply Android 16 Firebase/measurement compatibility at the virtual
-        // PackageManager source, before Application/ContentProvider startup. This
-        // is intentionally done even when GET_META_DATA was not requested so the
-        // initial LoadedApk/ApplicationInfo cannot start measurement with a stale
-        // virtual package identity.
         GmsCore.applyGeneratedVirtualAppGmsSafety(ai);
 
         ai.dataDir = BEnvironment.getDataDir(ai.packageName, userId).getAbsolutePath();
