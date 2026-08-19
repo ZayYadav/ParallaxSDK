@@ -10,6 +10,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import top.niunaijun.blackbox.BlackBoxCore;
+import top.niunaijun.blackbox.app.BActivityThread;
 import top.niunaijun.blackbox.entity.pm.InstallResult;
 import top.niunaijun.blackbox.utils.auth.Auth;
 import org.lsposed.lsparanoid.Obfuscate;
@@ -59,15 +60,17 @@ public class GmsCore {
     }
 
     /**
-     * Adds only compatibility metadata to virtual application info returned to
-     * code running inside the virtual process. This does not alter the APK on
-     * disk and does not spoof package/signing identity.
+     * Adds only compatibility metadata to the currently running virtual app.
+     * This does not alter the APK on disk and does not spoof package/signing
+     * identity or change metadata for unrelated queried packages.
      */
     public static ApplicationInfo applyVirtualAppGmsSafety(ApplicationInfo info) {
-        if (info == null || info.packageName == null) {
+        if (info == null || info.packageName == null || Build.VERSION.SDK_INT < 36) {
             return info;
         }
-        if (Build.VERSION.SDK_INT < 36) {
+
+        String virtualPackage = BActivityThread.getAppPackageName();
+        if (virtualPackage == null || !virtualPackage.equals(info.packageName)) {
             return info;
         }
         if (info.packageName.equals(BlackBoxCore.getHostPkg())
