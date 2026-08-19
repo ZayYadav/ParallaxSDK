@@ -199,11 +199,19 @@ public class ActivityManagerCommonProxy {
     public static class BindServiceCompat extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            if (args == null || args.length <= 4 || !(args[2] instanceof Intent)) {
+            if (args == null) {
                 return method.invoke(who, args);
             }
 
-            Intent intent = (Intent) args[2];
+            // Android has changed bindService signatures multiple times. Locate
+            // the Intent/connection by type instead of assuming fixed slots for
+            // every Android 10-16/OEM variant.
+            int intentIndex = MethodParameterUtils.getIndex(args, Intent.class);
+            if (intentIndex < 0) {
+                return method.invoke(who, args);
+            }
+            Intent intent = (Intent) args[intentIndex];
+
             if (AppSystemEnv.isOpenPackage(intent)) {
                 intent.removeExtra("_G_|_UserId");
                 MethodParameterUtils.replaceAllAppPkg(args);
@@ -211,9 +219,17 @@ public class ActivityManagerCommonProxy {
                 return method.invoke(who, args);
             }
 
-            String resolvedType = args[3] instanceof String ? (String) args[3] : null;
-            IServiceConnection connection = args[4] instanceof IServiceConnection
-                    ? (IServiceConnection) args[4] : null;
+            int connectionIndex = MethodParameterUtils.getIndex(args, IServiceConnection.class);
+            if (connectionIndex < 0) {
+                return method.invoke(who, args);
+            }
+
+            String resolvedType = null;
+            int resolvedTypeIndex = intentIndex + 1;
+            if (resolvedTypeIndex < args.length && args[resolvedTypeIndex] instanceof String) {
+                resolvedType = (String) args[resolvedTypeIndex];
+            }
+            IServiceConnection connection = (IServiceConnection) args[connectionIndex];
 
             int userId = intent.getIntExtra("_G_|_UserId", -1);
             userId = userId == -1 ? BActivityThread.getUserId() : userId;
@@ -236,7 +252,7 @@ public class ActivityManagerCommonProxy {
                             resolveInfo.serviceInfo.name));
                 }
                 IServiceConnection proxy = ServiceConnectionDelegate.createProxy(connection, intent);
-                args[4] = proxy;
+                args[connectionIndex] = proxy;
 
                 WeakReference<?> weakReference =
                         BRLoadedApkServiceDispatcherInnerConnection.get(connection).mDispatcher();
@@ -246,7 +262,7 @@ public class ActivityManagerCommonProxy {
             }
 
             if (bindService != null) {
-                args[2] = bindService;
+                args[intentIndex] = bindService;
                 return method.invoke(who, args);
             }
             return 0;
