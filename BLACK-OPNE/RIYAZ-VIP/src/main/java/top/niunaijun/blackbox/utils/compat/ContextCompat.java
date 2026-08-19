@@ -66,6 +66,11 @@ public class ContextCompat {
             BRContextImplKitkat.get(context)._set_mOpPackageName(hostPackage);
             BRContentResolver.get(context.getContentResolver())._set_mPackageName(hostPackage);
 
+            // Android 16: keep non-essential Google measurement from sending a
+            // virtual package name to real Play Services. The wrapper delegates
+            // every normal PM operation and only augments returned metadata.
+            VirtualPackageMetadataCompat.install(context);
+
             if (BuildCompat.isS()) {
                 fixAttributionSourceState(BRContextImpl.get(context).getAttributionSource(), hostUid);
             }
