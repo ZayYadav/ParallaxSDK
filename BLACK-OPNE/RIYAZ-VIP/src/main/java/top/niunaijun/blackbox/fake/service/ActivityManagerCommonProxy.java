@@ -30,6 +30,7 @@ import top.niunaijun.blackbox.utils.FileUtils;
 import top.niunaijun.blackbox.utils.MethodParameterUtils;
 import top.niunaijun.blackbox.utils.Slog;
 import top.niunaijun.blackbox.utils.compat.BuildCompat;
+import top.niunaijun.blackbox.utils.compat.ContextCompat;
 import top.niunaijun.blackbox.utils.compat.StartActivityCompat;
 import org.lsposed.lsparanoid.Obfuscate;
 
@@ -192,33 +193,40 @@ public class ActivityManagerCommonProxy {
     /**
      * Registered after IActivityManagerProxy's own bind hooks via @ScanClass, so
      * this compatibility hook becomes authoritative for all bindService variants.
-     * Real auth providers are handed to Android with the real caller package/user.
-     * Their IServiceConnection is wrapped only to normalize GMS broker requests;
-     * virtual services keep the original BlackBox binding path.
+     * Android has changed these signatures repeatedly, so arguments are located
+     * by type instead of assuming fixed slots. Real auth providers are handed to
+     * Android with the real caller package/user and their IServiceConnection is
+     * wrapped to normalize real GMS broker requests.
      */
     @ProxyMethods({"bindService", "bindServiceInstance", "bindIsolatedService"})
     public static class BindServiceCompat extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            if (args == null || args.length <= 4 || !(args[2] instanceof Intent)) {
+            if (args == null) {
                 return method.invoke(who, args);
             }
 
-            Intent intent = (Intent) args[2];
+            int intentIndex = MethodParameterUtils.getIndex(args, Intent.class);
+            if (intentIndex < 0) {
+                return method.invoke(who, args);
+            }
+            Intent intent = (Intent) args[intentIndex];
+
+            int connectionIndex = MethodParameterUtils.getIndex(args, IServiceConnection.class);
+            IServiceConnection connection = connectionIndex < 0
+                    ? null : (IServiceConnection) args[connectionIndex];
+
             if (AppSystemEnv.isOpenPackage(intent)) {
-                IServiceConnection connection = args[4] instanceof IServiceConnection
-                        ? (IServiceConnection) args[4] : null;
+                // Refresh the outbound Context right at the provider boundary.
+                // This is best-effort and keeps Android 16 package/UID attribution
+                // paired even when a provider client cached Context state earlier.
+                ContextCompat.fix(BActivityThread.getApplication());
+
                 if (connection != null) {
                     IServiceConnection proxy =
                             ExternalAuthServiceConnectionDelegate.createProxy(connection);
-                    args[4] = proxy;
-
-                    WeakReference<?> weakReference =
-                            BRLoadedApkServiceDispatcherInnerConnection.get(connection).mDispatcher();
-                    if (weakReference != null && weakReference.get() != null) {
-                        BRLoadedApkServiceDispatcher.get(weakReference.get())
-                                ._set_mConnection(proxy);
-                    }
+                    args[connectionIndex] = proxy;
+                    replaceLoadedApkConnection(connection, proxy);
                 }
 
                 intent.removeExtra("_G_|_UserId");
@@ -227,9 +235,15 @@ public class ActivityManagerCommonProxy {
                 return method.invoke(who, args);
             }
 
-            String resolvedType = args[3] instanceof String ? (String) args[3] : null;
-            IServiceConnection connection = args[4] instanceof IServiceConnection
-                    ? (IServiceConnection) args[4] : null;
+            if (connectionIndex < 0) {
+                return method.invoke(who, args);
+            }
+
+            String resolvedType = null;
+            int resolvedTypeIndex = intentIndex + 1;
+            if (resolvedTypeIndex < args.length && args[resolvedTypeIndex] instanceof String) {
+                resolvedType = (String) args[resolvedTypeIndex];
+            }
 
             int userId = intent.getIntExtra("_G_|_UserId", -1);
             userId = userId == -1 ? BActivityThread.getUserId() : userId;
@@ -252,20 +266,32 @@ public class ActivityManagerCommonProxy {
                             resolveInfo.serviceInfo.name));
                 }
                 IServiceConnection proxy = ServiceConnectionDelegate.createProxy(connection, intent);
-                args[4] = proxy;
-
-                WeakReference<?> weakReference =
-                        BRLoadedApkServiceDispatcherInnerConnection.get(connection).mDispatcher();
-                if (weakReference != null) {
-                    BRLoadedApkServiceDispatcher.get(weakReference.get())._set_mConnection(proxy);
-                }
+                args[connectionIndex] = proxy;
+                replaceLoadedApkConnection(connection, proxy);
             }
 
             if (bindService != null) {
-                args[2] = bindService;
+                args[intentIndex] = bindService;
                 return method.invoke(who, args);
             }
             return 0;
+        }
+
+        private static void replaceLoadedApkConnection(
+                IServiceConnection original, IServiceConnection proxy) {
+            if (original == null || proxy == null) {
+                return;
+            }
+            try {
+                WeakReference<?> weakReference =
+                        BRLoadedApkServiceDispatcherInnerConnection.get(original).mDispatcher();
+                if (weakReference != null && weakReference.get() != null) {
+                    BRLoadedApkServiceDispatcher.get(weakReference.get())._set_mConnection(proxy);
+                }
+            } catch (Throwable ignored) {
+                // OEM framework internals can vary; the actual system bind still
+                // receives the proxy even when this local dispatcher field differs.
+            }
         }
     }
 
