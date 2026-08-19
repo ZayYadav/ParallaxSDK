@@ -29,6 +29,7 @@ import top.niunaijun.blackbox.utils.FileUtils;
 import top.niunaijun.blackbox.utils.MethodParameterUtils;
 import top.niunaijun.blackbox.utils.Slog;
 import top.niunaijun.blackbox.utils.compat.BuildCompat;
+import top.niunaijun.blackbox.utils.compat.ContextCompat;
 import top.niunaijun.blackbox.utils.compat.StartActivityCompat;
 import org.lsposed.lsparanoid.Obfuscate;
 
@@ -213,6 +214,11 @@ public class ActivityManagerCommonProxy {
             Intent intent = (Intent) args[intentIndex];
 
             if (AppSystemEnv.isOpenPackage(intent)) {
+                // GMS/Facebook/X clients can cache the Context package identity
+                // before this Binder call is made. Refresh the real outbound
+                // Context identity immediately before handing the service bind to
+                // Android so package/UID attribution remains paired on Android 16.
+                ContextCompat.fix(BActivityThread.getApplication());
                 intent.removeExtra("_G_|_UserId");
                 MethodParameterUtils.replaceAllAppPkg(args);
                 MethodParameterUtils.replaceLastUserId(args);
