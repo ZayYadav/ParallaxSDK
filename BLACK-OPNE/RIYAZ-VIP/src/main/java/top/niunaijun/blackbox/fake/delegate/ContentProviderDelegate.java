@@ -1,6 +1,8 @@
 package top.niunaijun.blackbox.fake.delegate;
 
+import android.content.ContentProviderClient;
 import android.net.Uri;
+import android.os.Build;
 import android.os.IInterface;
 import android.util.ArrayMap;
 
@@ -29,6 +31,10 @@ import top.niunaijun.blackbox.utils.compat.BuildCompat;
 public class ContentProviderDelegate {
     public static final String TAG = "ContentProviderDelegate";
     private static final Set<String> sInjected = new HashSet<>();
+
+    // Keep one stable reference for the process lifetime so ActivityThread keeps
+    // the wrapped GMS chimera provider cached after we install the proxy.
+    private static volatile ContentProviderClient sGmsDynamiteClient;
 
     public static void update(Object holder, String auth) {
         IInterface iInterface;
@@ -64,6 +70,22 @@ public class ContentProviderDelegate {
 
         BlackBoxCore.getContext().getContentResolver().call(
                 Uri.parse("content://settings"), "", null, null);
+
+        // FirebaseInitProvider is removed from Android 16 virtual packages before
+        // this point. Prime GMS Dynamite now, under the real host identity, so the
+        // provider exists in ActivityThread's cache and can be wrapped before the
+        // virtual Application.onCreate/UE4 startup can explicitly request Analytics.
+        if (Build.VERSION.SDK_INT >= 36 && sGmsDynamiteClient == null) {
+            try {
+                sGmsDynamiteClient = BlackBoxCore.getContext()
+                        .getContentResolver()
+                        .acquireContentProviderClient(GmsCore.GMS_DYNAMITE_AUTHORITY);
+            } catch (Throwable ignored) {
+                // Play Services may be absent on some devices. Auth/browser paths
+                // continue without making provider setup fatal.
+            }
+        }
+
         Object activityThread = BlackBoxCore.mainThread();
         ArrayMap<Object, Object> map = (ArrayMap<Object, Object>)
                 BRActivityThread.get(activityThread).mProviderMap();
