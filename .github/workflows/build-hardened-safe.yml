@@ -107,10 +107,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ] \
-            || [ -z "${STORE_PASSWORD:-}" ] \
-            || [ -z "${KEY_ALIAS:-}" ] \
-            || [ -z "${KEY_PASSWORD:-}" ]; then
+          if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ] || [ -z "${STORE_PASSWORD:-}" ] || [ -z "${KEY_ALIAS:-}" ] || [ -z "${KEY_PASSWORD:-}" ]; then
             echo 'Production signing secrets are required for the hardened protected workflow.' >&2
             exit 1
           fi
@@ -160,7 +157,7 @@ jobs:
     with:
       source_artifact: loader-hardened-safe-apk
       output_artifact: loader-hardened-dpt-protected-apk
-      dpt_ref: 27848a9030e24ea4ff4cdf8558dd55f1bf93ed66
+      dpt_ref: c900062876b1844b6ab9b0aa1cc9af6c07e2cf0d
       smaller: true
     secrets:
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
