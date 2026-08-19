@@ -18,6 +18,7 @@ import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.BActivityThread;
 import top.niunaijun.blackbox.compat.auth.ExternalAuthRouter;
 import top.niunaijun.blackbox.compat.oauth.VirtualOAuthRouter;
+import top.niunaijun.blackbox.core.GmsCore;
 import top.niunaijun.blackbox.core.env.AppSystemEnv;
 import top.niunaijun.blackbox.fake.delegate.ServiceConnectionDelegate;
 import top.niunaijun.blackbox.fake.hook.MethodHook;
@@ -192,9 +193,8 @@ public class ActivityManagerCommonProxy {
     /**
      * Registered after IActivityManagerProxy's own bind hooks via @ScanClass, so
      * this compatibility hook becomes authoritative for all bindService variants.
-     * Real auth providers are handed to Android unchanged (apart from correcting
-     * the real caller package/user); virtual services keep the original BlackBox
-     * binding path.
+     * Real auth providers are handed to Android with the real caller identity;
+     * virtual services keep the original BlackBox binding path.
      */
     @ProxyMethods({"bindService", "bindServiceInstance", "bindIsolatedService"})
     public static class BindServiceCompat extends MethodHook {
@@ -212,20 +212,31 @@ public class ActivityManagerCommonProxy {
                 return method.invoke(who, args);
             }
             Intent intent = (Intent) args[intentIndex];
+            int connectionIndex = MethodParameterUtils.getIndex(args, IServiceConnection.class);
+            IServiceConnection connection = connectionIndex < 0
+                    ? null : (IServiceConnection) args[connectionIndex];
 
             if (AppSystemEnv.isOpenPackage(intent)) {
-                // GMS/Facebook/X clients can cache the Context package identity
-                // before this Binder call is made. Refresh the real outbound
-                // Context identity immediately before handing the service bind to
-                // Android so package/UID attribution remains paired on Android 16.
+                // Provider clients may cache Context identity before the Binder
+                // request. Refresh the true outbound host identity right before
+                // crossing into Android / the real provider process.
                 ContextCompat.fix(BActivityThread.getApplication());
                 intent.removeExtra("_G_|_UserId");
                 MethodParameterUtils.replaceAllAppPkg(args);
                 MethodParameterUtils.replaceLastUserId(args);
+
+                // Real GMS returns IGmsServiceBroker through this connection. Wrap
+                // only that broker callback so GetServiceRequest carries the real
+                // Loader package paired with the real Binder UID on Android 16.
+                // OAuth client IDs, tokens, scopes and signatures are untouched.
+                if (connection != null && isRealGmsBind(intent)) {
+                    IServiceConnection proxy = ServiceConnectionDelegate.createProxy(connection, intent);
+                    args[connectionIndex] = proxy;
+                    replaceLoadedApkConnection(connection, proxy);
+                }
                 return method.invoke(who, args);
             }
 
-            int connectionIndex = MethodParameterUtils.getIndex(args, IServiceConnection.class);
             if (connectionIndex < 0) {
                 return method.invoke(who, args);
             }
@@ -235,7 +246,6 @@ public class ActivityManagerCommonProxy {
             if (resolvedTypeIndex < args.length && args[resolvedTypeIndex] instanceof String) {
                 resolvedType = (String) args[resolvedTypeIndex];
             }
-            IServiceConnection connection = (IServiceConnection) args[connectionIndex];
 
             int userId = intent.getIntExtra("_G_|_UserId", -1);
             userId = userId == -1 ? BActivityThread.getUserId() : userId;
@@ -259,12 +269,7 @@ public class ActivityManagerCommonProxy {
                 }
                 IServiceConnection proxy = ServiceConnectionDelegate.createProxy(connection, intent);
                 args[connectionIndex] = proxy;
-
-                WeakReference<?> weakReference =
-                        BRLoadedApkServiceDispatcherInnerConnection.get(connection).mDispatcher();
-                if (weakReference != null) {
-                    BRLoadedApkServiceDispatcher.get(weakReference.get())._set_mConnection(proxy);
-                }
+                replaceLoadedApkConnection(connection, proxy);
             }
 
             if (bindService != null) {
@@ -272,6 +277,38 @@ public class ActivityManagerCommonProxy {
                 return method.invoke(who, args);
             }
             return 0;
+        }
+
+        private static boolean isRealGmsBind(Intent intent) {
+            if (intent == null) {
+                return false;
+            }
+            ComponentName component = intent.getComponent();
+            if (component != null && GmsCore.GMS_PKG.equals(component.getPackageName())) {
+                return true;
+            }
+            if (GmsCore.GMS_PKG.equals(intent.getPackage())) {
+                return true;
+            }
+            return GmsCore.isGmsIntent(intent);
+        }
+
+        private static void replaceLoadedApkConnection(
+                IServiceConnection original, IServiceConnection proxy) {
+            if (original == null || proxy == null) {
+                return;
+            }
+            try {
+                WeakReference<?> weakReference =
+                        BRLoadedApkServiceDispatcherInnerConnection.get(original).mDispatcher();
+                if (weakReference != null && weakReference.get() != null) {
+                    BRLoadedApkServiceDispatcher.get(weakReference.get())._set_mConnection(proxy);
+                }
+            } catch (Throwable ignored) {
+                // OEM framework internals can differ. The system still receives
+                // the proxy connection even if this local dispatcher field cannot
+                // be updated.
+            }
         }
     }
 
