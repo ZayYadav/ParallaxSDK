@@ -14,7 +14,7 @@ Java_com_onecore_loader_libhelper_DownloadZip_PASSJKPAPA(JNIEnv *env, jobject th
 extern "C"
 JNIEXPORT jstring JNICALL
 Java_com_onecore_loader_activity_MainActivity_FixCrash(JNIEnv *env, jobject thiz) {
-    return env->NewStringUTF(OBFUSCATE("https://github.com/ZayYadav/ParallaxCheats/raw/refs/heads/main/JANGAM.zip"));
+    return env->NewStringUTF(OBFUSCATE("https://github.com/ZayYadav/Parallaxapp/raw/refs/heads/main/JANGAM.zip"));
 }
 
 extern "C"
