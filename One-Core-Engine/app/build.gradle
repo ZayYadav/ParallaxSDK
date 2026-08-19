@@ -22,8 +22,9 @@ def oneCoreAllowedSigningSha256 = providers.gradleProperty('onecoreAllowedSignin
         .orElse(System.getenv('ONECORE_ALLOWED_SIGNING_SHA256') ?: '')
         .get()
 def javaString = { String value -> '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"' }
-def releaseTaskRequested = gradle.startParameter.taskNames.any {
-    it.toLowerCase(Locale.ROOT).contains('release')
+def protectedTaskRequested = gradle.startParameter.taskNames.any {
+    String taskName = it.toLowerCase(Locale.ROOT)
+    taskName.contains('release') || taskName.contains('hardened')
 }
 
 def resolveVerifiedLeafTlsPin = { String host ->
@@ -48,11 +49,10 @@ def resolveVerifiedLeafTlsPin = { String host ->
     }
 }
 
-// GitHub release artifacts must never become unusable merely because the leaf certificate
+// GitHub protected artifacts must never become unusable merely because the leaf certificate
 // rotated while the repository variable still contains the previous pin. During Actions builds,
 // resolve the live leaf SPKI only through the JVM's normal CA + hostname verification and append
-// it to the configured rotation set. Runtime OkHttp pinning remains enabled; this only refreshes
-// the build-time pin set from a certificate that the standard TLS stack already authenticated.
+// it to the configured rotation set. Runtime OkHttp pinning remains enabled.
 if ('true'.equalsIgnoreCase(System.getenv('GITHUB_ACTIONS'))
         && parallaxApiPublicKey != null && !parallaxApiPublicKey.trim().isEmpty()
         && parallaxTlsPins != null && !parallaxTlsPins.trim().isEmpty()) {
@@ -75,19 +75,19 @@ if ('true'.equalsIgnoreCase(System.getenv('GITHUB_ACTIONS'))
     }
 }
 
-if (releaseTaskRequested) {
+if (protectedTaskRequested) {
     byte[] publicKeyDer
     try {
         publicKeyDer = Base64.decoder.decode(parallaxApiPublicKey)
     } catch (IllegalArgumentException error) {
-        throw new GradleException('PARALLAX_API_PUBLIC_KEY_B64 is invalid for release builds', error)
+        throw new GradleException('PARALLAX_API_PUBLIC_KEY_B64 is invalid for protected builds', error)
     }
     if (publicKeyDer.length < 256 || publicKeyDer.length > 1024) {
         throw new GradleException('PARALLAX_API_PUBLIC_KEY_B64 has an invalid DER size')
     }
     def configuredPins = parallaxTlsPins.split(',', -1).collect { it.trim() }
     if (configuredPins.isEmpty() || configuredPins.any { !(it ==~ /^sha256\/[A-Za-z0-9+\/]{43}=$/) }) {
-        throw new GradleException('PARALLAX_TLS_PINS must contain valid SHA-256 pins for release builds')
+        throw new GradleException('PARALLAX_TLS_PINS must contain valid SHA-256 pins for protected builds')
     }
 }
 
@@ -155,19 +155,38 @@ android {
             signingConfig signingConfigs.debug
             def debugSigningSha256 = oneCoreAllowedSigningSha256 ?: getSigningCertificateSha256(signingConfigs.debug)
             buildConfigField "String", "EXPECTED_SIGNATURE_SHA256", javaString(debugSigningSha256)
+            buildConfigField "boolean", "HARDENED_SAFE_MODE", "false"
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
 
         release {
             debuggable false
             jniDebuggable false
-            // Temporary stability mode: keep bytecode untouched while diagnosing startup VerifyError.
+            // Keep the existing release path stable; hardened is the optimized distribution variant.
             shrinkResources false
             minifyEnabled false
             signingConfig signingConfigs.release
             def releaseSigningSha256 = oneCoreAllowedSigningSha256 ?: getSigningCertificateSha256(signingConfigs.release)
             buildConfigField "String", "EXPECTED_SIGNATURE_SHA256", javaString(releaseSigningSha256)
+            buildConfigField "boolean", "HARDENED_SAFE_MODE", "false"
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+
+        hardened {
+            initWith release
+            matchingFallbacks = ['release']
+            debuggable false
+            jniDebuggable false
+            minifyEnabled true
+            shrinkResources true
+            signingConfig signingConfigs.release
+            versionNameSuffix "-hardened"
+            def hardenedSigningSha256 = oneCoreAllowedSigningSha256 ?: getSigningCertificateSha256(signingConfigs.release)
+            buildConfigField "String", "EXPECTED_SIGNATURE_SHA256", javaString(hardenedSigningSha256)
+            buildConfigField "boolean", "HARDENED_SAFE_MODE", "true"
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
+                    'proguard-rules.pro',
+                    'proguard-hardened.pro'
         }
     }
 
@@ -190,7 +209,17 @@ android {
 
     packaging {
         jniLibs {
+            // Compressed legacy JNI packaging keeps the single APK smaller.
             useLegacyPackaging true
+        }
+        resources {
+            excludes += [
+                    'META-INF/AL2.0',
+                    'META-INF/LGPL2.1',
+                    'META-INF/LICENSE*',
+                    'META-INF/NOTICE*',
+                    'META-INF/DEPENDENCIES'
+            ]
         }
     }
 
@@ -206,8 +235,6 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.1'
     implementation 'com.google.android.material:material:1.14.0'
     implementation 'net.lingala.zip4j:zip4j:2.11.5'
-    implementation "androidx.work:work-runtime:2.11.2"
-    implementation 'androidx.profileinstaller:profileinstaller:1.4.1'
     implementation "com.github.topjohnwu.libsu:core:3.1.1"
     implementation 'io.github.molihuan:pathselector:1.1.16'
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
