@@ -26,6 +26,7 @@ import black.android.content.pm.BRPackageParserSigningDetails;
 import black.android.content.pm.BRSigningInfo;
 import black.android.content.res.BRAssetManager;
 import top.niunaijun.blackbox.BlackBoxCore;
+import top.niunaijun.blackbox.core.GmsCore;
 import top.niunaijun.blackbox.core.env.AppSystemEnv;
 import top.niunaijun.blackbox.core.env.BEnvironment;
 import top.niunaijun.blackbox.entity.pm.InstallOption;
@@ -80,7 +81,7 @@ public class PackageManagerCompat {
             p.requestedPermissions.toArray(requestedPermissions);
             pi.requestedPermissions = requestedPermissions;
         }
-        
+
         if ((flags & FileUtils.FileMode.MODE_IRUSR) != 0) {
             pi.gids = new int[0];
         }
@@ -131,7 +132,10 @@ public class PackageManagerCompat {
                 final ServiceInfo[] res = new ServiceInfo[N];
                 for (int i = 0; i < N; i++) {
                     final BPackage.Service s = p.services.get(i);
-                    res[num++] = generateServiceInfo(s, flags, state, userId);
+                    ServiceInfo serviceInfo = generateServiceInfo(s, flags, state, userId);
+                    if (serviceInfo != null) {
+                        res[num++] = serviceInfo;
+                    }
                 }
                 pi.services = ArrayUtils.trimToSize(res, num);
             }
@@ -180,11 +184,6 @@ public class PackageManagerCompat {
                 for (int i = 0; i < N; i++) {
                     final String perm = p.requestedPermissions.get(i);
                     pi.requestedPermissions[i] = perm;
-                    // The notion of required permissions is deprecated but for compatibility.
-//                    pi.requestedPermissionsFlags[i] |= PackageInfo.REQUESTED_PERMISSION_REQUIRED;
-//                    if (grantedPermissions != null && grantedPermissions.contains(perm)) {
-//                        pi.requestedPermissionsFlags[i] |= PackageInfo.REQUESTED_PERMISSION_GRANTED;
-//                    }
                 }
             }
         }
@@ -218,7 +217,6 @@ public class PackageManagerCompat {
         if (!checkUseInstalledOrHidden(flags, state, a.info.applicationInfo)) {
             return null;
         }
-        // Make shallow copies so we can store the metadata safely
         ActivityInfo ai = new ActivityInfo(a.info);
         ai.metaData = a.metaData;
         ai.processName = BPackageManagerService.fixProcessName(ai.packageName, ai.processName);
@@ -230,23 +228,21 @@ public class PackageManagerCompat {
         if (!checkUseInstalledOrHidden(flags, state, s.info.applicationInfo)) {
             return null;
         }
-        // Make shallow copies so we can store the metadata safely
         ServiceInfo si = new ServiceInfo(s.info);
         si.metaData = s.metaData;
         si.processName = BPackageManagerService.fixProcessName(si.packageName, si.processName);
         si.applicationInfo = generateApplicationInfo(s.owner, flags, state, userId);
-        return si;
+        return GmsCore.applyGeneratedVirtualServiceGmsSafety(si);
     }
 
     public static ProviderInfo generateProviderInfo(BPackage.Provider p, int flags, BPackageUserState state, int userId) {
         if (!checkUseInstalledOrHidden(flags, state, p.info.applicationInfo)) {
             return null;
         }
-        // Make shallow copies so we can store the metadata safely
         ProviderInfo pi = new ProviderInfo(p.info);
         if (pi.authority == null) return null;
-            pi.metaData = p.metaData;
-            pi.processName = BPackageManagerService.fixProcessName(pi.packageName, pi.processName);
+        pi.metaData = p.metaData;
+        pi.processName = BPackageManagerService.fixProcessName(pi.packageName, pi.processName);
         if ((flags & FileUtils.FileMode.MODE_ISUID) == 0) {
             pi.uriPermissionPatterns = null;
         }
@@ -292,6 +288,14 @@ public class PackageManagerCompat {
         if ((flags & PackageManager.GET_META_DATA) != 0) {
             ai.metaData = p.mAppMetaData;
         }
+
+        // Apply Android 16 Firebase/measurement compatibility at the virtual
+        // PackageManager source, before Application/ContentProvider startup. This
+        // is intentionally done even when GET_META_DATA was not requested so the
+        // initial LoadedApk/ApplicationInfo cannot start measurement with a stale
+        // virtual package identity.
+        GmsCore.applyGeneratedVirtualAppGmsSafety(ai);
+
         ai.dataDir = BEnvironment.getDataDir(ai.packageName, userId).getAbsolutePath();
         if (!p.installOption.isFlag(InstallOption.FLAG_SYSTEM)) {
             ai.nativeLibraryDir = BEnvironment.getAppLibDir(ai.packageName).getAbsolutePath();
@@ -300,7 +304,6 @@ public class PackageManagerCompat {
         ai.publicSourceDir = sourceDir;
         ai.sourceDir = sourceDir;
         ai.uid = p.mExtras.appId;
-//        ai.uid = baseApplication.uid;
 
         if (BuildCompat.isL()) {
             BRApplicationInfoL.get(ai)._set_primaryCpuAbi(Build.CPU_ABI);
@@ -331,7 +334,6 @@ public class PackageManagerCompat {
                                                      ApplicationInfo appInfo) {
         if (AppSystemEnv.isBlackPackage(appInfo.packageName))
             return false;
-        // Returns false if the package is hidden system app until installed.
         if (!state.installed || state.hidden) {
             return false;
         }
@@ -351,11 +353,6 @@ public class PackageManagerCompat {
         } else {
             sharedLibraryFileList.add(APACHE_LEGACY_JAR);
         }
-//        if (BXposedManagerService.get().isXPEnable()) {
-//            ApplicationInfo base = BlackBoxCore.getContext().getApplicationInfo();
-//            sharedLibraryFileList.add(base.sourceDir);
-//        }
-//        sharedLibraryFileList.add(BEnvironment.JUNIT_JAR.getAbsolutePath());
         info.sharedLibraryFiles = sharedLibraryFileList.toArray(new String[]{});
     }
 

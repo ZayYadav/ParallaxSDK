@@ -3,10 +3,13 @@ package top.niunaijun.blackbox.core;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.Bundle;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Set;
 
 import top.niunaijun.blackbox.BlackBoxCore;
@@ -23,17 +26,16 @@ public class GmsCore {
     public static final String GSF_PKG = "com.google.android.gsf";
     public static final String VENDING_PKG = "com.android.vending";
 
-    // Firebase/Google Analytics metadata keys documented for Android apps.
-    // In a virtual package the real Android UID belongs to the host package,
-    // so background measurement can fail strict package/UID validation in
-    // Android 16 / recent Play Services. Deactivating measurement avoids that
-    // non-essential background call while leaving Google sign-in/auth intact.
     private static final String FIREBASE_ANALYTICS_DEACTIVATED =
             "firebase_analytics_collection_deactivated";
     private static final String FIREBASE_ANALYTICS_ENABLED =
             "firebase_analytics_collection_enabled";
     private static final String GOOGLE_ANALYTICS_ADID_ENABLED =
             "google_analytics_adid_collection_enabled";
+    private static final String FIREBASE_COMPONENT_DISCOVERY_SERVICE =
+            "com.google.firebase.components.ComponentDiscoveryService";
+    private static final String FIREBASE_COMPONENT_PREFIX =
+            "com.google.firebase.components:";
 
     static {
         GOOGLE_APP.add(VENDING_PKG);
@@ -60,9 +62,8 @@ public class GmsCore {
     }
 
     /**
-     * Adds only compatibility metadata to the currently running virtual app.
-     * This does not alter the APK on disk and does not spoof package/signing
-     * identity or change metadata for unrelated queried packages.
+     * Runtime-process view: only touch the package that is currently executing
+     * virtually. This is used by the context-local PackageManager wrapper.
      */
     public static ApplicationInfo applyVirtualAppGmsSafety(ApplicationInfo info) {
         if (info == null || info.packageName == null || Build.VERSION.SDK_INT < 36) {
@@ -71,6 +72,28 @@ public class GmsCore {
 
         String virtualPackage = BActivityThread.getAppPackageName();
         if (virtualPackage == null || !virtualPackage.equals(info.packageName)) {
+            return info;
+        }
+        return applyAnalyticsSafety(info);
+    }
+
+    /**
+     * Package-manager-server view. PackageManagerCompat already knows it is
+     * generating metadata for a virtual package, so this path does not depend on
+     * BActivityThread being initialized in the server process. Keeping these
+     * flags visible from the first ApplicationInfo read prevents recent Play
+     * Services measurement Dynamite from initializing with a virtual package name
+     * against the host UID on Android 16.
+     */
+    public static ApplicationInfo applyGeneratedVirtualAppGmsSafety(ApplicationInfo info) {
+        if (info == null || info.packageName == null || Build.VERSION.SDK_INT < 36) {
+            return info;
+        }
+        return applyAnalyticsSafety(info);
+    }
+
+    private static ApplicationInfo applyAnalyticsSafety(ApplicationInfo info) {
+        if (info == null || info.packageName == null) {
             return info;
         }
         if (info.packageName.equals(BlackBoxCore.getHostPkg())
@@ -83,6 +106,45 @@ public class GmsCore {
         metaData.putBoolean(FIREBASE_ANALYTICS_ENABLED, false);
         metaData.putBoolean(GOOGLE_ANALYTICS_ADID_ENABLED, false);
         info.metaData = metaData;
+        return info;
+    }
+
+    /**
+     * FirebaseApp itself is still allowed to initialize so Firebase Auth and other
+     * core Firebase APIs keep working. We only remove Analytics/measurement
+     * registrars from ComponentDiscoveryService on Android 16. That keeps the
+     * measurement Dynamite module out of the virtual process without disabling
+     * Google/Firebase authentication.
+     */
+    public static ServiceInfo applyGeneratedVirtualServiceGmsSafety(ServiceInfo info) {
+        if (info == null || Build.VERSION.SDK_INT < 36 || info.packageName == null) {
+            return info;
+        }
+        if (info.packageName.equals(BlackBoxCore.getHostPkg())
+                || isGoogleAppOrService(info.packageName)) {
+            return info;
+        }
+
+        if (FIREBASE_COMPONENT_DISCOVERY_SERVICE.equals(info.name) && info.metaData != null) {
+            Bundle filtered = new Bundle(info.metaData);
+            for (String key : new ArrayList<>(filtered.keySet())) {
+                String lower = key == null ? "" : key.toLowerCase(Locale.US);
+                if (lower.startsWith(FIREBASE_COMPONENT_PREFIX)
+                        && (lower.contains("analytics") || lower.contains("measurement"))) {
+                    filtered.remove(key);
+                }
+            }
+            info.metaData = filtered;
+        }
+
+        if (info.name != null) {
+            String lowerName = info.name.toLowerCase(Locale.US);
+            if (lowerName.startsWith("com.google.android.gms.measurement.")
+                    || lowerName.contains("appmeasurementservice")
+                    || lowerName.contains("appmeasurementjobservice")) {
+                info.enabled = false;
+            }
+        }
         return info;
     }
 
