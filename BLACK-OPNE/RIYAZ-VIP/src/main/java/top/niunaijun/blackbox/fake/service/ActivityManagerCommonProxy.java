@@ -3,6 +3,7 @@ package top.niunaijun.blackbox.fake.service;
 import android.app.IServiceConnection;
 import android.content.ComponentName;
 import android.content.Intent;
+import android.content.IntentSender;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Bundle;
@@ -295,11 +296,132 @@ public class ActivityManagerCommonProxy {
         }
     }
 
-    @ProxyMethod("startIntentSenderForResult")
+    /**
+     * Android's framework binder method is startActivityIntentSender. Some older
+     * compatibility layers exposed the public API name startIntentSenderForResult,
+     * so keep both names registered. Provider-owned senders are launched from a
+     * real host proxy Activity and the provider result is forwarded to the virtual
+     * Activity token without reading or changing provider result contents.
+     */
+    @ProxyMethods({"startActivityIntentSender", "startIntentSenderForResult"})
     public static class StartIntentSenderForResult extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            return method.invoke(who, args);
+            if (args == null || method == null) {
+                return method == null ? 0 : method.invoke(who, args);
+            }
+
+            int targetIndex = findIntentSenderTargetIndex(method, args);
+            int fillInIndex = findIntentParameterIndex(method, targetIndex);
+            if (targetIndex < 0 || fillInIndex < 0) {
+                return method.invoke(who, args);
+            }
+
+            IntentSender sender = ExternalAuthRouter.wrapIntentSender(args[targetIndex]);
+            if (!ExternalAuthRouter.isTrustedProviderIntentSender(sender)) {
+                return method.invoke(who, args);
+            }
+
+            // AOSP layout from the fill-in Intent onward is stable:
+            // Intent, resolvedType, resultTo, resultWho, requestCode,
+            // flagsMask, flagsValues, options.
+            int resultToIndex = fillInIndex + 2;
+            int resultWhoIndex = fillInIndex + 3;
+            int requestCodeIndex = fillInIndex + 4;
+            int flagsMaskIndex = fillInIndex + 5;
+            int flagsValuesIndex = fillInIndex + 6;
+            int optionsIndex = fillInIndex + 7;
+            if (optionsIndex >= args.length
+                    || !(args[resultToIndex] instanceof IBinder)
+                    || !(args[requestCodeIndex] instanceof Integer)
+                    || !(args[flagsMaskIndex] instanceof Integer)
+                    || !(args[flagsValuesIndex] instanceof Integer)) {
+                return method.invoke(who, args);
+            }
+
+            IBinder resultTo = (IBinder) args[resultToIndex];
+            String resultWho = args[resultWhoIndex] instanceof String
+                    ? (String) args[resultWhoIndex] : null;
+            int requestCode = (Integer) args[requestCodeIndex];
+            int flagsMask = (Integer) args[flagsMaskIndex];
+            int flagsValues = (Integer) args[flagsValuesIndex];
+            Intent fillInIntent = args[fillInIndex] instanceof Intent
+                    ? (Intent) args[fillInIndex] : null;
+            Bundle options = args[optionsIndex] instanceof Bundle
+                    ? (Bundle) args[optionsIndex] : null;
+
+            Intent bridge = ExternalAuthRouter.createIntentSenderBridgeIntent(
+                    sender,
+                    fillInIntent,
+                    flagsMask,
+                    flagsValues,
+                    options,
+                    resultTo,
+                    resultWho,
+                    requestCode,
+                    BActivityThread.getAppPackageName());
+            if (bridge == null) {
+                return method.invoke(who, args);
+            }
+
+            try {
+                ContextCompat.fix(BActivityThread.getApplication());
+                BlackBoxCore.getContext().startActivity(bridge);
+                return 0;
+            } catch (Throwable ignored) {
+                // If the host bridge cannot be started on an OEM build, preserve
+                // normal Android behavior rather than swallowing the provider flow.
+                return method.invoke(who, args);
+            }
+        }
+
+        private static int findIntentSenderTargetIndex(Method method, Object[] args) {
+            Class<?>[] parameterTypes = method.getParameterTypes();
+            int count = Math.min(parameterTypes.length, args.length);
+            for (int i = 0; i < count; i++) {
+                Class<?> type = parameterTypes[i];
+                String typeName = type == null ? "" : type.getName();
+                if (IntentSender.class.equals(type)
+                        || "android.content.IIntentSender".equals(typeName)) {
+                    return i;
+                }
+            }
+            for (int i = 0; i < args.length; i++) {
+                Object arg = args[i];
+                if (arg instanceof IntentSender || implementsIntentSenderInterface(arg)) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        private static int findIntentParameterIndex(Method method, int targetIndex) {
+            Class<?>[] parameterTypes = method.getParameterTypes();
+            for (int i = Math.max(0, targetIndex + 1); i < parameterTypes.length; i++) {
+                if (Intent.class.equals(parameterTypes[i])) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        private static boolean implementsIntentSenderInterface(Object value) {
+            if (value == null) {
+                return false;
+            }
+            try {
+                Class<?> type = value.getClass();
+                while (type != null && type != Object.class) {
+                    for (Class<?> iface : type.getInterfaces()) {
+                        if ("android.content.IIntentSender".equals(iface.getName())) {
+                            return true;
+                        }
+                    }
+                    type = type.getSuperclass();
+                }
+            } catch (Throwable ignored) {
+            }
+            return false;
         }
     }
 
