@@ -42,22 +42,13 @@ public final class ExternalAuthServiceConnectionDelegate extends IServiceConnect
 
         if (previous == null) {
             try {
-                binder.linkToDeath(() -> {
-                    CACHE.remove(binder);
-                    binder.unlinkToDeath(thisDeathRecipient(binder), 0);
-                }, 0);
+                binder.linkToDeath(() -> CACHE.remove(binder), 0);
             } catch (Throwable ignored) {
                 // The original IServiceConnection may already be local/dead. The
                 // cache is only an optimization; callback delivery still works.
             }
         }
         return result;
-    }
-
-    private static IBinder.DeathRecipient thisDeathRecipient(IBinder ignored) {
-        // unlinkToDeath requires the same recipient instance. Returning a new one
-        // is not useful, so callers simply rely on process-lifetime cache cleanup.
-        return () -> { };
     }
 
     @Override
