@@ -160,7 +160,7 @@ jobs:
     with:
       source_artifact: loader-hardened-safe-apk
       output_artifact: loader-hardened-dpt-protected-apk
-      dpt_ref: agent/reusable-dpt-protect-workflow
+      dpt_ref: b23840dd7636894cd95798c2fdb828fe7f02daf0
       smaller: true
     secrets:
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
