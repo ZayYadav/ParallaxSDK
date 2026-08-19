@@ -1,4 +1,4 @@
-name: Build hardened safe Loader and DPT protect
+name: Build original UI Loader and DPT protect
 
 on:
   workflow_dispatch:
@@ -23,8 +23,8 @@ permissions:
   actions: read
 
 jobs:
-  build-hardened:
-    name: Build R8 hardened safe APK
+  build-release:
+    name: Build original UI release APK
     runs-on: ubuntu-latest
     env:
       SDK_PROJECT_DIR: BLACK-OPNE
@@ -108,7 +108,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ] || [ -z "${STORE_PASSWORD:-}" ] || [ -z "${KEY_ALIAS:-}" ] || [ -z "${KEY_PASSWORD:-}" ]; then
-            echo 'Production signing secrets are required for the hardened protected workflow.' >&2
+            echo 'Production signing secrets are required for the DPT protected release workflow.' >&2
             exit 1
           fi
           STORE_FILE=$(awk -F= '/^storeFile=/{print $2}' signing.properties)
@@ -116,47 +116,49 @@ jobs:
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$STORE_FILE"
           test -s "$STORE_FILE"
 
-      - name: Build R8 hardened safe APK
+      - name: Build original release APK
         working-directory: ${{ env.LOADER_PROJECT_DIR }}
         shell: bash
         run: |
           set -euo pipefail
-          ./gradlew :app:assembleHardened --no-daemon --stacktrace
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace
 
-      - name: Verify hardened APK
+      - name: Verify original release APK
         shell: bash
         run: |
           set -euo pipefail
-          APK=$(find "${LOADER_PROJECT_DIR}/app/build/outputs/apk/hardened" -type f -name '*.apk' -print -quit)
+          APK=$(find "${LOADER_PROJECT_DIR}/app/build/outputs/apk/release" -type f -name '*.apk' -print -quit)
           test -n "$APK"
           "${ANDROID_HOME}/build-tools/36.0.0/zipalign" -c -v 4 "$APK" >/dev/null
           "${ANDROID_HOME}/build-tools/36.0.0/apksigner" verify --verbose "$APK"
           "${ANDROID_HOME}/build-tools/36.0.0/apksigner" verify --print-certs "$APK"
-          mkdir -p hardened-artifact
-          cp "$APK" hardened-artifact/app-hardened.apk
+          mkdir -p release-artifact
+          cp "$APK" release-artifact/app-release.apk
           {
-            echo 'variant=hardened'
-            echo 'r8_minify=enabled'
-            echo 'resource_shrinking=enabled'
+            echo 'variant=release'
+            echo 'ui=original-main'
+            echo 'permissions=original-main-manifest'
+            echo 'r8_minify=disabled'
+            echo 'resource_shrinking=disabled'
             echo 'dpt_protection=pending-next-job'
-            sha256sum hardened-artifact/app-hardened.apk
-          } > hardened-artifact/HARDENED_INFO.txt
+            sha256sum release-artifact/app-release.apk
+          } > release-artifact/RELEASE_INFO.txt
 
-      - name: Upload hardened source APK
+      - name: Upload original release source APK
         uses: actions/upload-artifact@v4
         with:
-          name: loader-hardened-safe-apk
-          path: hardened-artifact/
+          name: loader-original-release-apk
+          path: release-artifact/
           if-no-files-found: error
           retention-days: 30
 
-  dpt-protect-hardened:
-    name: DPT protect and restore original signer
-    needs: build-hardened
+  dpt-protect-release:
+    name: DPT protect original UI and restore original signer
+    needs: build-release
     uses: ZayYadav/ParallaxDPT/.github/workflows/protect-apk.yml@main
     with:
-      source_artifact: loader-hardened-safe-apk
-      output_artifact: loader-hardened-dpt-protected-apk
+      source_artifact: loader-original-release-apk
+      output_artifact: loader-original-ui-dpt-protected-apk
       dpt_ref: main
       smaller: true
     secrets:
