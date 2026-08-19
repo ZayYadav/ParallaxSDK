@@ -17,6 +17,7 @@ import black.android.app.BRLoadedApkServiceDispatcherInnerConnection;
 import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.BActivityThread;
 import top.niunaijun.blackbox.compat.auth.ExternalAuthRouter;
+import top.niunaijun.blackbox.compat.auth.ExternalAuthServiceConnectionDelegate;
 import top.niunaijun.blackbox.compat.oauth.VirtualOAuthRouter;
 import top.niunaijun.blackbox.core.env.AppSystemEnv;
 import top.niunaijun.blackbox.fake.delegate.ServiceConnectionDelegate;
@@ -191,9 +192,9 @@ public class ActivityManagerCommonProxy {
     /**
      * Registered after IActivityManagerProxy's own bind hooks via @ScanClass, so
      * this compatibility hook becomes authoritative for all bindService variants.
-     * Real auth providers are handed to Android unchanged (apart from correcting
-     * the real caller package/user); virtual services keep the original BlackBox
-     * binding path.
+     * Real auth providers are handed to Android with the real caller package/user.
+     * Their IServiceConnection is wrapped only to normalize GMS broker requests;
+     * virtual services keep the original BlackBox binding path.
      */
     @ProxyMethods({"bindService", "bindServiceInstance", "bindIsolatedService"})
     public static class BindServiceCompat extends MethodHook {
@@ -205,6 +206,21 @@ public class ActivityManagerCommonProxy {
 
             Intent intent = (Intent) args[2];
             if (AppSystemEnv.isOpenPackage(intent)) {
+                IServiceConnection connection = args[4] instanceof IServiceConnection
+                        ? (IServiceConnection) args[4] : null;
+                if (connection != null) {
+                    IServiceConnection proxy =
+                            ExternalAuthServiceConnectionDelegate.createProxy(connection);
+                    args[4] = proxy;
+
+                    WeakReference<?> weakReference =
+                            BRLoadedApkServiceDispatcherInnerConnection.get(connection).mDispatcher();
+                    if (weakReference != null && weakReference.get() != null) {
+                        BRLoadedApkServiceDispatcher.get(weakReference.get())
+                                ._set_mConnection(proxy);
+                    }
+                }
+
                 intent.removeExtra("_G_|_UserId");
                 MethodParameterUtils.replaceAllAppPkg(args);
                 MethodParameterUtils.replaceLastUserId(args);
