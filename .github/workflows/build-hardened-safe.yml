@@ -153,11 +153,11 @@ jobs:
   dpt-protect-hardened:
     name: DPT protect and restore original signer
     needs: build-hardened
-    uses: ZayYadav/ParallaxDPT/.github/workflows/protect-apk.yml@agent/reusable-dpt-protect-workflow
+    uses: ZayYadav/ParallaxDPT/.github/workflows/protect-apk.yml@main
     with:
       source_artifact: loader-hardened-safe-apk
       output_artifact: loader-hardened-dpt-protected-apk
-      dpt_ref: 1f7d327200c8a07954b369c2742768c20cd07894
+      dpt_ref: main
       smaller: true
     secrets:
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
