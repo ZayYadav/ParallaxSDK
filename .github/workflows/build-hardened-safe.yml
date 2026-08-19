@@ -157,7 +157,7 @@ jobs:
     with:
       source_artifact: loader-hardened-safe-apk
       output_artifact: loader-hardened-dpt-protected-apk
-      dpt_ref: c900062876b1844b6ab9b0aa1cc9af6c07e2cf0d
+      dpt_ref: 1f7d327200c8a07954b369c2742768c20cd07894
       smaller: true
     secrets:
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
