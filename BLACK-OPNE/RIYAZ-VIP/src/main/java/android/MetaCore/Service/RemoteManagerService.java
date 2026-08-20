@@ -6,9 +6,7 @@ import android.app.Service;
 import android.content.Intent;
 import android.os.IBinder;
 import android.os.RemoteException;
-import org.lsposed.lsparanoid.Obfuscate;
 
-@Obfuscate
 public class RemoteManagerService extends Service {
     
     private final IRemoteManager.Stub binder = new IRemoteManager.Stub() {

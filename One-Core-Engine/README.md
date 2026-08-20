@@ -85,15 +85,17 @@ The CI workflow performs both stages automatically.
   LSParanoid release string transformation; this conceals fixed endpoint,
   algorithm, binding, and parser strings in the packaged DEX without pretending
   that the whole DEX is cryptographically sealed at runtime.
-- BlackObfuscator is disabled unless the release task explicitly sets
-  `-PblackObfuscatorEnabled=true`. CI pins upstream commit
+- BlackObfuscator is enabled by default for every release task. The emergency
+  compatibility escape hatch is `-PblackObfuscatorEnabled=false`; it must not
+  be used for a production artifact. CI pins upstream commit
   `67aec4c457be0d2644224100fa85aed7eac87cb6`, rejects fewer than 50 transformed
   methods or conversion stack traces, validates every packaged DEX with
   `dexdump`, rejects plaintext high-value license strings, and verifies APK
   signing plus ZIP alignment. CI builds and uploads both release and debug APKs.
   When production transport variables or signing secrets are missing, artifact
   names contain `ci-nonproduction`; only fully configured artifacts are labeled
-  `production`. BlackObfuscator remains enabled only for the release APK.
+  `production`. BlackObfuscator and LSParanoid remain release-only so debug
+  iteration and unit tests keep readable stack traces.
 - Tapjacking protection rejects obscured touches on the license input, while
   WorkManager and notification registrations are delegated to their current
   AndroidX manifests for modern Android compatibility.

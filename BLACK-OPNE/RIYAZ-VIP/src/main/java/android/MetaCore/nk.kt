@@ -4,12 +4,10 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import top.niunaijun.blackbox.BlackBoxCore
-import org.lsposed.lsparanoid.Obfuscate
 import java.text.SimpleDateFormat
 import java.util.*
 import android.widget.Toast
 
-@Obfuscate
 class nk {
 
     companion object {

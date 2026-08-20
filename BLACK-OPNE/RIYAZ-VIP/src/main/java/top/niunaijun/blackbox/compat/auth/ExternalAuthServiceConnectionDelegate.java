@@ -8,6 +8,8 @@ import android.os.RemoteException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.lsposed.lsparanoid.Obfuscate;
+
 import black.android.app.BRIServiceConnectionO;
 import top.niunaijun.blackbox.utils.compat.BuildCompat;
 
@@ -15,6 +17,7 @@ import top.niunaijun.blackbox.utils.compat.BuildCompat;
  * Keeps external authentication service callbacks inside the virtual process
  * while allowing the actual provider service on the phone to remain authoritative.
  */
+@Obfuscate
 public final class ExternalAuthServiceConnectionDelegate extends IServiceConnection.Stub {
     private static final Map<IBinder, ExternalAuthServiceConnectionDelegate> CACHE =
             new ConcurrentHashMap<>();

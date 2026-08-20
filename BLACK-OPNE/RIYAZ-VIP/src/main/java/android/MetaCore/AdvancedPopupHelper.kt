@@ -14,11 +14,9 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import org.json.JSONObject
-import org.lsposed.lsparanoid.Obfuscate
 import java.lang.reflect.Field
 import kotlin.math.min
 
-@Obfuscate
 object AdvancedPopupHelper {
 
     private val handler = Handler(Looper.getMainLooper())

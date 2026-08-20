@@ -8,6 +8,9 @@ buildscript {
     dependencies {
         classpath 'com.android.tools.build:gradle:8.11.1'
         classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.20'
+        classpath 'org.lsposed.lsparanoid:gradle-plugin:0.6.0'
+        // Pinned control-flow transformer; never float this dependency to HEAD.
+        classpath 'com.github.CodingGay:BlackObfuscator-ASPlugin:67aec4c457'
     }
 }
 

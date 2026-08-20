@@ -71,7 +71,6 @@ import static android.content.Context.RECEIVER_NOT_EXPORTED;
 import static android.content.pm.PackageManager.GET_META_DATA;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 
-import org.lsposed.lsparanoid.Obfuscate;
 /**
  * Created by @RIYAZXERO on 3/30/21.
  * * ∧＿∧
@@ -80,7 +79,6 @@ import org.lsposed.lsparanoid.Obfuscate;
  * しーＪ
  * 此处无Bug
  */
-@Obfuscate
 @ScanClass(ActivityManagerCommonProxy.class)
 public class IActivityManagerProxy extends ClassInvocationStub {
     public static final String TAG = "ActivityManagerStub";

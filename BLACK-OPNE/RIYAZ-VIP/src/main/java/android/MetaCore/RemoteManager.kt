@@ -19,7 +19,6 @@ import top.niunaijun.blackbox.BlackBoxCore
 import java.io.File
 import top.niunaijun.blackbox.core.env.BEnvironment
 import org.json.JSONObject
-import org.lsposed.lsparanoid.Obfuscate
 import java.io.BufferedReader
 import java.io.InputStream
 import java.io.InputStreamReader
@@ -34,7 +33,6 @@ import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
-@Obfuscate
 class RemoteManager private constructor() : IRemoteManager.Stub() {
 
     companion object {

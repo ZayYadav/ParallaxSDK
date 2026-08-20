@@ -14,9 +14,7 @@ import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.utils.FileUtils;
 import top.niunaijun.blackbox.app.BActivityThread;
 import top.niunaijun.blackbox.core.system.api.MetaActivationManager;
-import org.lsposed.lsparanoid.Obfuscate;
 
-@Obfuscate
 public class BEnvironment {
    
   //  private static final File sExternalVirtualRoot = BlackBoxCore.getContext().getExternalFilesDir("ParallaxCore");

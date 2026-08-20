@@ -9,6 +9,8 @@ import android.os.Bundle;
 
 import java.util.Locale;
 
+import org.lsposed.lsparanoid.Obfuscate;
+
 import top.niunaijun.blackbox.fake.frameworks.BActivityManager;
 import top.niunaijun.blackbox.fake.frameworks.BPackageManager;
 import top.niunaijun.blackbox.utils.FileUtils;
@@ -21,6 +23,7 @@ import top.niunaijun.blackbox.utils.FileUtils;
  * final redirect URI through Activity result data; this bridge immediately routes
  * that URI into BlackBox's virtual PackageManager/ActivityManager.
  */
+@Obfuscate
 public final class VirtualOAuthBridgeActivity extends Activity {
     private static final int REQUEST_AUTH_TAB = 0x5041;
 
@@ -35,7 +38,8 @@ public final class VirtualOAuthBridgeActivity extends Activity {
             "android.support.customtabs.extra.SESSION";
 
     private String virtualPackage;
-    private String expectedRedirectScheme;
+    private Uri expectedRedirectUri;
+    private String expectedState;
     private int userId = -1;
 
     @Override
@@ -60,14 +64,15 @@ public final class VirtualOAuthBridgeActivity extends Activity {
             return;
         }
 
-        expectedRedirectScheme = lower(redirectUri.getScheme());
+        expectedRedirectUri = redirectUri;
+        expectedState = authUri.getQueryParameter("state");
         if (!redirectResolvesToVirtualPackage(redirectUri)) {
             finish();
             return;
         }
 
         if (savedInstanceState == null) {
-            launchAuthTab(authUri, expectedRedirectScheme);
+            launchAuthTab(authUri, lower(expectedRedirectUri.getScheme()));
         }
     }
 
@@ -101,13 +106,55 @@ public final class VirtualOAuthBridgeActivity extends Activity {
         }
 
         Uri callbackUri = data.getData();
-        if (!expectedRedirectScheme.equals(lower(callbackUri.getScheme()))) {
+        if (!matchesExpectedCallback(callbackUri)) {
             finish();
             return;
         }
 
         dispatchToVirtualPackage(callbackUri);
         finish();
+    }
+
+    /**
+     * Auth Tabs return an arbitrary URI supplied by the browser, so validate the
+     * entire registered callback target and OAuth state before crossing back into
+     * the virtual package. Provider-added code/error query parameters are allowed;
+     * fixed query parameters already present in redirect_uri must still match.
+     */
+    private boolean matchesExpectedCallback(Uri callbackUri) {
+        if (callbackUri == null || expectedRedirectUri == null) {
+            return false;
+        }
+        if (!lower(expectedRedirectUri.getScheme()).equals(lower(callbackUri.getScheme()))) {
+            return false;
+        }
+        if (!lower(expectedRedirectUri.getEncodedAuthority())
+                .equals(lower(callbackUri.getEncodedAuthority()))) {
+            return false;
+        }
+        if (!same(expectedRedirectUri.getEncodedPath(), callbackUri.getEncodedPath())) {
+            return false;
+        }
+        if (expectedRedirectUri.getFragment() != null
+                && !same(expectedRedirectUri.getEncodedFragment(),
+                callbackUri.getEncodedFragment())) {
+            return false;
+        }
+        if (expectedState != null && !expectedState.isEmpty()
+                && !expectedState.equals(callbackUri.getQueryParameter("state"))) {
+            return false;
+        }
+        try {
+            for (String name : expectedRedirectUri.getQueryParameterNames()) {
+                if (!expectedRedirectUri.getQueryParameters(name)
+                        .equals(callbackUri.getQueryParameters(name))) {
+                    return false;
+                }
+            }
+        } catch (Throwable ignored) {
+            return false;
+        }
+        return redirectResolvesToVirtualPackage(callbackUri);
     }
 
     private void dispatchToVirtualPackage(Uri callbackUri) {
@@ -197,5 +244,9 @@ public final class VirtualOAuthBridgeActivity extends Activity {
 
     private static String lower(String value) {
         return value == null ? "" : value.toLowerCase(Locale.US);
+    }
+
+    private static boolean same(String left, String right) {
+        return left == null ? right == null : left.equals(right);
     }
 }

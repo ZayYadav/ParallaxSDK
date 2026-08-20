@@ -10,6 +10,8 @@ import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
 
+import org.lsposed.lsparanoid.Obfuscate;
+
 import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.fake.frameworks.BPackageManager;
 import top.niunaijun.blackbox.utils.FileUtils;
@@ -22,6 +24,7 @@ import top.niunaijun.blackbox.utils.FileUtils;
  * It only carries the final redirect URI back to the virtual package that declared
  * the redirect intent-filter.
  */
+@Obfuscate
 public final class VirtualOAuthRouter {
     public static final String EXTRA_AUTH_URL =
             "top.niunaijun.blackbox.oauth.AUTH_URL";

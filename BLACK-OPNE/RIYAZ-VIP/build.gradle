@@ -1,6 +1,17 @@
 plugins {
     id 'com.android.library'
     id 'org.jetbrains.kotlin.android'
+    id 'org.lsposed.lsparanoid'
+}
+
+// Keep the reflection-heavy virtualization startup bytecode stable. Only the
+// release auth/activation boundary is transformed at build time.
+lsparanoid {
+    seed = 0x50415241
+    includeDependencies = false
+    variantFilter = { variant ->
+        variant.buildType == 'release'
+    }
 }
 
 android {

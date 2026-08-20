@@ -3,10 +3,12 @@ package top.niunaijun.blackbox.fake.service;
 import android.app.IServiceConnection;
 import android.content.ComponentName;
 import android.content.Intent;
+import android.content.IntentSender;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.os.IInterface;
 
 import java.io.File;
 import java.lang.ref.WeakReference;
@@ -21,6 +23,7 @@ import top.niunaijun.blackbox.compat.auth.ExternalAuthServiceConnectionDelegate;
 import top.niunaijun.blackbox.compat.oauth.VirtualOAuthRouter;
 import top.niunaijun.blackbox.core.env.AppSystemEnv;
 import top.niunaijun.blackbox.fake.delegate.ServiceConnectionDelegate;
+import top.niunaijun.blackbox.fake.frameworks.BActivityManager;
 import top.niunaijun.blackbox.fake.hook.MethodHook;
 import top.niunaijun.blackbox.fake.hook.ProxyMethod;
 import top.niunaijun.blackbox.fake.hook.ProxyMethods;
@@ -32,12 +35,10 @@ import top.niunaijun.blackbox.utils.Slog;
 import top.niunaijun.blackbox.utils.compat.BuildCompat;
 import top.niunaijun.blackbox.utils.compat.ContextCompat;
 import top.niunaijun.blackbox.utils.compat.StartActivityCompat;
-import org.lsposed.lsparanoid.Obfuscate;
 
 /**
  * Created by @RIYAZXERO on 3/30/21.
  */
-@Obfuscate
 public class ActivityManagerCommonProxy {
 
     public static final String TAG = "ActivityManagerCommonProxy";
@@ -295,10 +296,165 @@ public class ActivityManagerCommonProxy {
         }
     }
 
-    @ProxyMethod("startIntentSenderForResult")
+    /**
+     * Android's binder method is startActivityIntentSender. Older compatibility
+     * layers exposed the public API name startIntentSenderForResult, so register
+     * both. Only provider-owned senders with an allow-listed Android creator are
+     * launched outside the virtual namespace.
+     */
+    @ProxyMethods({"startActivityIntentSender", "startIntentSenderForResult"})
     public static class StartIntentSenderForResult extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+            if (args == null || method == null) {
+                return method == null ? 0 : method.invoke(who, args);
+            }
+
+            int targetIndex = findIntentSenderTargetIndex(method, args);
+            int fillInIndex = findIntentParameterIndex(method, targetIndex);
+            if (targetIndex < 0 || fillInIndex < 0) {
+                return method.invoke(who, args);
+            }
+
+            IntentSender sender = ExternalAuthRouter.wrapIntentSender(args[targetIndex]);
+            if (!ExternalAuthRouter.isTrustedProviderIntentSender(sender)) {
+                return method.invoke(who, args);
+            }
+
+            int resultToIndex = fillInIndex + 2;
+            int resultWhoIndex = fillInIndex + 3;
+            int requestCodeIndex = fillInIndex + 4;
+            int flagsMaskIndex = fillInIndex + 5;
+            int flagsValuesIndex = fillInIndex + 6;
+            int optionsIndex = fillInIndex + 7;
+            if (optionsIndex >= args.length
+                    || !(args[resultToIndex] instanceof IBinder)
+                    || !(args[requestCodeIndex] instanceof Integer)
+                    || !(args[flagsMaskIndex] instanceof Integer)
+                    || !(args[flagsValuesIndex] instanceof Integer)) {
+                return method.invoke(who, args);
+            }
+
+            IBinder resultTo = (IBinder) args[resultToIndex];
+            String resultWho = args[resultWhoIndex] instanceof String
+                    ? (String) args[resultWhoIndex] : null;
+            int requestCode = (Integer) args[requestCodeIndex];
+            int flagsMask = (Integer) args[flagsMaskIndex];
+            int flagsValues = (Integer) args[flagsValuesIndex];
+            Intent fillInIntent = args[fillInIndex] instanceof Intent
+                    ? (Intent) args[fillInIndex] : null;
+            Bundle options = args[optionsIndex] instanceof Bundle
+                    ? (Bundle) args[optionsIndex] : null;
+
+            Intent bridge = ExternalAuthRouter.createIntentSenderBridgeIntent(
+                    sender,
+                    fillInIntent,
+                    flagsMask,
+                    flagsValues,
+                    options,
+                    resultTo,
+                    resultWho,
+                    requestCode,
+                    BActivityThread.getAppPackageName());
+            if (bridge == null) {
+                return method.invoke(who, args);
+            }
+
+            try {
+                ContextCompat.fix(BActivityThread.getApplication());
+                BlackBoxCore.getContext().startActivity(bridge);
+                return 0;
+            } catch (Throwable ignored) {
+                return method.invoke(who, args);
+            }
+        }
+
+        private static int findIntentSenderTargetIndex(Method method, Object[] args) {
+            Class<?>[] parameterTypes = method.getParameterTypes();
+            int count = Math.min(parameterTypes.length, args.length);
+            for (int i = 0; i < count; i++) {
+                Class<?> type = parameterTypes[i];
+                String typeName = type == null ? "" : type.getName();
+                if (IntentSender.class.equals(type)
+                        || "android.content.IIntentSender".equals(typeName)) {
+                    return i;
+                }
+            }
+            for (int i = 0; i < args.length; i++) {
+                Object arg = args[i];
+                if (arg instanceof IntentSender || implementsIntentSenderInterface(arg)) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        private static int findIntentParameterIndex(Method method, int targetIndex) {
+            Class<?>[] parameterTypes = method.getParameterTypes();
+            for (int i = Math.max(0, targetIndex + 1); i < parameterTypes.length; i++) {
+                if (Intent.class.equals(parameterTypes[i])) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        private static boolean implementsIntentSenderInterface(Object value) {
+            if (value == null) {
+                return false;
+            }
+            try {
+                Class<?> type = value.getClass();
+                while (type != null && type != Object.class) {
+                    for (Class<?> iface : type.getInterfaces()) {
+                        if ("android.content.IIntentSender".equals(iface.getName())) {
+                            return true;
+                        }
+                    }
+                    type = type.getSuperclass();
+                }
+            } catch (Throwable ignored) {
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Preserve the real creator metadata for external provider PendingIntents.
+     * Virtual metadata is returned only when BlackBox actually owns the sender.
+     */
+    @ProxyMethod("getPackageForIntentSender")
+    public static class GetPackageForIntentSenderCompat extends MethodHook {
+        @Override
+        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+            if (args != null && args.length > 0 && args[0] instanceof IInterface) {
+                try {
+                    String virtualPackage = BActivityManager.get().getPackageForIntentSender(
+                            ((IInterface) args[0]).asBinder());
+                    if (virtualPackage != null && !virtualPackage.trim().isEmpty()) {
+                        return virtualPackage;
+                    }
+                } catch (Throwable ignored) {
+                }
+            }
+            return method.invoke(who, args);
+        }
+    }
+
+    @ProxyMethod("getUidForIntentSender")
+    public static class GetUidForIntentSenderCompat extends MethodHook {
+        @Override
+        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+            if (args != null && args.length > 0 && args[0] instanceof IInterface) {
+                try {
+                    int virtualUid = BActivityManager.get().getUidForIntentSender(
+                            ((IInterface) args[0]).asBinder());
+                    if (virtualUid >= 0) {
+                        return virtualUid;
+                    }
+                } catch (Throwable ignored) {
+                }
+            }
             return method.invoke(who, args);
         }
     }

@@ -8,8 +8,10 @@ import java.security.cert.X509Certificate
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
+    id 'org.lsposed.lsparanoid'
 }
 
+apply plugin: 'top.niunaijun.blackobfuscator'
 apply from: '../signing.gradle'
 
 def parallaxApiPublicKey = providers.gradleProperty('parallaxApiPublicKey')
@@ -24,6 +26,17 @@ def oneCoreAllowedSigningSha256 = providers.gradleProperty('onecoreAllowedSignin
 def javaString = { String value -> '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"' }
 def releaseTaskRequested = gradle.startParameter.taskNames.any {
     it.toLowerCase(Locale.ROOT).contains('release')
+}
+def blackObfuscatorEnabled = providers.gradleProperty('blackObfuscatorEnabled')
+        .orElse(releaseTaskRequested ? 'true' : 'false')
+        .get()
+        .toBoolean()
+def blackObfuscatorDepth = providers.gradleProperty('blackObfuscatorDepth')
+        .orElse('2')
+        .get()
+        .toInteger()
+if (blackObfuscatorDepth < 1 || blackObfuscatorDepth > 3) {
+    throw new GradleException('blackObfuscatorDepth must be between 1 and 3')
 }
 
 def resolveVerifiedLeafTlsPin = { String host ->
@@ -121,6 +134,38 @@ def getSigningCertificateSha256 = { signingConfig ->
     return ""
 }
 
+// Encrypt literals only in explicitly annotated first-party classes. Debug is
+// intentionally untouched for readable diagnostics and fast iteration.
+lsparanoid {
+    seed = 0x50415241
+    includeDependencies = false
+    variantFilter = { variant ->
+        variant.buildType == 'release'
+    }
+}
+
+// Control-flow obfuscation is restricted to first-party release code. Generated
+// Android classes, dependencies and exact JNI entry points stay untouched.
+BlackObfuscator {
+    enabled blackObfuscatorEnabled && releaseTaskRequested
+    depth blackObfuscatorDepth
+
+    obfClass = [
+            'com.onecore.loader.security',
+            'com.onecore.loader.libhelper',
+            'com.onecore.loader.activity',
+            'com.onecore.loader.BoxApplication'
+    ]
+
+    blackClass = [
+            'com.onecore.loader.BuildConfig',
+            'com.onecore.loader.R',
+            'com.onecore.loader.BR',
+            'com.onecore.loader.databinding',
+            'com.onecore.loader.security.NativeSigningVerifier'
+    ]
+}
+
 android {
     compileSdk rootProject.ext.compileSdkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -138,6 +183,9 @@ android {
         versionName rootProject.ext.versionName
         vectorDrawables.useSupportLibrary = true
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        // Keep default resources plus the only explicitly supported translation.
+        // This removes unused language packs contributed by dependencies.
+        resourceConfigurations += ['en']
         buildConfigField "String", "PARALLAX_API_PUBLIC_KEY_B64", javaString(parallaxApiPublicKey)
         buildConfigField "String", "PARALLAX_TLS_PINS", javaString(parallaxTlsPins)
 
@@ -161,9 +209,8 @@ android {
         release {
             debuggable false
             jniDebuggable false
-            // Temporary stability mode: keep bytecode untouched while diagnosing startup VerifyError.
-            shrinkResources false
-            minifyEnabled false
+            shrinkResources true
+            minifyEnabled true
             signingConfig signingConfigs.release
             def releaseSigningSha256 = oneCoreAllowedSigningSha256 ?: getSigningCertificateSha256(signingConfigs.release)
             buildConfigField "String", "EXPECTED_SIGNATURE_SHA256", javaString(releaseSigningSha256)
