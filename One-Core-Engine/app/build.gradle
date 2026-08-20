@@ -11,7 +11,6 @@ plugins {
     id 'org.lsposed.lsparanoid'
 }
 
-apply plugin: 'top.niunaijun.blackobfuscator'
 apply from: '../signing.gradle'
 
 def parallaxApiPublicKey = providers.gradleProperty('parallaxApiPublicKey')
@@ -26,17 +25,6 @@ def oneCoreAllowedSigningSha256 = providers.gradleProperty('onecoreAllowedSignin
 def javaString = { String value -> '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"' }
 def releaseTaskRequested = gradle.startParameter.taskNames.any {
     it.toLowerCase(Locale.ROOT).contains('release')
-}
-def blackObfuscatorEnabled = providers.gradleProperty('blackObfuscatorEnabled')
-        .orElse(releaseTaskRequested ? 'true' : 'false')
-        .get()
-        .toBoolean()
-def blackObfuscatorDepth = providers.gradleProperty('blackObfuscatorDepth')
-        .orElse('2')
-        .get()
-        .toInteger()
-if (blackObfuscatorDepth < 1 || blackObfuscatorDepth > 3) {
-    throw new GradleException('blackObfuscatorDepth must be between 1 and 3')
 }
 
 def resolveVerifiedLeafTlsPin = { String host ->
@@ -142,28 +130,6 @@ lsparanoid {
     variantFilter = { variant ->
         variant.buildType == 'release'
     }
-}
-
-// Control-flow obfuscation is restricted to first-party release code. Generated
-// Android classes, dependencies and exact JNI entry points stay untouched.
-BlackObfuscator {
-    enabled blackObfuscatorEnabled && releaseTaskRequested
-    depth blackObfuscatorDepth
-
-    obfClass = [
-            'com.onecore.loader.security',
-            'com.onecore.loader.libhelper',
-            'com.onecore.loader.activity',
-            'com.onecore.loader.BoxApplication'
-    ]
-
-    blackClass = [
-            'com.onecore.loader.BuildConfig',
-            'com.onecore.loader.R',
-            'com.onecore.loader.BR',
-            'com.onecore.loader.databinding',
-            'com.onecore.loader.security.NativeSigningVerifier'
-    ]
 }
 
 android {

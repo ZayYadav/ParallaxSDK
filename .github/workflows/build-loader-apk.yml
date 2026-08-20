@@ -280,7 +280,7 @@ jobs:
               -dname "CN=CI,O=SdkLodaLasan,C=US"
           fi
 
-      - name: Build signed hardened loader release APK
+      - name: Build signed loader release APK
         working-directory: ${{ env.LOADER_PROJECT_DIR }}
         run: |
           set -o pipefail
@@ -293,12 +293,6 @@ jobs:
           set -euo pipefail
           RELEASE_APK=$(find "${LOADER_PROJECT_DIR}/app/build/outputs/apk/release" -name '*.apk' -print -quit)
           test -n "$RELEASE_APK"
-          BLACK_COUNT=$(grep -c '^BlackObf Class:' "${BUILD_LOG_DIR}/loader-release-apk.log" || true)
-          test "$BLACK_COUNT" -ge 50
-          if grep -E 'Obfuscator Class not found|No classes found|VerifyError' "${BUILD_LOG_DIR}/loader-release-apk.log"; then
-            echo "BlackObfuscator reported an invalid release transform" >&2
-            exit 1
-          fi
           DEX_DIR=$(mktemp -d)
           unzip -qq "$RELEASE_APK" 'classes*.dex' -d "$DEX_DIR"
           DEX_COUNT=0
@@ -323,7 +317,7 @@ jobs:
           done
           "${ANDROID_HOME}/build-tools/36.0.0/apksigner" verify --verbose "$RELEASE_APK"
           "${ANDROID_HOME}/build-tools/36.0.0/zipalign" -c -v 4 "$RELEASE_APK" >/dev/null
-          printf 'black_obfuscator=enabled\nblack_obfuscator_classes=%s\nlsparanoid=enabled\nr8_minify=enabled\nresource_shrinking=enabled\ndex_files=%s\n' "$BLACK_COUNT" "$DEX_COUNT" \
+          printf 'lsparanoid=enabled\nr8_minify=enabled\nresource_shrinking=enabled\ndex_files=%s\n' "$DEX_COUNT" \
             | tee "${BUILD_LOG_DIR}/loader-stability-report.txt"
 
       - name: Build loader debug APK
@@ -360,7 +354,7 @@ jobs:
             printf 'artifact_tier=%s\n' "${PARALLAX_ARTIFACT_TIER}"
             printf 'production_transport=%s\n' "${PARALLAX_HAS_RELEASE_TRANSPORT}"
             printf 'production_signing=%s\n' "${PARALLAX_HAS_RELEASE_SIGNING}"
-            printf 'loader_obfuscation=hardened\n'
+            printf 'loader_obfuscation=r8+lsparanoid\n'
             printf 'commit=%s\n' "${GITHUB_SHA}"
             if [ "${PARALLAX_ARTIFACT_TIER}" != 'production' ]; then
               printf 'warning=CI verification build only; configure production transport and signing before distribution.\n'
