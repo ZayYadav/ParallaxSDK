@@ -2,6 +2,7 @@ package top.niunaijun.blackbox.proxy;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.IntentSender;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.util.Log;
@@ -54,9 +55,39 @@ public class ProxyActivity extends Activity {
 
     private void launchExternalProvider(Intent bridgeIntent) {
         try {
+            IntentSender providerSender = bridgeIntent.getParcelableExtra(
+                    ExternalAuthRouter.EXTRA_PROVIDER_INTENT_SENDER);
+            if (providerSender != null) {
+                if (!ExternalAuthRouter.isTrustedProviderIntentSender(providerSender)) {
+                    deliverExternalAuthResult(RESULT_CANCELED, null);
+                    finish();
+                    return;
+                }
+
+                Intent fillInIntent = bridgeIntent.getParcelableExtra(
+                        ExternalAuthRouter.EXTRA_PROVIDER_FILL_IN_INTENT);
+                int flagsMask = bridgeIntent.getIntExtra(
+                        ExternalAuthRouter.EXTRA_PROVIDER_FLAGS_MASK, 0);
+                int flagsValues = bridgeIntent.getIntExtra(
+                        ExternalAuthRouter.EXTRA_PROVIDER_FLAGS_VALUES, 0);
+                Bundle options = bridgeIntent.getBundleExtra(
+                        ExternalAuthRouter.EXTRA_PROVIDER_OPTIONS);
+
+                startIntentSenderForResult(
+                        providerSender,
+                        REQUEST_EXTERNAL_AUTH,
+                        fillInIntent,
+                        flagsMask,
+                        flagsValues,
+                        0,
+                        options);
+                return;
+            }
+
             Intent providerIntent = bridgeIntent.getParcelableExtra(
                     ExternalAuthRouter.EXTRA_PROVIDER_INTENT);
             if (!ExternalAuthRouter.isTrustedProviderIntent(providerIntent)) {
+                deliverExternalAuthResult(RESULT_CANCELED, null);
                 finish();
                 return;
             }
@@ -94,8 +125,8 @@ public class ProxyActivity extends Activity {
             }
 
             // This proxy instance runs in the same :pN process as the virtual app,
-            // so BActivityManager can deliver the result to the original virtual
-            // Activity token instead of returning it to the loader's main process.
+            // so BActivityManager can deliver the provider-controlled result to
+            // the original virtual Activity token. Result contents are untouched.
             BActivityManager.get().sendActivityResult(
                     resultTo,
                     resultWho,
