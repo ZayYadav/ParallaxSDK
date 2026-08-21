@@ -122,24 +122,29 @@ def getSigningCertificateSha256 = { signingConfig ->
     return ""
 }
 
+// Keep this closure detached from the Gradle extension. LSParanoid exposes the
+// callback as a cacheable task @Input, so a normal nested Groovy closure captures
+// LSParanoidExtension and fails Gradle 8.x input fingerprint serialization.
+def loaderStringClassFilter = { String className ->
+    className.startsWith('com.onecore.loader.')
+            && className != 'com.onecore.loader.BoxApplication'
+            && !className.startsWith('com.onecore.loader.BoxApplication$')
+            && className != 'com.onecore.loader.security.NativeSigningVerifier'
+            && !className.startsWith('com.onecore.loader.security.NativeSigningVerifier$')
+            && className != 'com.onecore.loader.BuildConfig'
+            && className != 'com.onecore.loader.R'
+            && !className.startsWith('com.onecore.loader.R$')
+            && className != 'com.onecore.loader.BR'
+            && !className.startsWith('com.onecore.loader.databinding.')
+}.dehydrate()
+
 // Release builds protect string constants throughout first-party Loader code.
 // Startup/JNI/generated classes stay out of the transformer so framework and
 // native entry points keep the same stability characteristics as the green build.
 lsparanoid {
     seed = 0x50415241
     includeDependencies = false
-    classFilter = { className ->
-        className.startsWith('com.onecore.loader.')
-                && className != 'com.onecore.loader.BoxApplication'
-                && !className.startsWith('com.onecore.loader.BoxApplication$')
-                && className != 'com.onecore.loader.security.NativeSigningVerifier'
-                && !className.startsWith('com.onecore.loader.security.NativeSigningVerifier$')
-                && className != 'com.onecore.loader.BuildConfig'
-                && className != 'com.onecore.loader.R'
-                && !className.startsWith('com.onecore.loader.R$')
-                && className != 'com.onecore.loader.BR'
-                && !className.startsWith('com.onecore.loader.databinding.')
-    }
+    classFilter = loaderStringClassFilter
     variantFilter = { variant ->
         variant.buildType == 'release'
     }
