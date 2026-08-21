@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.Log;
 
 import java.util.Locale;
 
@@ -23,12 +24,15 @@ import top.niunaijun.blackbox.utils.FileUtils;
  * into BlackBox's virtual PackageManager/ActivityManager.
  */
 public final class VirtualOAuthBridgeActivity extends Activity {
+    private static final String TAG = "ParallaxOAuth";
     private static final int REQUEST_AUTH_TAB = 0x5041;
 
     private String virtualPackage;
     private String expectedRedirectScheme;
     private String authProvider;
     private int userId = -1;
+    private boolean twitterFlow;
+    private boolean legacyTwitterFlow;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -55,9 +59,12 @@ public final class VirtualOAuthBridgeActivity extends Activity {
             return;
         }
 
+        twitterFlow = isTwitterHost(authUri);
+        legacyTwitterFlow = twitterFlow && hasQueryParameter(authUri, "oauth_token");
         expectedRedirectScheme = lower(redirectUri.getScheme());
         if (!redirectResolvesToVirtualPackage(redirectUri)
                 || !AuthTabCompat.isSupportedProvider(this, authProvider, authUri)) {
+            diagnostic("setup_rejected", false, false, false, false, false);
             finish();
             return;
         }
@@ -83,6 +90,7 @@ public final class VirtualOAuthBridgeActivity extends Activity {
 
             startActivityForResult(authIntent, REQUEST_AUTH_TAB);
         } catch (Throwable ignored) {
+            diagnostic("launch_failed", false, false, false, false, false);
             finish();
         }
     }
@@ -94,21 +102,42 @@ public final class VirtualOAuthBridgeActivity extends Activity {
             return;
         }
         if (resultCode != RESULT_OK || data == null || data.getData() == null) {
+            diagnostic("auth_not_completed", false, false, false, false, false);
             finish();
             return;
         }
 
         Uri callbackUri = data.getData();
         if (!expectedRedirectScheme.equals(lower(callbackUri.getScheme()))) {
+            diagnostic("scheme_mismatch", false, false, false, false, false);
             finish();
             return;
         }
 
-        dispatchToVirtualPackage(callbackUri);
+        boolean hasToken = hasQueryParameter(callbackUri, "oauth_token");
+        boolean hasVerifier = hasQueryParameter(callbackUri, "oauth_verifier");
+        boolean hasCode = hasQueryParameter(callbackUri, "code");
+        boolean denied = hasQueryParameter(callbackUri, "denied")
+                || hasQueryParameter(callbackUri, "error");
+
+        // OAuth 1.0a success requires both oauth_token and oauth_verifier. Sending
+        // a structurally incomplete callback into the virtual app only turns a
+        // browser/provider failure into an opaque in-app 9999 error, so fail closed
+        // here instead. Values are never logged or persisted.
+        if (legacyTwitterFlow && !denied && (!hasToken || !hasVerifier)) {
+            diagnostic("twitter_oauth1_incomplete",
+                    hasToken, hasVerifier, hasCode, denied, false);
+            finish();
+            return;
+        }
+
+        boolean dispatched = dispatchToVirtualPackage(callbackUri);
+        diagnostic(dispatched ? "callback_dispatched" : "callback_unresolved",
+                hasToken, hasVerifier, hasCode, denied, dispatched);
         finish();
     }
 
-    private void dispatchToVirtualPackage(Uri callbackUri) {
+    private boolean dispatchToVirtualPackage(Uri callbackUri) {
         try {
             Intent callback = new Intent(Intent.ACTION_VIEW, callbackUri);
             callback.addCategory(Intent.CATEGORY_DEFAULT);
@@ -125,15 +154,17 @@ public final class VirtualOAuthBridgeActivity extends Activity {
                     userId);
             if (resolved == null || resolved.activityInfo == null
                     || !virtualPackage.equals(resolved.activityInfo.packageName)) {
-                return;
+                return false;
             }
 
             callback.setComponent(new ComponentName(
                     resolved.activityInfo.packageName,
                     resolved.activityInfo.name));
             BActivityManager.get().startActivity(callback, userId);
+            return true;
         } catch (Throwable ignored) {
             // Fail closed. Redirect contents are intentionally never logged.
+            return false;
         }
     }
 
@@ -154,6 +185,49 @@ public final class VirtualOAuthBridgeActivity extends Activity {
         } catch (Throwable ignored) {
             return false;
         }
+    }
+
+    private void diagnostic(String stage,
+                            boolean hasToken,
+                            boolean hasVerifier,
+                            boolean hasCode,
+                            boolean denied,
+                            boolean dispatched) {
+        if (!twitterFlow) {
+            return;
+        }
+        // Structural booleans only. Never emit callback URI, query values,
+        // authorization tokens, verifier values, cookies, or credentials.
+        Log.i(TAG, "twitter stage=" + stage
+                + " oauth1=" + legacyTwitterFlow
+                + " token=" + hasToken
+                + " verifier=" + hasVerifier
+                + " code=" + hasCode
+                + " denied=" + denied
+                + " dispatched=" + dispatched);
+    }
+
+    private static boolean hasQueryParameter(Uri uri, String name) {
+        if (uri == null || name == null) {
+            return false;
+        }
+        try {
+            String value = uri.getQueryParameter(name);
+            return value != null && !value.trim().isEmpty();
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static boolean isTwitterHost(Uri uri) {
+        if (uri == null) {
+            return false;
+        }
+        String host = lower(uri.getHost());
+        return "twitter.com".equals(host)
+                || "x.com".equals(host)
+                || host.endsWith(".twitter.com")
+                || host.endsWith(".x.com");
     }
 
     private static Uri safeHttpsUri(String value) {

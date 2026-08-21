@@ -4,11 +4,13 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
 
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Set;
 
 import top.niunaijun.blackbox.BlackBoxCore;
@@ -77,6 +79,17 @@ public final class ExternalAuthRouter {
                 || virtualPackage == null || virtualPackage.trim().isEmpty()) {
             return null;
         }
+
+        // X/Twitter's Android app has had compatibility regressions where an
+        // otherwise valid OAuth authorize URL returns a generic application error.
+        // When the provider intent itself already carries an HTTPS Twitter/X OAuth
+        // URL, leave it to VirtualOAuthRouter so a real Auth-Tab capable browser
+        // handles the authorization and returns the declared custom callback. Pure
+        // native/SSO intents without an HTTPS URL still use this result bridge.
+        if (isTwitterWebAuthIntent(source)) {
+            return null;
+        }
+
         String providerPackage = trustedProviderPackage(source);
         if (providerPackage == null) {
             return null;
@@ -115,6 +128,22 @@ public final class ExternalAuthRouter {
                         | Intent.FLAG_ACTIVITY_CLEAR_TOP
                         | Intent.FLAG_ACTIVITY_SINGLE_TOP));
         return bridge;
+    }
+
+    private static boolean isTwitterWebAuthIntent(Intent intent) {
+        if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction())) {
+            return false;
+        }
+        Uri uri = intent.getData();
+        if (uri == null || !"https".equalsIgnoreCase(uri.getScheme())) {
+            return false;
+        }
+        String host = uri.getHost();
+        host = host == null ? "" : host.toLowerCase(Locale.US);
+        return "twitter.com".equals(host)
+                || "x.com".equals(host)
+                || host.endsWith(".twitter.com")
+                || host.endsWith(".x.com");
     }
 
     private static String trustedProviderPackage(Intent intent) {
