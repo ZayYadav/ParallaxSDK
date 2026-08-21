@@ -17,25 +17,17 @@ import top.niunaijun.blackbox.utils.FileUtils;
  * Host-side trampoline for browser OAuth started by a virtual application.
  *
  * The Auth Tab protocol is emitted directly so the SDK AAR stays self-contained
- * when it is copied into a host app as a raw local AAR. The browser returns the
- * final redirect URI through Activity result data; this bridge immediately routes
- * that URI into BlackBox's virtual PackageManager/ActivityManager.
+ * when it is copied into a host app as a raw local AAR. A real browser that
+ * advertises Auth Tab support is selected explicitly; the browser returns the
+ * final redirect URI through Activity result data and this bridge routes that URI
+ * into BlackBox's virtual PackageManager/ActivityManager.
  */
 public final class VirtualOAuthBridgeActivity extends Activity {
     private static final int REQUEST_AUTH_TAB = 0x5041;
 
-    // Public AndroidX Browser Auth Tab protocol constants. These are browser-facing
-    // Intent extras documented by AndroidX; using the protocol directly avoids a
-    // transitive Maven dependency that a raw local AAR cannot carry by itself.
-    private static final String EXTRA_LAUNCH_AUTH_TAB =
-            "androidx.browser.auth.extra.LAUNCH_AUTH_TAB";
-    private static final String EXTRA_REDIRECT_SCHEME =
-            "androidx.browser.auth.extra.REDIRECT_SCHEME";
-    private static final String EXTRA_CUSTOM_TABS_SESSION =
-            "android.support.customtabs.extra.SESSION";
-
     private String virtualPackage;
     private String expectedRedirectScheme;
+    private String authProvider;
     private int userId = -1;
 
     @Override
@@ -51,36 +43,42 @@ public final class VirtualOAuthBridgeActivity extends Activity {
                 : launchIntent.getStringExtra(VirtualOAuthRouter.EXTRA_VIRTUAL_PACKAGE);
         userId = launchIntent == null ? -1
                 : launchIntent.getIntExtra(VirtualOAuthRouter.EXTRA_USER_ID, -1);
+        authProvider = launchIntent == null ? null
+                : launchIntent.getStringExtra(VirtualOAuthRouter.EXTRA_AUTH_PROVIDER);
 
         Uri authUri = safeHttpsUri(authUrl);
         Uri redirectUri = safeCustomRedirectUri(redirectUriValue);
         if (authUri == null || redirectUri == null || virtualPackage == null
-                || virtualPackage.trim().isEmpty() || userId < 0) {
+                || virtualPackage.trim().isEmpty() || userId < 0
+                || authProvider == null || authProvider.trim().isEmpty()) {
             finish();
             return;
         }
 
         expectedRedirectScheme = lower(redirectUri.getScheme());
-        if (!redirectResolvesToVirtualPackage(redirectUri)) {
+        if (!redirectResolvesToVirtualPackage(redirectUri)
+                || !AuthTabCompat.isSupportedProvider(this, authProvider, authUri)) {
             finish();
             return;
         }
 
         if (savedInstanceState == null) {
-            launchAuthTab(authUri, expectedRedirectScheme);
+            launchAuthTab(authUri, expectedRedirectScheme, authProvider);
         }
     }
 
-    private void launchAuthTab(Uri authUri, String redirectScheme) {
+    private void launchAuthTab(Uri authUri, String redirectScheme, String provider) {
         try {
             Intent authIntent = new Intent(Intent.ACTION_VIEW, authUri);
-            authIntent.putExtra(EXTRA_LAUNCH_AUTH_TAB, true);
-            authIntent.putExtra(EXTRA_REDIRECT_SCHEME, redirectScheme);
+            authIntent.addCategory(Intent.CATEGORY_BROWSABLE);
+            authIntent.setPackage(provider);
+            authIntent.putExtra(AuthTabCompat.EXTRA_LAUNCH_AUTH_TAB, true);
+            authIntent.putExtra(AuthTabCompat.EXTRA_REDIRECT_SCHEME, redirectScheme);
 
             // AndroidX AuthTabIntent.Builder adds a null Custom Tabs session so
-            // browsers also recognize this as a Custom Tab-style request.
+            // browsers recognize the request as a Custom Tab/Auth Tab launch.
             Bundle session = new Bundle();
-            session.putBinder(EXTRA_CUSTOM_TABS_SESSION, null);
+            session.putBinder(AuthTabCompat.EXTRA_CUSTOM_TABS_SESSION, null);
             authIntent.putExtras(session);
 
             startActivityForResult(authIntent, REQUEST_AUTH_TAB);
@@ -135,7 +133,7 @@ public final class VirtualOAuthBridgeActivity extends Activity {
                     resolved.activityInfo.name));
             BActivityManager.get().startActivity(callback, userId);
         } catch (Throwable ignored) {
-            // Fail closed. Do not leak redirect data to another package or logs.
+            // Fail closed. Redirect contents are intentionally never logged.
         }
     }
 
@@ -186,7 +184,7 @@ public final class VirtualOAuthBridgeActivity extends Activity {
                     || "javascript".equals(scheme)
                     || "data".equals(scheme)
                     || "intent".equals(scheme)
-                    || !scheme.matches("^[a-z][a-z0-9+.-]{1,63}$")) {
+                    || !scheme.matches("^[a-z][a-z0-9+.-]{1,127}$")) {
                 return null;
             }
             return uri;
