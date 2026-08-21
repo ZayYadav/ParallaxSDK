@@ -122,11 +122,24 @@ def getSigningCertificateSha256 = { signingConfig ->
     return ""
 }
 
-// Encrypt literals only in explicitly annotated first-party classes. Debug is
-// intentionally untouched for readable diagnostics and fast iteration.
+// Release builds protect string constants throughout first-party Loader code.
+// Startup/JNI/generated classes stay out of the transformer so framework and
+// native entry points keep the same stability characteristics as the green build.
 lsparanoid {
     seed = 0x50415241
     includeDependencies = false
+    classFilter = { className ->
+        className.startsWith('com.onecore.loader.')
+                && className != 'com.onecore.loader.BoxApplication'
+                && !className.startsWith('com.onecore.loader.BoxApplication$')
+                && className != 'com.onecore.loader.security.NativeSigningVerifier'
+                && !className.startsWith('com.onecore.loader.security.NativeSigningVerifier$')
+                && className != 'com.onecore.loader.BuildConfig'
+                && className != 'com.onecore.loader.R'
+                && !className.startsWith('com.onecore.loader.R$')
+                && className != 'com.onecore.loader.BR'
+                && !className.startsWith('com.onecore.loader.databinding.')
+    }
     variantFilter = { variant ->
         variant.buildType == 'release'
     }
@@ -203,7 +216,21 @@ android {
 
     packaging {
         jniLibs {
+            // Compressed native libraries minimize APK download/on-disk package size.
             useLegacyPackaging true
+        }
+        resources {
+            excludes += [
+                    'META-INF/DEPENDENCIES',
+                    'META-INF/LICENSE',
+                    'META-INF/LICENSE.txt',
+                    'META-INF/NOTICE',
+                    'META-INF/NOTICE.txt',
+                    'META-INF/**/LICENSE',
+                    'META-INF/**/LICENSE.txt',
+                    'META-INF/**/NOTICE',
+                    'META-INF/**/NOTICE.txt'
+            ]
         }
     }
 
@@ -222,7 +249,6 @@ dependencies {
     implementation "androidx.work:work-runtime:2.11.2"
     implementation 'androidx.profileinstaller:profileinstaller:1.4.1'
     implementation "com.github.topjohnwu.libsu:core:3.1.1"
-    implementation 'io.github.molihuan:pathselector:1.1.16'
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'com.squareup.okio:okio:3.9.0'
     implementation 'com.github.tiann:FreeReflection:3.2.2'
