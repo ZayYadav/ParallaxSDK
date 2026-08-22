@@ -6,10 +6,13 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
+import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
 
 import com.google.android.material.card.MaterialCardView;
+import com.onecore.loader.R;
+import com.onecore.loader.security.HostedLicenseClient;
 
 import java.util.Collections;
 import java.util.Map;
@@ -22,6 +25,8 @@ public final class InteractionGlowInstaller {
             Collections.newSetFromMap(new WeakHashMap<>());
     private static final Map<Activity, ViewTreeObserver.OnGlobalLayoutListener> LISTENERS =
             new WeakHashMap<>();
+    private static final Set<Activity> FAILURE_HANDLED =
+            Collections.newSetFromMap(new WeakHashMap<>());
 
     private InteractionGlowInstaller() {
     }
@@ -30,8 +35,12 @@ public final class InteractionGlowInstaller {
         if (activity == null || activity.getWindow() == null) return;
         View root = activity.getWindow().getDecorView();
         installTree(root);
+        syncVerificationFailure(activity, root);
         if (!LISTENERS.containsKey(activity)) {
-            ViewTreeObserver.OnGlobalLayoutListener listener = () -> installTree(root);
+            ViewTreeObserver.OnGlobalLayoutListener listener = () -> {
+                installTree(root);
+                syncVerificationFailure(activity, root);
+            };
             root.getViewTreeObserver().addOnGlobalLayoutListener(listener);
             LISTENERS.put(activity, listener);
         }
@@ -44,6 +53,7 @@ public final class InteractionGlowInstaller {
         if (listener != null && root.getViewTreeObserver().isAlive()) {
             root.getViewTreeObserver().removeOnGlobalLayoutListener(listener);
         }
+        FAILURE_HANDLED.remove(activity);
     }
 
     private static void installTree(View view) {
@@ -90,6 +100,7 @@ public final class InteractionGlowInstaller {
 
                 case MotionEvent.ACTION_UP:
                     release(target, theme);
+                    maybeShowKeyVerification(target);
                     target.animate()
                             .scaleX(1.018f)
                             .scaleY(1.018f)
@@ -121,6 +132,45 @@ public final class InteractionGlowInstaller {
             }
             return false;
         });
+    }
+
+    private static void maybeShowKeyVerification(View target) {
+        if (!(target.getContext() instanceof Activity) || !(target instanceof TextView)) return;
+        TextView textView = (TextView) target;
+        String label = textView.getText() == null ? "" : textView.getText().toString().trim();
+        if (!"CONNECT TO EDGE SERVER".equalsIgnoreCase(label)) return;
+
+        Activity activity = (Activity) target.getContext();
+        EditText input = activity.findViewById(R.id.textUsername);
+        if (input == null) return;
+        String key = input.getText() == null ? "" : input.getText().toString();
+        if (!HostedLicenseClient.isSupportedActivationKey(key)) return;
+
+        FAILURE_HANDLED.remove(activity);
+        KeyVerificationUi.show(activity);
+    }
+
+    private static void syncVerificationFailure(Activity activity, View root) {
+        if (!KeyVerificationUi.isShowing(activity) || FAILURE_HANDLED.contains(activity)) return;
+        if (!containsText(root, "ACCESS DENIED")) return;
+
+        FAILURE_HANDLED.add(activity);
+        KeyVerificationUi.failed(activity);
+        root.postDelayed(() -> KeyVerificationUi.hide(activity), 620L);
+    }
+
+    private static boolean containsText(View view, String needle) {
+        if (view instanceof TextView) {
+            CharSequence raw = ((TextView) view).getText();
+            if (raw != null && raw.toString().toUpperCase().contains(needle)) return true;
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                if (containsText(group.getChildAt(i), needle)) return true;
+            }
+        }
+        return false;
     }
 
     private static void release(View target, ThemeManager.ThemeSpec theme) {
