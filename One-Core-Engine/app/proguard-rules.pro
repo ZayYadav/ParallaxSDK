@@ -1,82 +1,40 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
+# One-Core Loader release rules.
+# Keep only reflection/JNI/framework boundaries that truly require stable names;
+# everything else is available to R8 for shrinking, optimization and obfuscation.
 
-# ============================================================
-# DEBUG / STACKTRACE ATTRIBUTES
-# ============================================================
-
+# Remove source paths and let R8 freely consolidate first-party class packages.
 -renamesourcefileattribute SourceFile
--keepattributes LineNumberTable
+-allowaccessmodification
+-repackageclasses o
+
+# Reflection-heavy virtualization code relies on these metadata attributes.
 -keepattributes *Annotation*
 -keepattributes Signature
 -keepattributes InnerClasses
 -keepattributes EnclosingMethod
 
-# ============================================================
-# REMOVE RELEASE LOGGING
-# ============================================================
-
+# Remove verbose release logging.
 -assumenosideeffects class android.util.Log {
     public static *** v(...);
     public static *** d(...);
     public static *** i(...);
 }
 
-# ============================================================
-# APPLICATION ENTRY POINT
-# ============================================================
-
+# Android framework entry point. This class initializes the virtualization core
+# before normal app startup and intentionally remains structurally stable.
 -keep class com.onecore.loader.BoxApplication { *; }
--keep class * extends android.app.Application { *; }
 
-# ============================================================
-# BLACKBOX / VIRTUALIZATION CORE
-# ============================================================
-
+# BlackBox/virtualization internals use extensive reflection and generated proxy
+# names. Keep this boundary intact; shrinking the surrounding Loader remains safe.
 -keep class top.niunaijun.blackbox.** { *; }
--keep class top.niunaijun.blackbox.core.NativeCore { *; }
--keep class top.niunaijun.blackbox.BlackBoxCore { *; }
--keep class top.niunaijun.blackbox.app.BActivityThread { *; }
--keep class top.niunaijun.blackbox.core.system.api.MetaActivationManager { *; }
 -dontwarn top.niunaijun.**
 
-# ============================================================
-# HIDDEN API / REFLECTION BRIDGES
-# ============================================================
-
+# Hidden API/reflection/JNI hook boundaries.
 -keep class org.lsposed.hiddenapibypass.** { *; }
 -keep class top.niunaijun.jnihook.** { *; }
 -keep class black.** { *; }
 
-# Android framework classes are library classes. Keep reflective framework references stable,
-# but do not blanket-keep com.android.**: that namespace also contains the bundled APK verifier
-# and previously prevented R8 from removing its unreachable implementation code.
--keep class android.** { *; }
--dontwarn com.android.apksig.**
-
-# ============================================================
-# LEGACY FLOATING COMPONENT COMPATIBILITY
-# ============================================================
-
--keep class com.Jagdish.Loader.** { *; }
--keep class com.Jagdish.Loader.floating.** { *; }
--keep class com.Jagdish.Loader.floating.FloatLogo { *; }
--keep class com.Jagdish.Loader.floating.Overlay { *; }
--keep class com.Jagdish.Loader.floating.ESPView { *; }
-
-# ============================================================
-# SLF4J
-# ============================================================
-
--keep class org.slf4j.** { *; }
--dontwarn org.slf4j.**
-
-# ============================================================
-# NATIVE SIGNING VERIFIER
-# JNI resolves this method by exact class/member names.
-# ============================================================
-
+# Native signing verifier is resolved by its exact JNI class/member name.
 -keep class com.onecore.loader.security.NativeSigningVerifier {
     private static native boolean verifySigningIdentity(
         byte[][],
@@ -87,52 +45,15 @@
 }
 -keepnames class com.onecore.loader.security.NativeSigningVerifier
 
-# ============================================================
-# JNI NATIVE METHODS
-# ============================================================
-
+# Preserve every class/member name that is bound through conventional JNI.
 -keepclasseswithmembernames class * {
     native <methods>;
 }
 
-# ============================================================
-# ANDROID COMPONENTS
-# ============================================================
-
--keep class * extends android.app.Activity { *; }
--keep class * extends android.app.Service { *; }
--keep class * extends android.content.BroadcastReceiver { *; }
--keep class * extends android.content.ContentProvider { *; }
-
-# ============================================================
-# SERIALIZATION / JSON / REFLECTION SAFETY
-# ============================================================
-
--keepattributes RuntimeVisibleAnnotations
--keepattributes RuntimeInvisibleAnnotations
--keepattributes RuntimeVisibleParameterAnnotations
--keepattributes RuntimeInvisibleParameterAnnotations
-
--keepclassmembers enum * {
-    public static **[] values();
-    public static ** valueOf(java.lang.String);
-}
-
+# Parcelable CREATOR fields are looked up by the Android framework/Binder.
 -keepclassmembers class * implements android.os.Parcelable {
     public static final android.os.Parcelable$Creator CREATOR;
 }
 
--keepclassmembers class * {
-    public void *(android.view.View);
-}
-
-# ============================================================
-# SECURITY / EARLY STARTUP
-# ============================================================
-
--keep class com.onecore.loader.security.IntegrityEnforcer { *; }
--keep class com.onecore.loader.security.SecurityThreatDetector { *; }
--keep class com.onecore.loader.security.HostedLicenseClient { *; }
--keep class com.onecore.loader.utils.CrashHandler { *; }
--keep class com.onecore.loader.utils.FLog { *; }
--keep class com.onecore.loader.utils.NetworkConnection { *; }
+# Warnings from optional logging APIs are not actionable in the release APK.
+-dontwarn org.slf4j.**

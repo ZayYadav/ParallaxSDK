@@ -16,8 +16,11 @@ android {
             storePassword getString('storePassword', 'STORE_PASSWORD', 'Store password')
             keyAlias getString('keyAlias', 'KEY_ALIAS', 'Key alias')
             keyPassword getString('keyPassword', 'KEY_PASSWORD', 'Key password')
-            
-            v1SigningEnabled true
+
+            // minSdk is 24, so every supported Android version understands APK
+            // Signature Scheme v2. Dropping legacy JAR/v1 signatures removes the
+            // large META-INF manifest/signature files from the production APK.
+            v1SigningEnabled false
             v2SigningEnabled true
         }
         debug {

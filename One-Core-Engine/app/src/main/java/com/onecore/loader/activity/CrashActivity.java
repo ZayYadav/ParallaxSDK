@@ -1,5 +1,8 @@
 package com.onecore.loader.activity;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
@@ -8,8 +11,6 @@ import android.view.MenuItem;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.blankj.molihuan.utilcode.util.ClipboardUtils;
-import com.blankj.molihuan.utilcode.util.DeviceUtils;
 import com.Jagdish.tastytoast.TastyToast;
 import com.onecore.loader.R;
 import com.onecore.loader.databinding.ActivityCrashBinding;
@@ -30,8 +31,8 @@ public class CrashActivity extends AppCompatActivity {
             getSupportActionBar().setTitle("Application Crash");
         }
 
-        String manufacturer = DeviceUtils.getManufacturer();
-        String deviceModel = DeviceUtils.getModel();
+        String manufacturer = Build.MANUFACTURER;
+        String deviceModel = Build.MODEL;
         String softwareInfo = getIntent().getStringExtra("Software");
         String errorInfo = getIntent().getStringExtra("Error");
         String dateInfo = getIntent().getStringExtra("Date");
@@ -46,7 +47,11 @@ public class CrashActivity extends AppCompatActivity {
         binding.result.setText(errorBuilder.toString());
 
         binding.fab.setOnClickListener(v -> {
-            ClipboardUtils.copyText(binding.result.getText());
+            ClipboardManager clipboard =
+                    (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            if (clipboard != null) {
+                clipboard.setPrimaryClip(ClipData.newPlainText("crash-report", binding.result.getText()));
+            }
             TastyToast.makeText(this, "Text Copied", TastyToast.LENGTH_SHORT, TastyToast.SUCCESS);
         });
     }
