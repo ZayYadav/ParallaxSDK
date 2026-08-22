@@ -22,8 +22,8 @@ import java.util.regex.Pattern;
 
 import okhttp3.CertificatePinner;
 import okhttp3.ConnectionSpec;
+import okhttp3.HttpUrl;
 import okhttp3.MediaType;
-import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
@@ -33,8 +33,6 @@ import okio.BufferedSource;
 /** Fail-closed encrypted client for the pinned Parallax licensing API. */
 @Obfuscate
 public final class HostedLicenseClient {
-    static final String CONNECT_URL = "https://parallaxloader.parallaxserver.online/api/v2/connect";
-    static final String CONNECT_HOST = "parallaxloader.parallaxserver.online";
     static final String GAME_ID = "PUBG";
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
     private static final long MAX_RESPONSE_BYTES = 32L * 1024L;
@@ -55,20 +53,36 @@ public final class HostedLicenseClient {
     private static final String VERIFIED_ELAPSED_TIME = "PARALLAX_VERIFIED_ELAPSED_TIME";
 
     private final Context context;
-    private final OkHttpClient httpClient;
+    private final okhttp3.OkHttpClient httpClient;
+    private final String connectUrl;
+    private final String connectHost;
+    private final String apiPublicKey;
+    private final String[] tlsPins;
 
     public HostedLicenseClient(Context context) {
         this.context = context.getApplicationContext();
+        this.apiPublicKey = configuredPublicKey();
+        this.tlsPins = configuredPins();
+
+        NativeLicenseGuard.assertSecure(this.context, tlsPins, apiPublicKey);
+        this.connectUrl = NativeLicenseGuard.connectUrl();
+        this.connectHost = NativeLicenseGuard.connectHost();
+
+        HttpUrl parsedUrl = HttpUrl.get(connectUrl);
+        if (!"https".equals(parsedUrl.scheme()) || !connectHost.equals(parsedUrl.host())) {
+            throw new SecurityException("Native licensing endpoint validation failed");
+        }
+
         CertificatePinner.Builder pins = new CertificatePinner.Builder();
         int pinCount = 0;
-        for (String pin : configuredPins()) {
-            pins.add(CONNECT_HOST, pin);
+        for (String pin : tlsPins) {
+            pins.add(connectHost, pin);
             pinCount++;
         }
         if (pinCount == 0) {
             throw new IllegalStateException("Licensing TLS pins are not configured");
         }
-        this.httpClient = new OkHttpClient.Builder()
+        this.httpClient = new okhttp3.OkHttpClient.Builder()
                 .certificatePinner(pins.build())
                 .connectionSpecs(Arrays.asList(ConnectionSpec.MODERN_TLS))
                 .proxy(Proxy.NO_PROXY)
@@ -84,6 +98,9 @@ public final class HostedLicenseClient {
     /** Activates or revalidates a key and persists only a cryptographically bound response. */
     public String activate(String activationKey) {
         try {
+            // Native pre-flight: endpoint/config + tracer/injection/interception checks.
+            NativeLicenseGuard.assertSecure(context, tlsPins, apiPublicKey);
+
             AppIntegrity.Verification integrity = AppIntegrity.verify(context);
             if (!integrity.isValid()) {
                 clearLicense();
@@ -104,18 +121,24 @@ public final class HostedLicenseClient {
                     AppIntegrity.currentSigningCertificateSha256(context));
             payload.put("version_code", BuildConfig.VERSION_CODE);
             LicenseTransportCrypto.RequestEnvelope encrypted =
-                    LicenseTransportCrypto.encryptRequest(payload, configuredPublicKey());
+                    LicenseTransportCrypto.encryptRequest(payload, apiPublicKey);
             try {
                 Request request = new Request.Builder()
-                        .url(CONNECT_URL)
+                        .url(connectUrl)
                         .header("Accept", "application/json")
                         .header("Cache-Control", "no-store")
                         .post(RequestBody.create(encrypted.json, JSON))
                         .build();
                 try (Response response = httpClient.newCall(request).execute()) {
-                    if (!CONNECT_URL.equals(response.request().url().toString())) {
-                        throw new IllegalStateException("Licensing server redirected unexpectedly");
+                    if (!connectUrl.equals(response.request().url().toString())
+                            || !connectHost.equals(response.request().url().host())
+                            || response.handshake() == null) {
+                        throw new IllegalStateException("Licensing server transport changed unexpectedly");
                     }
+
+                    // Native post-flight catches a tracer/injection arriving while the request was active.
+                    NativeLicenseGuard.assertSecure(context, tlsPins, apiPublicKey);
+
                     String body = readBoundedJson(response);
                     JSONObject decrypted = LicenseTransportCrypto.decryptResponse(body, encrypted);
                     long receivedAt = System.currentTimeMillis() / 1000L;
@@ -338,12 +361,16 @@ public final class HostedLicenseClient {
     private static String userFacingError(Exception exception) {
         String message = exception.getMessage();
         String normalized = message == null ? "" : message.toLowerCase(Locale.US);
+        if (normalized.contains("environment rejected")
+                || normalized.contains("native licensing")) {
+            return "Secure verification environment rejected";
+        }
         if (normalized.contains("certificate pinning") || normalized.contains("peer not authenticated")) {
             return "Secure server identity validation failed";
         }
         if (normalized.contains("configured") || normalized.contains("encryption")
                 || normalized.contains("canary") || normalized.contains("unsupported response")
-                || normalized.contains("redirected") || normalized.contains("too large")) {
+                || normalized.contains("transport changed") || normalized.contains("too large")) {
             return message;
         }
         if (normalized.contains("timeout") || normalized.contains("timed out")) {
