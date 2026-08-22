@@ -1,6 +1,11 @@
 package com.onecore.loader.security;
 
-/** Native, independent SHA-256 comparison for the active APK signing certificates. */
+/**
+ * Native signing verifier independent from PackageManager signer metadata.
+ *
+ * <p>The on-disk path parses and verifies APK Signature Scheme v2 directly in native code and
+ * also validates libParallaxLoader's executable mapping against its on-disk ELF image.</p>
+ */
 final class NativeSigningVerifier {
     private static final boolean AVAILABLE;
 
@@ -34,9 +39,25 @@ final class NativeSigningVerifier {
         }
     }
 
+    static boolean verifyInstalledApk(String apkPath, String actualPackage) {
+        if (!AVAILABLE || apkPath == null || apkPath.isEmpty()
+                || actualPackage == null || actualPackage.isEmpty()) {
+            return false;
+        }
+        try {
+            return verifyInstalledApkNative(apkPath, actualPackage);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
     private static native boolean verifySigningIdentity(
             byte[][] allowedDigests,
             byte[][] certificates,
             String actualPackage,
             String expectedPackage);
+
+    private static native boolean verifyInstalledApkNative(
+            String apkPath,
+            String actualPackage);
 }
