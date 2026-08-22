@@ -107,6 +107,20 @@ final class NativeLicenseGuard {
         }
     }
 
+    static int pulseA(int seed, long stamp) {
+        if (!AVAILABLE) {
+            throw new IllegalStateException("Native runtime unavailable");
+        }
+        return nativePulseA(seed, stamp);
+    }
+
+    static void pulseB(int ticket, long stamp) {
+        if (!AVAILABLE) {
+            throw new IllegalStateException("Native runtime unavailable");
+        }
+        nativePulseB(ticket, stamp);
+    }
+
     private static boolean hasConfiguredProxy() {
         String httpsProxy = System.getProperty("https.proxyHost", "");
         String httpProxy = System.getProperty("http.proxyHost", "");
@@ -127,4 +141,8 @@ final class NativeLicenseGuard {
             String publicKeyB64,
             boolean proxyConfigured,
             boolean debuggerConnected);
+
+    private static native int nativePulseA(int seed, long stamp);
+
+    private static native void nativePulseB(int ticket, long stamp);
 }
