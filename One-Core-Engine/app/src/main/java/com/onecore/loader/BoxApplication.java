@@ -67,8 +67,6 @@ public class BoxApplication extends Application {
             });
             FLog.info("Startup: BlackBox attach complete");
         } catch (Throwable error) {
-            // Do not leave the process in a silent startup loop. The UI can still launch and
-            // surface a useful error/log instead of being killed by an initialization exception.
             FLog.error("BlackBox attach failed", error);
         }
     }
@@ -79,8 +77,6 @@ public class BoxApplication extends Application {
         gApp = this;
         FLog.info("Startup: Application.onCreate begin");
 
-        // Full APK cryptographic verification is expensive. IntegrityEnforcer performs it on a
-        // background worker and enforces an invalid result after the first UI frame is available.
         IntegrityEnforcer.install(this);
 
         try {
@@ -91,7 +87,6 @@ public class BoxApplication extends Application {
             FLog.error("BlackBox service initialization failed", error);
         }
 
-        // Native key retrieval + SDK activation must never delay Application.onCreate().
         new Thread(() -> {
             try {
                 MetaActivationManager.activateSdk(BoxApp());
@@ -119,7 +114,7 @@ public class BoxApplication extends Application {
     }
 
     public void showToastWithImage(String msg, int type) {
-        TastyToast.makeText(BoxApplication.get(), msg, TastyToast.LENGTH_LONG, type).show();
+        TastyToast.makeText(this, msg, TastyToast.LENGTH_LONG, type);
     }
 
     public static boolean checkRootAccess() {
