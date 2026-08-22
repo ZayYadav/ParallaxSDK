@@ -138,6 +138,8 @@ android {
         versionName rootProject.ext.versionName
         vectorDrawables.useSupportLibrary = true
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        // Keep only the app's default/English resources from dependencies.
+        resourceConfigurations += ['en']
         buildConfigField "String", "PARALLAX_API_PUBLIC_KEY_B64", javaString(parallaxApiPublicKey)
         buildConfigField "String", "PARALLAX_TLS_PINS", javaString(parallaxTlsPins)
 
@@ -161,9 +163,11 @@ android {
         release {
             debuggable false
             jniDebuggable false
-            // Temporary stability mode: keep bytecode untouched while diagnosing startup VerifyError.
-            shrinkResources false
-            minifyEnabled false
+            // Release-only optimization: R8 removes unreachable bytecode and the resource shrinker
+            // drops resources no longer referenced after minification. Startup/JNI entry points are
+            // protected by the project ProGuard rules below.
+            shrinkResources true
+            minifyEnabled true
             signingConfig signingConfigs.release
             def releaseSigningSha256 = oneCoreAllowedSigningSha256 ?: getSigningCertificateSha256(signingConfigs.release)
             buildConfigField "String", "EXPECTED_SIGNATURE_SHA256", javaString(releaseSigningSha256)
