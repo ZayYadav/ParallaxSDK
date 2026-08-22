@@ -16,6 +16,7 @@ plugins {
     id 'org.lsposed.lsparanoid'
 }
 
+apply plugin: 'top.niunaijun.blackobfuscator'
 apply from: '../signing.gradle'
 
 def parallaxApiPublicKey = providers.gradleProperty('parallaxApiPublicKey')
@@ -30,6 +31,17 @@ def oneCoreAllowedSigningSha256 = providers.gradleProperty('onecoreAllowedSignin
 def javaString = { String value -> '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"' }
 def releaseTaskRequested = gradle.startParameter.taskNames.any {
     it.toLowerCase(Locale.ROOT).contains('release')
+}
+def blackObfuscatorEnabled = providers.gradleProperty('blackObfuscatorEnabled')
+        .orElse('true')
+        .get()
+        .toBoolean()
+def blackObfuscatorDepth = providers.gradleProperty('blackObfuscatorDepth')
+        .orElse('1')
+        .get()
+        .toInteger()
+if (blackObfuscatorDepth != 1) {
+    throw new GradleException('The OneCore safe BlackObfuscator profile only supports depth 1')
 }
 
 // Keep the user's supplied artwork as the untouched master outside res/. Every build creates
@@ -211,6 +223,36 @@ lsparanoid {
     variantFilter = { variant ->
         variant.buildType == 'release'
     }
+}
+
+// BlackObfuscator is deliberately much narrower than the string transformer. The old broad
+// package profile touched startup/security bytecode and produced VerifyError failures on-device.
+// This safe tier transforms only ordinary preference/config helpers at depth 1. Android
+// components, JNI/native bridges, security/crypto code, reflection-heavy code and BlackBox are
+// left untouched. Disable temporarily with -PblackObfuscatorEnabled=false when troubleshooting.
+BlackObfuscator {
+    enabled blackObfuscatorEnabled && releaseTaskRequested
+    depth blackObfuscatorDepth
+    obfClass = [
+            'com.onecore.loader.Config',
+            'com.onecore.loader.utils.Constants',
+            'com.onecore.loader.utils.Prefs',
+            'com.onecore.loader.utils.FPrefs'
+    ]
+    blackClass = [
+            'com.onecore.loader.BoxApplication',
+            'com.onecore.loader.activity',
+            'com.onecore.loader.floating',
+            'com.onecore.loader.security',
+            'com.onecore.loader.libhelper',
+            'com.onecore.loader.utils.CrashHandler',
+            'com.onecore.loader.utils.FLog',
+            'com.onecore.loader.utils.NetworkConnection',
+            'com.onecore.loader.BuildConfig',
+            'com.onecore.loader.R',
+            'com.onecore.loader.BR',
+            'com.onecore.loader.databinding'
+    ]
 }
 
 android {
