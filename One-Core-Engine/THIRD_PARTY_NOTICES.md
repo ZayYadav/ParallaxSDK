@@ -1,19 +1,20 @@
 # Third-party build tooling
 
-## BlackObfuscator
+## StringFog
 
-The release build uses the following build-time projects:
+The release build uses `MegatronKing/StringFog` for automatic string protection
+in first-party Loader and SDK bytecode.
 
-- `CodingGay/BlackObfuscator-ASPlugin`, pinned to commit
-  `67aec4c457be0d2644224100fa85aed7eac87cb6`
-- `CodingGay/BlackObfuscator` / its `dex-tools` dependency
+- Gradle plugin: `com.github.megatronking.stringfog:gradle-plugin:5.2.0`
+- XOR runtime/transform implementation: `com.github.megatronking.stringfog:xor:5.0.0`
+- Release configuration uses `StringFogMode.bytes` with per-string random keys.
 
-Both upstream repositories declare the Apache License 2.0. Their source and
-license notices are available at:
+StringFog is licensed under the Apache License 2.0. Upstream source and license
+information are available at:
 
-- https://github.com/CodingGay/BlackObfuscator-ASPlugin
-- https://github.com/CodingGay/BlackObfuscator
+- https://github.com/MegatronKing/StringFog
 - https://www.apache.org/licenses/LICENSE-2.0
 
-BlackObfuscator is a build-time control-flow transformation tool and is not
-packaged as an application runtime library.
+StringFog rewrites protected bytecode string literals into runtime decrypt calls.
+It is defense in depth and does not make client-side data impossible to recover
+at runtime.

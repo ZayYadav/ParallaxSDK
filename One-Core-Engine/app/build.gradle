@@ -9,12 +9,15 @@ import javax.imageio.IIOImage
 import javax.imageio.ImageWriteParam
 import java.awt.image.BufferedImage
 import java.awt.RenderingHints
+import com.github.megatronking.stringfog.plugin.kg.RandomKeyGenerator
+import com.github.megatronking.stringfog.plugin.StringFogMode
 
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
 }
 
+apply plugin: 'stringfog'
 apply from: '../signing.gradle'
 
 def parallaxApiPublicKey = providers.gradleProperty('parallaxApiPublicKey')
@@ -187,6 +190,19 @@ def getSigningCertificateSha256 = { signingConfig ->
     return ""
 }
 
+// Release-only first-party string protection. StringFog rewrites literals into runtime decrypt
+// calls and bytes mode stores encrypted byte arrays instead of readable/base64 string payloads.
+// This safely covers BoxApplication, activities, security classes, JNI-facing Java wrappers,
+// crash/logging helpers and generated BuildConfig literals without control-flow rewriting.
+stringfog {
+    implementation 'com.github.megatronking.stringfog.xor.StringFogImpl'
+    packageName rootProject.ext.LoaderPkg
+    enable releaseTaskRequested
+    fogPackages = ['com.onecore.loader', 'com.Jagdish.tastytoast']
+    kg new RandomKeyGenerator()
+    mode StringFogMode.bytes
+}
+
 android {
     compileSdk rootProject.ext.compileSdkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -274,6 +290,10 @@ android {
 
 dependencies {
     implementation fileTree(dir: "libs", include: ["*.jar", "*.aar"])
+    implementation 'com.github.megatronking.stringfog:xor:5.0.0'
+    // Existing source annotations remain compile-compatible, but LSParanoid no longer transforms
+    // the Loader. StringFog is the single release string transformer to avoid double rewriting.
+    compileOnly 'org.lsposed.lsparanoid:core:0.6.0'
     implementation 'com.android.tools.build:apksig:8.11.1'
     implementation 'androidx.appcompat:appcompat:1.7.1'
     implementation 'com.google.android.material:material:1.14.0'

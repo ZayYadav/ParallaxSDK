@@ -59,6 +59,18 @@
             android:name=".activity.MainActivity"
             android:exported="false"
             android:theme="@style/AppTheme" />
+
+        <activity
+            android:name=".activity.KeyPortalActivity"
+            android:exported="false"
+            android:noHistory="true"
+            android:theme="@style/Theme.AppCompat.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="onecoreedge" android:host="key-portal" />
+            </intent-filter>
+        </activity>
         
         <activity
             android:name=".activity.CrashActivity"

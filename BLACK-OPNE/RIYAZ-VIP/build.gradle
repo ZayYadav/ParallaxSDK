@@ -1,6 +1,27 @@
+import com.github.megatronking.stringfog.plugin.kg.RandomKeyGenerator
+import com.github.megatronking.stringfog.plugin.StringFogMode
+
 plugins {
     id 'com.android.library'
     id 'org.jetbrains.kotlin.android'
+}
+
+apply plugin: 'stringfog'
+
+def releaseTaskRequested = gradle.startParameter.taskNames.any {
+    it.toLowerCase(Locale.ROOT).contains('release')
+}
+
+// Protect first-party SDK literals before the AAR is copied into the Loader. The SDK contains
+// several package roots, so all of them are covered explicitly. bytes mode keeps encrypted data
+// out of the DEX string pool while runtime values remain identical to source values.
+stringfog {
+    implementation 'com.github.megatronking.stringfog.xor.StringFogImpl'
+    packageName 'top.niunaijun.blackbox'
+    enable releaseTaskRequested
+    fogPackages = ['android', 'black', 'net_62v', 'top']
+    kg new RandomKeyGenerator()
+    mode StringFogMode.bytes
 }
 
 android {
@@ -31,7 +52,7 @@ android {
         }
 
         release {
-            // Stability mode: keep the SDK bytecode untouched while loader startup is debugged.
+            // StringFog handles release string protection while preserving bytecode control flow.
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
@@ -87,7 +108,10 @@ dependencies {
     implementation 'com.github.tiann:FreeReflection:3.2.2'
     implementation 'com.github.CodingGay.BlackReflection:core:1.1.2'
     annotationProcessor 'com.github.CodingGay.BlackReflection:compiler:1.1.2'
+    implementation 'com.github.megatronking.stringfog:xor:5.0.0'
 
+    // Existing @Obfuscate annotations are retained only for source compatibility.
+    compileOnly 'org.lsposed.lsparanoid:core:0.6.0'
     compileOnly "com.google.auto.service:auto-service:1.1.1"
     annotationProcessor "com.google.auto.service:auto-service:1.1.1"
     implementation "com.squareup:javapoet:1.13.0"

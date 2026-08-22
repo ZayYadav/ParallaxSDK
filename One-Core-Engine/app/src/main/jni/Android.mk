@@ -19,7 +19,8 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE := ParallaxLoader
 
-LOCAL_SRC_FILES :=  main.cpp \
+LOCAL_SRC_FILES := main.cpp \
+                   native_vault.cpp
 
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/backends/external/curl-android-$(TARGET_ARCH_ABI)/include
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/backends/external/openssl-android-$(TARGET_ARCH_ABI)/include
@@ -27,7 +28,7 @@ LOCAL_C_INCLUDES += $(LOCAL_PATH)/backends/external/openssl-android-$(TARGET_ARC
 # Code optimization
 # -std=c++17 is required to support AIDE app with NDK support
 LOCAL_CFLAGS += -Wno-error=format-security -fvisibility=hidden -ffunction-sections -fdata-sections -w -std=c++17
-LOCAL_CPPFLAGS += -Wno-error=format-security -fvisibility=hidden -ffunction-sections -fdata-sections -w -Werror -s  -fms-extensions
+LOCAL_CPPFLAGS += -Wno-error=format-security -fvisibility=hidden -ffunction-sections -fdata-sections -w -Werror -s -fms-extensions
 LOCAL_LDFLAGS += -Wl,--gc-sections,--strip-all
 LOCAL_ARM_MODE := arm
 
