@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Parallax Loader</string>
+    <string name="app_name">OneCore Edge Server</string>
     <string name="GODL_NAME">Welcome</string>
-    <string name="GODL_NAME1"> PARALLAX LOADER</string>
+    <string name="GODL_NAME1"> ONECORE EDGE SERVER</string>
     <string name="welcome_to">Please Enter </string>
     <string name="vip_users"> Your Lincense Key</string>
     
@@ -34,8 +34,5 @@
     
     <string name="start">Start Esp</string>
     <string name="Stop">Stop Esp</string>
-    
-    
-    
 
 </resources>
