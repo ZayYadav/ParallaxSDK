@@ -194,22 +194,7 @@ public final class IntegrityEnforcer implements Application.ActivityLifecycleCal
 
     private void hardTerminate(Activity activity) {
         clearLicenseFailClosed();
-        try {
-            if (isUsable(activity)) {
-                activity.finishAffinity();
-            } else {
-                WeakReference<Activity> foreground = foregroundActivity;
-                Activity current = foreground == null ? null : foreground.get();
-                if (isUsable(current)) current.finishAffinity();
-            }
-        } catch (Throwable ignored) {
-            // Continue into process termination.
-        }
-        try {
-            Process.killProcess(Process.myPid());
-        } finally {
-            System.exit(10);
-        }
+        TerminationGate.close(activity, 0x4901);
     }
 
     @Override
