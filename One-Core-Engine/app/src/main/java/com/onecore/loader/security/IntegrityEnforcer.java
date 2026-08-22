@@ -1,7 +1,6 @@
 package com.onecore.loader.security;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.app.Application;
 import android.os.Bundle;
 import android.os.Handler;
@@ -10,7 +9,6 @@ import android.os.Process;
 import android.os.SystemClock;
 import android.view.WindowManager;
 
-import com.onecore.loader.R;
 import com.onecore.loader.activity.SplashActivity;
 import com.onecore.loader.utils.FLog;
 
@@ -26,12 +24,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Process-wide fail-closed signing enforcement.
  *
  * <p>Heavy APK cryptographic work remains off the main thread. A rejected identity clears local
- * license state, blocks the foreground activity, shows one non-cancelable security message, and
- * terminates the process even if the dialog is not acknowledged.</p>
+ * license state, blocks the foreground activity, launches the themed security cinematic, and
+ * terminates the process even if the cinematic itself stalls.</p>
  */
 public final class IntegrityEnforcer implements Application.ActivityLifecycleCallbacks {
     private static final long RECHECK_INTERVAL_MS = 60 * 1000L;
-    private static final long TERMINATION_GRACE_MS = 3500L;
+    private static final long CINEMATIC_WATCHDOG_MS = 130 * 1000L;
 
     private final Application application;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -102,8 +100,6 @@ public final class IntegrityEnforcer implements Application.ActivityLifecycleCal
                     }
                 }
             } catch (Throwable error) {
-                // An integrity verifier failure is itself unsafe. Do not silently continue with a
-                // previously trusted state if the verifier can no longer execute.
                 FLog.error("Background APK integrity verification failed", error);
                 clearLicenseFailClosed();
                 scheduleHardTermination(null);
@@ -132,8 +128,6 @@ public final class IntegrityEnforcer implements Application.ActivityLifecycleCal
 
         foregroundActivity = new WeakReference<>(activity);
 
-        // Keep first-frame work off the launcher splash. Login/license verification has its own
-        // mandatory native attestation before any server trust decision can succeed.
         if (activity instanceof SplashActivity) {
             return;
         }
@@ -181,19 +175,13 @@ public final class IntegrityEnforcer implements Application.ActivityLifecycleCal
             }
         }, "IntegrityReport").start();
 
-        try {
-            AlertDialog dialog = new AlertDialog.Builder(activity)
-                    .setTitle(R.string.security_warning_title)
-                    .setMessage(R.string.security_warning_signature)
-                    .setCancelable(false)
-                    .setPositiveButton(R.string.close_app, (ignoredDialog, which) ->
-                            hardTerminate(activity))
-                    .create();
-            dialog.setCanceledOnTouchOutside(false);
-            dialog.show();
-        } catch (Throwable error) {
-            FLog.error("Unable to render integrity block dialog", error);
-        }
+        SecurityIncidentDispatcher.raise(
+                activity,
+                SecurityIncidentDispatcher.Reason.SIGNATURE,
+                verification.status().name());
+
+        // UI/media is presentation only. This delayed termination is a final fail-closed watchdog
+        // in case download/playback or the Android media stack never returns a terminal callback.
         scheduleHardTermination(activity);
     }
 
@@ -201,7 +189,7 @@ public final class IntegrityEnforcer implements Application.ActivityLifecycleCal
         if (!terminationScheduled.compareAndSet(false, true)) {
             return;
         }
-        mainHandler.postDelayed(() -> hardTerminate(activity), TERMINATION_GRACE_MS);
+        mainHandler.postDelayed(() -> hardTerminate(activity), CINEMATIC_WATCHDOG_MS);
     }
 
     private void hardTerminate(Activity activity) {
