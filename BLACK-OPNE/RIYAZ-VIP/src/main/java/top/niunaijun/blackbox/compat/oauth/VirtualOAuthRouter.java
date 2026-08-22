@@ -109,7 +109,7 @@ public final class VirtualOAuthRouter {
         return bridge;
     }
 
-    private static boolean isTrustedAuthUri(Uri uri) {
+    static boolean isTrustedAuthUri(Uri uri) {
         if (uri == null) {
             return false;
         }

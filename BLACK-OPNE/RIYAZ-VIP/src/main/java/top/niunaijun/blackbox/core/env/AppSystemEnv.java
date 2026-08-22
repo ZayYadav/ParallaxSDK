@@ -84,6 +84,7 @@ public class AppSystemEnv {
 
         // Real Facebook apps/services.
         sSystemPackages.add("com.facebook.katana");
+        sSystemPackages.add("com.facebook.wakizashi");
         sSystemPackages.add("com.facebook.orca");
         sSystemPackages.add("com.facebook.lite");
         sSystemPackages.add("com.facebook.mlite");

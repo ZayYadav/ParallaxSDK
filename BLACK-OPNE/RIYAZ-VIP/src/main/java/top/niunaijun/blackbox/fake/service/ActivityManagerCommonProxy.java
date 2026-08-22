@@ -56,8 +56,14 @@ public class ActivityManagerCommonProxy {
             }
 
             if (ExternalAuthRouter.isDirectProviderDispatch(intent)) {
+                // The marker lives in an Intent extra and can therefore be set by
+                // virtual applications too. Never treat it as authorization on
+                // its own: only the provider intent created by our bridge may
+                // leave the virtual namespace directly.
                 ExternalAuthRouter.clearDirectProviderDispatch(intent);
-                return method.invoke(who, args);
+                if (ExternalAuthRouter.isTrustedProviderIntent(intent)) {
+                    return method.invoke(who, args);
+                }
             }
 
             if (intent.getParcelableExtra("_G_|_target_") != null) {

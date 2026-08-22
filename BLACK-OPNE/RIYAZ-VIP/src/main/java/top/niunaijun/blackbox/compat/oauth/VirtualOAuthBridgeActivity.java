@@ -58,7 +58,8 @@ public final class VirtualOAuthBridgeActivity extends Activity {
 
         Uri authUri = safeHttpsUri(authUrl);
         Uri redirectUri = safeCustomRedirectUri(redirectUriValue);
-        if (authUri == null || redirectUri == null || virtualPackage == null
+        if (authUri == null || !VirtualOAuthRouter.isTrustedAuthUri(authUri)
+                || redirectUri == null || virtualPackage == null
                 || virtualPackage.trim().isEmpty() || userId < 0) {
             finish();
             return;
