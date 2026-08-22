@@ -1,6 +1,8 @@
 package com.onecore.loader.ui;
 
 import android.app.Activity;
+import android.content.Context;
+import android.content.ContextWrapper;
 import android.os.Build;
 import android.view.MotionEvent;
 import android.view.View;
@@ -135,12 +137,13 @@ public final class InteractionGlowInstaller {
     }
 
     private static void maybeShowKeyVerification(View target) {
-        if (!(target.getContext() instanceof Activity) || !(target instanceof TextView)) return;
+        if (!(target instanceof TextView)) return;
         TextView textView = (TextView) target;
         String label = textView.getText() == null ? "" : textView.getText().toString().trim();
         if (!"CONNECT TO EDGE SERVER".equalsIgnoreCase(label)) return;
 
-        Activity activity = (Activity) target.getContext();
+        Activity activity = findActivity(target.getContext());
+        if (activity == null) return;
         EditText input = activity.findViewById(R.id.textUsername);
         if (input == null) return;
         String key = input.getText() == null ? "" : input.getText().toString();
@@ -148,6 +151,17 @@ public final class InteractionGlowInstaller {
 
         FAILURE_HANDLED.remove(activity);
         KeyVerificationUi.show(activity);
+    }
+
+    private static Activity findActivity(Context context) {
+        Context current = context;
+        while (current instanceof ContextWrapper) {
+            if (current instanceof Activity) return (Activity) current;
+            Context base = ((ContextWrapper) current).getBaseContext();
+            if (base == current) break;
+            current = base;
+        }
+        return current instanceof Activity ? (Activity) current : null;
     }
 
     private static void syncVerificationFailure(Activity activity, View root) {
