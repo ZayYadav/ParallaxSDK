@@ -8,9 +8,10 @@ buildscript {
     dependencies {
         classpath 'com.android.tools.build:gradle:8.11.1'
         classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.20'
-        classpath 'org.lsposed.lsparanoid:gradle-plugin:0.6.0'
-        // BlackObfuscator 3.9 pinned to the immutable upstream commit used by the previously validated release pipeline.
-        classpath 'com.github.CodingGay:BlackObfuscator-ASPlugin:67aec4c457'
+        // StringFog 5.2.0 uses ASM9 and supports Gradle 8.x. The bytes mode is configured
+        // in the app module so protected literals are emitted as encrypted byte arrays.
+        classpath 'com.github.megatronking.stringfog:gradle-plugin:5.2.0'
+        classpath 'com.github.megatronking.stringfog:xor:5.0.0'
     }
 }
 
