@@ -14,6 +14,7 @@ import com.google.android.material.color.DynamicColors;
 import com.onecore.loader.security.IntegrityEnforcer;
 import com.onecore.loader.ui.AdvancedUiStyler;
 import com.onecore.loader.ui.EdgeVisualInstaller;
+import com.onecore.loader.ui.InteractionGlowInstaller;
 import com.onecore.loader.ui.ThemeManager;
 import com.onecore.loader.utils.CrashHandler;
 import com.onecore.loader.utils.FLog;
@@ -140,7 +141,6 @@ public class BoxApplication extends Application {
         if (themeCount == 1) {
             nextTheme = 0;
         } else if (previousTheme >= 0 && previousTheme < themeCount) {
-            // Pick from the other themes so consecutive cold launches never look identical.
             int offset = 1 + random.nextInt(themeCount - 1);
             nextTheme = (previousTheme + offset) % themeCount;
         } else {
@@ -161,6 +161,7 @@ public class BoxApplication extends Application {
                 AdvancedUiStyler.attach(activity);
                 ThemeManager.attach(activity);
                 EdgeVisualInstaller.attach(activity);
+                InteractionGlowInstaller.attach(activity);
             }
 
             @Override
@@ -194,6 +195,7 @@ public class BoxApplication extends Application {
             public void onActivityDestroyed(Activity activity) {
                 AdvancedUiStyler.detach(activity);
                 ThemeManager.detach(activity);
+                InteractionGlowInstaller.detach(activity);
             }
         });
     }

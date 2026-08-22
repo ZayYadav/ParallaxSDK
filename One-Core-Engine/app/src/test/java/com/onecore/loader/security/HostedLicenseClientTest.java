@@ -15,10 +15,8 @@ public class HostedLicenseClientTest {
     private static final long SERVER_TIME = 1_800_000_000L;
 
     @Test
-    public void encryptedCheckerIdentityIsPinnedInTheLoader() {
-        assertEquals("https://parallaxloader.parallaxserver.online/api/v2/connect",
-                HostedLicenseClient.CONNECT_URL);
-        assertEquals("parallaxloader.parallaxserver.online", HostedLicenseClient.CONNECT_HOST);
+    public void encryptedCheckerKeepsExpectedGameIdentity() {
+        // Endpoint and host are intentionally native-owned and are not exposed as DEX constants.
         assertEquals("PUBG", HostedLicenseClient.GAME_ID);
     }
 
