@@ -12,6 +12,7 @@ import com.Jagdish.tastytoast.TastyToast;
 import com.google.android.material.color.DynamicColors;
 import com.onecore.loader.security.IntegrityEnforcer;
 import com.onecore.loader.ui.AdvancedUiStyler;
+import com.onecore.loader.ui.ThemeManager;
 import com.onecore.loader.utils.CrashHandler;
 import com.onecore.loader.utils.FLog;
 import com.onecore.loader.utils.NetworkConnection;
@@ -126,6 +127,7 @@ public class BoxApplication extends Application {
                 }
                 activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
                 AdvancedUiStyler.attach(activity);
+                ThemeManager.attach(activity);
             }
 
             @Override
@@ -158,6 +160,7 @@ public class BoxApplication extends Application {
             @Override
             public void onActivityDestroyed(Activity activity) {
                 AdvancedUiStyler.detach(activity);
+                ThemeManager.detach(activity);
             }
         });
     }
