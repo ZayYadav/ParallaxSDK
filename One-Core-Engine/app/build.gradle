@@ -225,29 +225,42 @@ lsparanoid {
     }
 }
 
-// BlackObfuscator is deliberately much narrower than the string transformer. The old broad
-// package profile touched startup/security bytecode and produced VerifyError failures on-device.
-// This safe tier transforms only ordinary preference/config helpers at depth 1. Android
-// components, JNI/native bridges, security/crypto code, reflection-heavy code and BlackBox are
-// left untouched. Disable temporarily with -PblackObfuscatorEnabled=false when troubleshooting.
+// Expanded safe BlackObfuscator tier. Depth stays locked to 1 because the previous broad
+// depth-2 profile produced Android VerifyError failures. This covers the application shell,
+// login/main/splash flows, non-JNI security/crypto classes and ordinary loader helpers while
+// keeping native bridges, overlay/native artifact code, generated code and crash/logging paths
+// out of the control-flow transformer. Disable with -PblackObfuscatorEnabled=false for rollback.
 BlackObfuscator {
     enabled blackObfuscatorEnabled && releaseTaskRequested
     depth blackObfuscatorDepth
     obfClass = [
+            'com.onecore.loader.BoxApplication',
             'com.onecore.loader.Config',
+            'com.onecore.loader.activity.LoginActivity',
+            'com.onecore.loader.activity.MainActivity',
+            'com.onecore.loader.activity.SplashActivity',
+            'com.onecore.loader.security.AppIntegrity',
+            'com.onecore.loader.security.DeviceIdentity',
+            'com.onecore.loader.security.HostedLicenseClient',
+            'com.onecore.loader.security.IntegrityEnforcer',
+            'com.onecore.loader.security.LicenseTransportCrypto',
+            'com.onecore.loader.security.SecurePreferences',
+            'com.onecore.loader.security.SecurityThreatDetector',
+            'com.onecore.loader.libhelper.DownloadZip',
+            'com.onecore.loader.libhelper.FileCopyTask',
             'com.onecore.loader.utils.Constants',
             'com.onecore.loader.utils.Prefs',
-            'com.onecore.loader.utils.FPrefs'
+            'com.onecore.loader.utils.FPrefs',
+            'com.onecore.loader.utils.NetworkConnection'
     ]
     blackClass = [
-            'com.onecore.loader.BoxApplication',
-            'com.onecore.loader.activity',
+            'com.onecore.loader.activity.CrashActivity',
             'com.onecore.loader.floating',
-            'com.onecore.loader.security',
-            'com.onecore.loader.libhelper',
+            'com.onecore.loader.security.NativeSigningVerifier',
+            'com.onecore.loader.libhelper.ApkEnv',
+            'com.onecore.loader.libhelper.NativeArtifactStore',
             'com.onecore.loader.utils.CrashHandler',
             'com.onecore.loader.utils.FLog',
-            'com.onecore.loader.utils.NetworkConnection',
             'com.onecore.loader.BuildConfig',
             'com.onecore.loader.R',
             'com.onecore.loader.BR',
