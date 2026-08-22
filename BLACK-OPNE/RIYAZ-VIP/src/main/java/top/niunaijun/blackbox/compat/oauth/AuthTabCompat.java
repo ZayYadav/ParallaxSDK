@@ -21,12 +21,12 @@ import java.util.Set;
  * only selects a real browser that advertises Auth Tab support and can handle
  * the requested HTTPS URL.
  */
-final class AuthTabCompat {
-    static final String EXTRA_LAUNCH_AUTH_TAB =
+public final class AuthTabCompat {
+    public static final String EXTRA_LAUNCH_AUTH_TAB =
             "androidx.browser.auth.extra.LAUNCH_AUTH_TAB";
-    static final String EXTRA_REDIRECT_SCHEME =
+    public static final String EXTRA_REDIRECT_SCHEME =
             "androidx.browser.auth.extra.REDIRECT_SCHEME";
-    static final String EXTRA_CUSTOM_TABS_SESSION =
+    public static final String EXTRA_CUSTOM_TABS_SESSION =
             "android.support.customtabs.extra.SESSION";
 
     private static final String ACTION_CUSTOM_TABS_CONNECTION =
@@ -37,7 +37,7 @@ final class AuthTabCompat {
     private AuthTabCompat() {
     }
 
-    static String findProvider(Context context, Uri authUri) {
+    public static String findProvider(Context context, Uri authUri) {
         if (context == null || authUri == null
                 || !"https".equalsIgnoreCase(authUri.getScheme())) {
             return null;
@@ -89,7 +89,7 @@ final class AuthTabCompat {
         return firstSupported;
     }
 
-    static boolean isSupportedProvider(Context context, String provider, Uri authUri) {
+    public static boolean isSupportedProvider(Context context, String provider, Uri authUri) {
         if (context == null || provider == null || provider.trim().isEmpty()) {
             return false;
         }
