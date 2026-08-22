@@ -22,8 +22,6 @@
 
 #include <obfuscate.h>
 
-#include "NativeApkAttestation.h"
-
 namespace {
 constexpr uint32_t ZIP_EOCD_MAGIC = 0x06054b50u;
 constexpr uint32_t ZIP_CENTRAL_MAGIC = 0x02014b50u;
@@ -337,8 +335,12 @@ bool onecore_verify_process_bound_apk(
     if (strict_runtime_scan && suspicious_open_code_descriptors(base_apk)) return false;
     if (suspicious_nested_payloads(base_apk)) return false;
 
-    return onecore_verify_installed_apk(base_apk.c_str())
-            && maps_are_bound_to_self(library_path, base_apk, strict_runtime_scan);
+    // This function owns process/file binding only. Do not mix runtime relocated native text
+    // bytes into APK signing identity: Android's loader may legitimately alter runtime mapping
+    // state even though the installed base.apk and signing certificate are authentic. Signer and
+    // signed-content validation is performed independently by AppIntegrity/apksig plus the native
+    // expected-certificate digest comparison.
+    return maps_are_bound_to_self(library_path, base_apk, strict_runtime_scan);
 }
 
 extern "C" JNIEXPORT jboolean JNICALL

@@ -18,13 +18,11 @@ Java_com_onecore_loader_security_NativeLicenseGuard_nativeVerifyInstalledApk(
         return JNI_FALSE;
     }
 
-    // The Loader intentionally hosts/virtualizes guest code from its private storage. Treating
-    // every writable APK/DEX/JAR mapping as a signature failure makes the genuine signed Loader
-    // reject its own legitimate runtime. Keep the strong process-bound host verification here:
-    // the claimed file must still be the real installed base.apk derived from the executing
-    // libParallaxLoader.so, nested original/backup APK payloads are still rejected, the compiled
-    // signer must match, APK v2 signed data/content digests must verify, and native text remains
-    // bound. Guest-code map scanning is therefore deliberately disabled for this host check.
+    // License-time native attestation owns host/process binding only. The claimed file must be the
+    // real installed base.apk derived from the currently executing Loader library; wrapper-style
+    // embedded original/backup payloads are rejected. Cryptographic signer/content validation is
+    // performed separately by AppIntegrity using apksig plus the build-pinned native certificate
+    // digest. Runtime relocated native text is intentionally not treated as signing identity.
     const bool verified = onecore_verify_process_bound_apk(path, package_value, false);
     env->ReleaseStringUTFChars(apkPath, path);
     env->ReleaseStringUTFChars(packageName, package_value);
