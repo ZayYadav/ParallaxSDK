@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <cctype>
 #include <cerrno>
+#include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <dirent.h>
 #include <fstream>
