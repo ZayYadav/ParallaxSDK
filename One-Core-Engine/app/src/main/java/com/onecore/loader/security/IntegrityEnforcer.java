@@ -24,8 +24,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Process-wide fail-closed signing enforcement.
  *
  * <p>Heavy APK cryptographic work remains off the main thread. A rejected identity clears local
- * license state, blocks the foreground activity, launches the themed security cinematic, and
- * terminates the process even if the cinematic itself stalls.</p>
+ * license state and blocks the foreground activity. The signature cinematic is reserved for
+ * cryptographically confirmed APK/signing-certificate failures; other integrity failures remain
+ * fail-closed without falsely labelling a genuine signer as a re-signed APK.</p>
  */
 public final class IntegrityEnforcer implements Application.ActivityLifecycleCallbacks {
     private static final long RECHECK_INTERVAL_MS = 60 * 1000L;
@@ -85,7 +86,7 @@ public final class IntegrityEnforcer implements Application.ActivityLifecycleCal
                 lastCheckElapsed = SystemClock.elapsedRealtime();
 
                 if (!verification.isValid()) {
-                    FLog.error("APK signing identity rejected: " + verification.status().name());
+                    FLog.error("APK identity rejected: " + verification.status().name());
                     clearLicenseFailClosed();
                     Activity target = preferred.get();
                     if (!isUsable(target)) {
@@ -119,6 +120,13 @@ public final class IntegrityEnforcer implements Application.ActivityLifecycleCal
 
     private static boolean isUsable(Activity activity) {
         return activity != null && !activity.isFinishing() && !activity.isDestroyed();
+    }
+
+    private static boolean isConfirmedSignatureFailure(AppIntegrity.Status status) {
+        return status == AppIntegrity.Status.APK_SIGNATURE_INVALID
+                || status == AppIntegrity.Status.SIGNER_MISSING
+                || status == AppIntegrity.Status.SIGNER_MISMATCH
+                || status == AppIntegrity.Status.ARCHIVE_SIGNER_MISMATCH;
     }
 
     private void enforce(Activity activity) {
@@ -165,10 +173,12 @@ public final class IntegrityEnforcer implements Application.ActivityLifecycleCal
             // Cosmetic only.
         }
 
+        final boolean signatureFailure = isConfirmedSignatureFailure(verification.status());
         new Thread(() -> {
             try {
                 new HostedLicenseClient(application).reportSecurityEvent(
-                        "INVALID_SIGNATURE_" + verification.status().name(),
+                        (signatureFailure ? "INVALID_SIGNATURE_" : "INTEGRITY_REJECTED_")
+                                + verification.status().name(),
                         "critical");
             } catch (Throwable ignored) {
                 // Local enforcement does not depend on telemetry availability.
@@ -177,7 +187,9 @@ public final class IntegrityEnforcer implements Application.ActivityLifecycleCal
 
         SecurityIncidentDispatcher.raise(
                 activity,
-                SecurityIncidentDispatcher.Reason.SIGNATURE,
+                signatureFailure
+                        ? SecurityIncidentDispatcher.Reason.SIGNATURE
+                        : SecurityIncidentDispatcher.Reason.INTEGRITY,
                 verification.status().name());
 
         // UI/media is presentation only. This delayed termination is a final fail-closed watchdog
