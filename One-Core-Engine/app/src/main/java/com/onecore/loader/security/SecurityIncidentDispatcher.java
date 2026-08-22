@@ -4,19 +4,13 @@ import android.app.Activity;
 import android.os.Handler;
 import android.os.Looper;
 
-import com.onecore.loader.ui.SecurityCinematicDialog;
+import com.onecore.loader.ui.SecurityCinematicDialogV2;
 import com.onecore.loader.utils.FLog;
 
 import java.lang.ref.WeakReference;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * Routes security incidents to the appropriate fail-closed response.
- *
- * <p>The cinematic is intentionally reserved for confirmed APK signing/integrity rejection.
- * Debugger/tracer/runtime guard events still terminate fail-closed, but cannot accidentally show
- * the cracked/re-signed APK video on an otherwise genuine signed installation.</p>
- */
+/** Routes confirmed signature incidents to the composited security response. */
 public final class SecurityIncidentDispatcher {
     public enum Reason {
         SIGNATURE,
@@ -34,9 +28,7 @@ public final class SecurityIncidentDispatcher {
     }
 
     public static void attach(Activity activity) {
-        if (!usable(activity)) {
-            return;
-        }
+        if (!usable(activity)) return;
         foreground = new WeakReference<>(activity);
         Reason reason = pendingReason;
         if (reason != null && !ACTIVE.get()) {
@@ -57,12 +49,9 @@ public final class SecurityIncidentDispatcher {
     }
 
     public static void raise(Activity preferredActivity, Reason reason, String detail) {
-        if (reason == null) {
-            reason = Reason.INTEGRITY;
-        }
+        if (reason == null) reason = Reason.INTEGRITY;
         pendingReason = reason;
         pendingDetail = detail == null ? "" : detail;
-
         Activity target = usable(preferredActivity) ? preferredActivity : currentActivity();
         final Reason finalReason = reason;
         final String finalDetail = pendingDetail;
@@ -77,14 +66,11 @@ public final class SecurityIncidentDispatcher {
     }
 
     private static void dispatch(Activity activity, Reason reason, String detail) {
-        if (!usable(activity)) {
-            return;
-        }
+        if (!usable(activity)) return;
         pendingReason = null;
         pendingDetail = null;
 
         if (reason != Reason.SIGNATURE) {
-            // Runtime/debug protection remains fail-closed but does not use the signature video.
             hardTerminate(activity, reason);
             return;
         }
@@ -92,17 +78,15 @@ public final class SecurityIncidentDispatcher {
     }
 
     private static void showSignatureCinematic(Activity activity, String detail) {
-        if (!usable(activity) || !ACTIVE.compareAndSet(false, true)) {
-            return;
-        }
+        if (!usable(activity) || !ACTIVE.compareAndSet(false, true)) return;
         try {
-            SecurityCinematicDialog.show(
+            SecurityCinematicDialogV2.show(
                     activity,
                     Reason.SIGNATURE,
                     detail,
                     () -> hardTerminate(activity, Reason.SIGNATURE));
         } catch (Throwable error) {
-            FLog.error("Unable to start signature security cinematic", error);
+            FLog.error("Unable to start composited signature security cinematic", error);
             hardTerminate(activity, Reason.SIGNATURE);
         }
     }
@@ -112,6 +96,8 @@ public final class SecurityIncidentDispatcher {
     }
 
     private static void hardTerminate(Activity activity, Reason reason) {
+        // Final close still goes through the existing obfuscated/native TerminationGate rather than
+        // exposing a single direct Process.killProcess/System.exit call in this response class.
         int marker = 0x5A17 ^ ((reason == null ? 3 : reason.ordinal() + 1) * 0x1337);
         TerminationGate.close(activity, marker);
     }
