@@ -3,7 +3,6 @@ package com.onecore.loader.security;
 import android.app.Activity;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.Process;
 
 import com.onecore.loader.ui.SecurityCinematicDialog;
 import com.onecore.loader.utils.FLog;
@@ -83,10 +82,10 @@ public final class SecurityIncidentDispatcher {
         pendingReason = null;
         pendingDetail = null;
         try {
-            SecurityCinematicDialog.show(activity, reason, detail, () -> hardTerminate(activity));
+            SecurityCinematicDialog.show(activity, reason, detail, () -> hardTerminate(activity, reason));
         } catch (Throwable error) {
             FLog.error("Unable to start security cinematic", error);
-            hardTerminate(activity);
+            hardTerminate(activity, reason);
         }
     }
 
@@ -94,23 +93,8 @@ public final class SecurityIncidentDispatcher {
         return activity != null && !activity.isFinishing() && !activity.isDestroyed();
     }
 
-    private static void hardTerminate(Activity activity) {
-        try {
-            if (usable(activity)) {
-                activity.finishAffinity();
-            } else {
-                Activity current = currentActivity();
-                if (usable(current)) {
-                    current.finishAffinity();
-                }
-            }
-        } catch (Throwable ignored) {
-            // Continue into process termination.
-        }
-        try {
-            Process.killProcess(Process.myPid());
-        } finally {
-            System.exit(10);
-        }
+    private static void hardTerminate(Activity activity, Reason reason) {
+        int marker = 0x5A17 ^ ((reason == null ? 3 : reason.ordinal() + 1) * 0x1337);
+        TerminationGate.close(activity, marker);
     }
 }
