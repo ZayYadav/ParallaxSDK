@@ -1,8 +1,6 @@
 #include <jni.h>
-#include <cstring>
-#include <obfuscate.h>
 
-#include "NativeApkAttestation.h"
+#include "ProcessBindingGuard.h"
 
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_onecore_loader_security_NativeLicenseGuard_nativeVerifyInstalledApk(
@@ -20,8 +18,10 @@ Java_com_onecore_loader_security_NativeLicenseGuard_nativeVerifyInstalledApk(
         return JNI_FALSE;
     }
 
-    const bool package_ok = std::strcmp(package_value, OBFUSCATE("com.onecore.loader")) == 0;
-    const bool verified = package_ok && onecore_verify_installed_apk(path);
+    // Sensitive license verification is the strict path: the claimed APK must be the real
+    // installed base.apk bound to the currently executing native library, and writable dynamic
+    // code sources / embedded original-APK payloads are rejected.
+    const bool verified = onecore_verify_process_bound_apk(path, package_value, true);
     env->ReleaseStringUTFChars(apkPath, path);
     env->ReleaseStringUTFChars(packageName, package_value);
     return verified ? JNI_TRUE : JNI_FALSE;
