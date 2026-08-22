@@ -186,6 +186,32 @@ def getSigningCertificateSha256 = { signingConfig ->
     return ""
 }
 
+def normalizeSigningDigestList = { String raw ->
+    if (raw == null || raw.trim().isEmpty()) {
+        return ""
+    }
+    def normalized = raw.split('[,;]', -1)
+            .collect { it.replace(':', '').trim().toUpperCase(Locale.ROOT) }
+            .findAll { !it.isEmpty() }
+    if (normalized.isEmpty() || normalized.any { !(it ==~ /^[0-9A-F]{64}$/) }) {
+        throw new GradleException('Signing SHA-256 configuration must contain 64-digit hex digests')
+    }
+    return normalized.unique().join(',')
+}
+
+def bindNativeSigningIdentity = { signingConfig, String configured, boolean required ->
+    String actual = normalizeSigningDigestList(getSigningCertificateSha256(signingConfig))
+    String expected = normalizeSigningDigestList(configured ?: actual)
+    if (required && (actual.isEmpty() || expected.isEmpty())) {
+        throw new GradleException('Release signing certificate identity is unavailable')
+    }
+    if (!actual.isEmpty() && !expected.isEmpty()
+            && !expected.split(',').contains(actual)) {
+        throw new GradleException('Configured signing identity does not match the selected keystore certificate')
+    }
+    return expected
+}
+
 // Keep this closure detached from the Gradle extension. LSParanoid exposes the
 // callback as a cacheable task @Input, so a normal nested Groovy closure captures
 // LSParanoidExtension and fails Gradle 8.x input fingerprint serialization.
@@ -255,8 +281,14 @@ android {
             shrinkResources false
             minifyEnabled false
             signingConfig signingConfigs.debug
-            def debugSigningSha256 = oneCoreAllowedSigningSha256 ?: getSigningCertificateSha256(signingConfigs.debug)
+            def debugSigningSha256 = bindNativeSigningIdentity(
+                    signingConfigs.debug, oneCoreAllowedSigningSha256, false)
             buildConfigField "String", "EXPECTED_SIGNATURE_SHA256", javaString(debugSigningSha256)
+            externalNativeBuild {
+                ndkBuild {
+                    arguments "ONECORE_SIGNING_SHA256=${debugSigningSha256}"
+                }
+            }
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
 
@@ -266,8 +298,14 @@ android {
             shrinkResources true
             minifyEnabled true
             signingConfig signingConfigs.release
-            def releaseSigningSha256 = oneCoreAllowedSigningSha256 ?: getSigningCertificateSha256(signingConfigs.release)
+            def releaseSigningSha256 = bindNativeSigningIdentity(
+                    signingConfigs.release, oneCoreAllowedSigningSha256, true)
             buildConfigField "String", "EXPECTED_SIGNATURE_SHA256", javaString(releaseSigningSha256)
+            externalNativeBuild {
+                ndkBuild {
+                    arguments "ONECORE_SIGNING_SHA256=${releaseSigningSha256}"
+                }
+            }
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
