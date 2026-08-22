@@ -36,7 +36,7 @@
             android:fontFamily="sans-serif-medium"
             android:gravity="center"
             android:letterSpacing="0.12"
-            android:text="PARALLAX  /  ONECORE"
+            android:text="ONECORE  /  EDGE"
             android:textColor="@color/premium_gold"
             android:textSize="10sp" />
 
@@ -56,9 +56,10 @@
                 android:id="@+id/logo"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:contentDescription="Parallax Labs"
-                android:scaleType="centerCrop"
-                android:src="@drawable/parallax_labs_brand" />
+                android:contentDescription="@string/app_name"
+                android:padding="32dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/onecore_edge_brand_mark" />
         </FrameLayout>
 
         <ImageView
@@ -77,7 +78,7 @@
             android:layout_marginTop="20dp"
             android:fontFamily="sans-serif-black"
             android:letterSpacing="0.08"
-            android:text="ONECORE ENGINE"
+            android:text="ONECORE EDGE SERVER"
             android:textColor="@color/white"
             android:textSize="24sp" />
 
@@ -88,7 +89,7 @@
             android:layout_marginTop="7dp"
             android:fontFamily="sans-serif"
             android:letterSpacing="0.04"
-            android:text="Private runtime control center"
+            android:text="Secure edge runtime control center"
             android:textColor="@color/premium_text_secondary"
             android:textSize="12sp" />
 
@@ -117,7 +118,7 @@
                 android:layout_weight="1"
                 android:fontFamily="sans-serif-medium"
                 android:letterSpacing="0.08"
-                android:text="STARTING ONECORE ENGINE"
+                android:text="STARTING ONECORE EDGE SERVER"
                 android:textColor="@color/white"
                 android:textSize="11sp" />
 
@@ -148,7 +149,7 @@
             android:layout_marginTop="16dp"
             android:fontFamily="sans-serif-medium"
             android:letterSpacing="0.06"
-            android:text="ARM64  &#8226;  API 24-36  &#8226;  SECURE RUNTIME"
+            android:text="ARM64  &#8226;  API 24-36  &#8226;  SECURE EDGE RUNTIME"
             android:textColor="@color/premium_text_muted"
             android:textSize="9sp" />
     </LinearLayout>
