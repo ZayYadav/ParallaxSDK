@@ -12,6 +12,7 @@ import androidx.appcompat.app.AppCompatDelegate;
 import com.Jagdish.tastytoast.TastyToast;
 import com.google.android.material.color.DynamicColors;
 import com.onecore.loader.security.IntegrityEnforcer;
+import com.onecore.loader.security.SecurityIncidentDispatcher;
 import com.onecore.loader.ui.AdvancedUiStyler;
 import com.onecore.loader.ui.EdgeVisualInstaller;
 import com.onecore.loader.ui.InteractionGlowInstaller;
@@ -162,6 +163,7 @@ public class BoxApplication extends Application {
                 ThemeManager.attach(activity);
                 EdgeVisualInstaller.attach(activity);
                 InteractionGlowInstaller.attach(activity);
+                SecurityIncidentDispatcher.attach(activity);
             }
 
             @Override
@@ -196,6 +198,7 @@ public class BoxApplication extends Application {
                 AdvancedUiStyler.detach(activity);
                 ThemeManager.detach(activity);
                 InteractionGlowInstaller.detach(activity);
+                SecurityIncidentDispatcher.detach(activity);
             }
         });
     }
