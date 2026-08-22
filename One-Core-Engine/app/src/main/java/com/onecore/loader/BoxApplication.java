@@ -16,6 +16,7 @@ import com.onecore.loader.security.SecurityIncidentDispatcher;
 import com.onecore.loader.ui.AdvancedUiStyler;
 import com.onecore.loader.ui.EdgeVisualInstaller;
 import com.onecore.loader.ui.InteractionGlowInstaller;
+import com.onecore.loader.ui.PremiumButtonStyler;
 import com.onecore.loader.ui.ThemeManager;
 import com.onecore.loader.utils.CrashHandler;
 import com.onecore.loader.utils.FLog;
@@ -161,6 +162,7 @@ public class BoxApplication extends Application {
                 activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
                 AdvancedUiStyler.attach(activity);
                 ThemeManager.attach(activity);
+                PremiumButtonStyler.attach(activity);
                 EdgeVisualInstaller.attach(activity);
                 InteractionGlowInstaller.attach(activity);
                 SecurityIncidentDispatcher.attach(activity);
@@ -197,6 +199,7 @@ public class BoxApplication extends Application {
             public void onActivityDestroyed(Activity activity) {
                 AdvancedUiStyler.detach(activity);
                 ThemeManager.detach(activity);
+                PremiumButtonStyler.detach(activity);
                 InteractionGlowInstaller.detach(activity);
                 SecurityIncidentDispatcher.detach(activity);
             }
