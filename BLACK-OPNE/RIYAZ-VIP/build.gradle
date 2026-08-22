@@ -88,6 +88,9 @@ dependencies {
     implementation 'com.github.CodingGay.BlackReflection:core:1.1.2'
     annotationProcessor 'com.github.CodingGay.BlackReflection:compiler:1.1.2'
 
+    // The SDK uses @Obfuscate as a compile-time marker only. Keep LSParanoid out of
+    // the produced AAR so an app that applies the Gradle plugin owns the single runtime copy.
+    compileOnly 'org.lsposed.lsparanoid:core:0.6.0'
     compileOnly "com.google.auto.service:auto-service:1.1.1"
     annotationProcessor "com.google.auto.service:auto-service:1.1.1"
     implementation "com.squareup:javapoet:1.13.0"
