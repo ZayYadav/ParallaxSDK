@@ -1,36 +1,34 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="colorPrimary">#FF17202E</color>
-    <color name="colorAccent">#58588D</color>
+    <color name="colorPrimary">#FF0C1724</color>
+    <color name="colorAccent">#38D4FF</color>
     <color name="white">#FFFFFF</color>
-    <color name="background">#000000</color>
-    <color name="blue">#3A6FBD</color>
-    <color name="blue2">#29ACE2</color>
-    <color name="red">#FF0000</color>
-    <color name="whitegelap">#9C9999</color>
-    <color name="grey">#535353</color>
-    <color name="card_background">#60464646</color>
-    <color name="black">#101010</color>
-    <color name="bule3">#198DFA</color>
-    <!-- Button start stop -->
-    <color name="green">#2ebc86</color>
-    <color name="startbtn">#f8465c</color>
-    <color name="stopbtn">#2ebc86</color>
-    <color name="button">#FFFF445C</color>
-    <color name="premium_ink">#080B12</color>
-    <color name="premium_background">#080B12</color>
-    <color name="premium_surface">#E6121824</color>
-    <color name="premium_surface_light">#FF182131</color>
-    <color name="premium_gold">#FFF0C96A</color>
-    <color name="premium_gold_dark">#FFB9862E</color>
-    <color name="premium_success">#FF5DE2B1</color>
-    <color name="premium_warning">#FFF4BE5E</color>
-    <color name="premium_error">#FFFF667A</color>
-    <color name="premium_text_secondary">#FFAFB8C8</color>
-    <color name="premium_text_muted">#FF748094</color>
-    <color name="premium_stroke">#263F506B</color>
-    <color name="premium_stroke_gold">#66F0C96A</color>
-    
-    
+    <color name="background">#050A11</color>
+    <color name="blue">#239CD6</color>
+    <color name="blue2">#38D4FF</color>
+    <color name="red">#FF657A</color>
+    <color name="whitegelap">#9EAABA</color>
+    <color name="grey">#526173</color>
+    <color name="card_background">#60121D2A</color>
+    <color name="black">#050A11</color>
+    <color name="bule3">#1CB7F2</color>
+    <color name="green">#55E6B3</color>
+    <color name="startbtn">#38D4FF</color>
+    <color name="stopbtn">#55E6B3</color>
+    <color name="button">#38D4FF</color>
 
+    <!-- OneCore Edge visual system. Legacy premium_* names are retained to avoid noisy code churn. -->
+    <color name="premium_ink">#03070C</color>
+    <color name="premium_background">#050A11</color>
+    <color name="premium_surface">#F00B1420</color>
+    <color name="premium_surface_light">#FF111F2D</color>
+    <color name="premium_gold">#FF38D4FF</color>
+    <color name="premium_gold_dark">#FF0A8FD6</color>
+    <color name="premium_success">#FF55E6B3</color>
+    <color name="premium_warning">#FFFFC857</color>
+    <color name="premium_error">#FFFF657A</color>
+    <color name="premium_text_secondary">#FFB7C4D4</color>
+    <color name="premium_text_muted">#FF74879E</color>
+    <color name="premium_stroke">#33456A85</color>
+    <color name="premium_stroke_gold">#6638D4FF</color>
 </resources>
