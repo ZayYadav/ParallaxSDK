@@ -76,31 +76,33 @@ The CI workflow performs both stages automatically.
   configured keystore.
 - Release builds minify resources and code, remove verbose logs, and block
   screen capture on sensitive activities.
-- Production release APKs additionally run BlackObfuscator control-flow
-  flattening at depth 2 over first-party security, license, download, and
-  activity code after R8. Generated binding/resource classes, the exact native
-  signing entrypoint, and third-party libraries are excluded for runtime
-  compatibility, as recommended by BlackObfuscator upstream.
-- High-value license transport classes are also marked for the existing
-  LSParanoid release string transformation; this conceals fixed endpoint,
-  algorithm, binding, and parser strings in the packaged DEX without pretending
-  that the whole DEX is cryptographically sealed at runtime.
-- BlackObfuscator is disabled unless the release task explicitly sets
-  `-PblackObfuscatorEnabled=true`. CI pins upstream commit
-  `67aec4c457be0d2644224100fa85aed7eac87cb6`, rejects fewer than 50 transformed
-  methods or conversion stack traces, validates every packaged DEX with
-  `dexdump`, rejects plaintext high-value license strings, and verifies APK
-  signing plus ZIP alignment. CI builds and uploads both release and debug APKs.
-  When production transport variables or signing secrets are missing, artifact
-  names contain `ci-nonproduction`; only fully configured artifacts are labeled
-  `production`. BlackObfuscator remains enabled only for the release APK.
+- Release string protection uses StringFog 5.2.0 instead of control-flow
+  obfuscation. The Loader and freshly built ParallaxCore SDK AAR are both
+  transformed in release builds.
+- StringFog runs in `bytes` mode with per-string random keys. First-party code
+  literals are rewritten into encrypted byte arrays plus runtime decrypt calls,
+  keeping sensitive endpoint, package, parser, crypto, preference, and UI-code
+  literals out of the packaged DEX string pool while preserving normal control
+  flow for Android verifier stability.
+- Existing LSParanoid annotations remain source-compatible only; the Loader
+  does not stack a second string transformer over StringFog.
+- R8 minification/resource shrinking remain enabled for the Loader release.
+  CI validates every packaged DEX with `dexdump`, verifies APK signing and ZIP
+  alignment, and builds both release and debug APKs. When production transport
+  variables or signing secrets are missing, artifact names contain
+  `ci-nonproduction`; only fully configured artifacts are labeled `production`.
 - Tapjacking protection rejects obscured touches on the license input, while
   WorkManager and notification registrations are delegated to their current
   AndroidX manifests for modern Android compatibility.
-- Signature or VPN policy failures now stop at a non-cancelable warning in both
+- Signature or VPN policy failures stop at a non-cancelable warning in both
   the splash entry point and direct login flow.
 - APK builds package only `arm64-v8a`, reducing native payload size and excluding
   32-bit devices by design.
+
+Normal Android resource labels, manifest metadata, class descriptors and
+third-party/framework strings can remain inspectable in an APK. Sensitive
+first-party values should not rely on client-side obfuscation as their only
+security boundary.
 
 These controls are defense in depth; no client-side Android application can be
 made impossible to inspect or modify. Server-side authorization should remain
