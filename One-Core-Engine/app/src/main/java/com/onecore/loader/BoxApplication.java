@@ -11,6 +11,7 @@ import androidx.appcompat.app.AppCompatDelegate;
 import com.Jagdish.tastytoast.TastyToast;
 import com.google.android.material.color.DynamicColors;
 import com.onecore.loader.security.IntegrityEnforcer;
+import com.onecore.loader.ui.AdvancedUiStyler;
 import com.onecore.loader.utils.CrashHandler;
 import com.onecore.loader.utils.FLog;
 import com.onecore.loader.utils.NetworkConnection;
@@ -78,7 +79,7 @@ public class BoxApplication extends Application {
     public void onCreate() {
         super.onCreate();
         gApp = this;
-        allowScreenshotsAcrossLoader();
+        configureLoaderActivities();
         FLog.info("Startup: Application.onCreate begin");
 
         IntegrityEnforcer.install(this);
@@ -117,27 +118,29 @@ public class BoxApplication extends Application {
         FLog.info("Startup: Application.onCreate complete");
     }
 
-    private void allowScreenshotsAcrossLoader() {
+    private void configureLoaderActivities() {
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
-            private void clearSecureFlag(Activity activity) {
-                if (activity != null && activity.getWindow() != null) {
-                    activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+            private void configure(Activity activity) {
+                if (activity == null || activity.getWindow() == null) {
+                    return;
                 }
+                activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+                AdvancedUiStyler.attach(activity);
             }
 
             @Override
             public void onActivityCreated(Activity activity, Bundle savedInstanceState) {
-                clearSecureFlag(activity);
+                configure(activity);
             }
 
             @Override
             public void onActivityStarted(Activity activity) {
-                clearSecureFlag(activity);
+                configure(activity);
             }
 
             @Override
             public void onActivityResumed(Activity activity) {
-                clearSecureFlag(activity);
+                configure(activity);
             }
 
             @Override
@@ -154,6 +157,7 @@ public class BoxApplication extends Application {
 
             @Override
             public void onActivityDestroyed(Activity activity) {
+                AdvancedUiStyler.detach(activity);
             }
         });
     }
