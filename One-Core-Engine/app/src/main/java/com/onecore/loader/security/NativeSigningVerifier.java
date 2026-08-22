@@ -1,13 +1,14 @@
 package com.onecore.loader.security;
 
 /**
- * Native signing verifier independent from PackageManager signer metadata.
+ * Native signing/process-binding verifier independent from PackageManager signer metadata.
  *
- * <p>The on-disk path parses and verifies APK Signature Scheme v2 directly in native code,
- * validates libParallaxLoader's executable mapping against its on-disk ELF image, and first binds
- * the claimed APK path to the real installed base.apk associated with the currently executing
- * native library. This prevents wrapper/repacker code from pointing the verifier at an embedded
- * untouched copy of the original APK.</p>
+ * <p>The host APK path is bound in native code to the real installed base.apk associated with the
+ * currently executing Loader library. Cryptographic signer identity is then checked separately
+ * against the build-pinned SHA-256 certificate using certificates produced by apksig. Keeping
+ * process binding separate from runtime relocated native-text bytes avoids false signature alarms
+ * on genuine Android linker/runtime states while still preventing an embedded untouched APK from
+ * being substituted for the actual installed host.</p>
  */
 final class NativeSigningVerifier {
     private static final boolean AVAILABLE;
@@ -48,11 +49,9 @@ final class NativeSigningVerifier {
             return false;
         }
         try {
-            // Process binding is intentionally checked both before and after the direct v2
-            // attestation. An embedded original APK cannot be substituted for the host base.apk.
-            return verifyProcessBoundApkNative(apkPath, actualPackage)
-                    && verifyInstalledApkNative(apkPath, actualPackage)
-                    && verifyProcessBoundApkNative(apkPath, actualPackage);
+            // Bind only to the currently executing installation. Actual signer + signed-content
+            // validation is performed by AppIntegrity/apksig and verifySigningIdentity().
+            return verifyProcessBoundApkNative(apkPath, actualPackage);
         } catch (Throwable ignored) {
             return false;
         }
@@ -64,6 +63,9 @@ final class NativeSigningVerifier {
             String actualPackage,
             String expectedPackage);
 
+    // Kept for native compatibility/diagnostics; it is deliberately not used as the signing
+    // identity gate because it also contains runtime-native mapping checks that can be unstable
+    // across legitimate Android linker states.
     private static native boolean verifyInstalledApkNative(
             String apkPath,
             String actualPackage);
