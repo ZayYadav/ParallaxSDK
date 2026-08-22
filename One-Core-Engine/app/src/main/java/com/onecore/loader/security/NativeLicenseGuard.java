@@ -61,9 +61,11 @@ final class NativeLicenseGuard {
                 ? null : context.getApplicationInfo().sourceDir;
         if (apkPath == null || apkPath.isEmpty()
                 || !nativeVerifyInstalledApk(apkPath, context.getPackageName())) {
-            SecurityIncidentDispatcher.raise(
-                    SecurityIncidentDispatcher.Reason.SIGNATURE,
-                    "NATIVE_APK_ATTESTATION_FAILED");
+            // Do not label a generic native binding failure as a signer mismatch here. The
+            // process-wide AppIntegrity verifier independently classifies re-signed APKs and owns
+            // the signature cinematic. This prevents a genuine signed Loader from showing the
+            // cracked-APK video because of a runtime/environment false positive.
+            FLog.error("Native installed APK binding check failed");
             throw new SecurityException("Secure verification environment rejected");
         }
 
