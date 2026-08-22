@@ -9,14 +9,15 @@ import javax.imageio.IIOImage
 import javax.imageio.ImageWriteParam
 import java.awt.image.BufferedImage
 import java.awt.RenderingHints
+import com.github.megatronking.stringfog.plugin.kg.RandomKeyGenerator
+import com.github.megatronking.stringfog.plugin.StringFogMode
 
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
-    id 'org.lsposed.lsparanoid'
 }
 
-apply plugin: 'top.niunaijun.blackobfuscator'
+apply plugin: 'stringfog'
 apply from: '../signing.gradle'
 
 def parallaxApiPublicKey = providers.gradleProperty('parallaxApiPublicKey')
@@ -31,17 +32,6 @@ def oneCoreAllowedSigningSha256 = providers.gradleProperty('onecoreAllowedSignin
 def javaString = { String value -> '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"' }
 def releaseTaskRequested = gradle.startParameter.taskNames.any {
     it.toLowerCase(Locale.ROOT).contains('release')
-}
-def blackObfuscatorEnabled = providers.gradleProperty('blackObfuscatorEnabled')
-        .orElse('true')
-        .get()
-        .toBoolean()
-def blackObfuscatorDepth = providers.gradleProperty('blackObfuscatorDepth')
-        .orElse('1')
-        .get()
-        .toInteger()
-if (blackObfuscatorDepth != 1) {
-    throw new GradleException('The OneCore safe BlackObfuscator profile only supports depth 1')
 }
 
 // Keep the user's supplied artwork as the untouched master outside res/. Every build creates
@@ -200,72 +190,17 @@ def getSigningCertificateSha256 = { signingConfig ->
     return ""
 }
 
-// Aggressive release-only string protection for first-party Loader code. Keep framework/JNI/
-// generated entry points untouched so Android component loading and native symbol lookup remain
-// stable. Third-party dependencies are intentionally excluded to avoid reflection breakage.
-def loaderStringClassFilter = { String className ->
-    (className.startsWith('com.onecore.loader.') || className.startsWith('com.Jagdish.tastytoast.'))
-            && className != 'com.onecore.loader.BoxApplication'
-            && !className.startsWith('com.onecore.loader.BoxApplication$')
-            && className != 'com.onecore.loader.security.NativeSigningVerifier'
-            && !className.startsWith('com.onecore.loader.security.NativeSigningVerifier$')
-            && className != 'com.onecore.loader.BuildConfig'
-            && className != 'com.onecore.loader.R'
-            && !className.startsWith('com.onecore.loader.R$')
-            && className != 'com.onecore.loader.BR'
-            && !className.startsWith('com.onecore.loader.databinding.')
-}.dehydrate()
-
-lsparanoid {
-    seed = 0x4F4E4345
-    includeDependencies = false
-    classFilter = loaderStringClassFilter
-    variantFilter = { variant ->
-        variant.buildType == 'release'
-    }
-}
-
-// Expanded safe BlackObfuscator tier. Depth stays locked to 1 because the previous broad
-// depth-2 profile produced Android VerifyError failures. This covers the application shell,
-// login/main/splash flows, non-JNI security/crypto classes and ordinary loader helpers while
-// keeping native bridges, overlay/native artifact code, generated code and crash/logging paths
-// out of the control-flow transformer. Disable with -PblackObfuscatorEnabled=false for rollback.
-BlackObfuscator {
-    enabled blackObfuscatorEnabled && releaseTaskRequested
-    depth blackObfuscatorDepth
-    obfClass = [
-            'com.onecore.loader.BoxApplication',
-            'com.onecore.loader.Config',
-            'com.onecore.loader.activity.LoginActivity',
-            'com.onecore.loader.activity.MainActivity',
-            'com.onecore.loader.activity.SplashActivity',
-            'com.onecore.loader.security.AppIntegrity',
-            'com.onecore.loader.security.DeviceIdentity',
-            'com.onecore.loader.security.HostedLicenseClient',
-            'com.onecore.loader.security.IntegrityEnforcer',
-            'com.onecore.loader.security.LicenseTransportCrypto',
-            'com.onecore.loader.security.SecurePreferences',
-            'com.onecore.loader.security.SecurityThreatDetector',
-            'com.onecore.loader.libhelper.DownloadZip',
-            'com.onecore.loader.libhelper.FileCopyTask',
-            'com.onecore.loader.utils.Constants',
-            'com.onecore.loader.utils.Prefs',
-            'com.onecore.loader.utils.FPrefs',
-            'com.onecore.loader.utils.NetworkConnection'
-    ]
-    blackClass = [
-            'com.onecore.loader.activity.CrashActivity',
-            'com.onecore.loader.floating',
-            'com.onecore.loader.security.NativeSigningVerifier',
-            'com.onecore.loader.libhelper.ApkEnv',
-            'com.onecore.loader.libhelper.NativeArtifactStore',
-            'com.onecore.loader.utils.CrashHandler',
-            'com.onecore.loader.utils.FLog',
-            'com.onecore.loader.BuildConfig',
-            'com.onecore.loader.R',
-            'com.onecore.loader.BR',
-            'com.onecore.loader.databinding'
-    ]
+// Release-only first-party string protection. StringFog rewrites literals into runtime decrypt
+// calls and bytes mode stores encrypted byte arrays instead of readable/base64 string payloads.
+// This safely covers BoxApplication, activities, security classes, JNI-facing Java wrappers,
+// crash/logging helpers and generated BuildConfig literals without control-flow rewriting.
+stringfog {
+    implementation 'com.github.megatronking.stringfog.xor.StringFogImpl'
+    packageName rootProject.ext.LoaderPkg
+    enable releaseTaskRequested
+    fogPackages = ['com.onecore.loader', 'com.Jagdish.tastytoast']
+    kg new RandomKeyGenerator()
+    mode StringFogMode.bytes
 }
 
 android {
@@ -355,6 +290,10 @@ android {
 
 dependencies {
     implementation fileTree(dir: "libs", include: ["*.jar", "*.aar"])
+    implementation 'com.github.megatronking.stringfog:xor:5.0.0'
+    // Existing source annotations remain compile-compatible, but LSParanoid no longer transforms
+    // the Loader. StringFog is the single release string transformer to avoid double rewriting.
+    compileOnly 'org.lsposed.lsparanoid:core:0.6.0'
     implementation 'com.android.tools.build:apksig:8.11.1'
     implementation 'androidx.appcompat:appcompat:1.7.1'
     implementation 'com.google.android.material:material:1.14.0'
