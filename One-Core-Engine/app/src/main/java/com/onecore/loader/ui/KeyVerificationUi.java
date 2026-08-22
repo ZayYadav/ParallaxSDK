@@ -18,6 +18,7 @@ public final class KeyVerificationUi {
         run(activity, () -> {
             KeyVerificationView view = ensureView(activity);
             if (view == null) return;
+            view.animate().cancel();
             view.setState(KeyVerificationView.STATE_VERIFYING,
                     "NATIVE TRUST • TLS PINNED • RESPONSE BOUND");
             view.setVisibility(View.VISIBLE);
@@ -28,6 +29,11 @@ public final class KeyVerificationUi {
                     .translationY(0f)
                     .setDuration(240L)
                     .start();
+
+            // Safety watchdog: never leave an orphaned verification panel on screen.
+            view.postDelayed(() -> {
+                if (view.getParent() != null) hide(activity);
+            }, 25_000L);
         });
     }
 
@@ -53,10 +59,15 @@ public final class KeyVerificationUi {
         });
     }
 
+    public static boolean isShowing(Activity activity) {
+        return find(activity) != null;
+    }
+
     public static void hide(Activity activity) {
         run(activity, () -> {
             KeyVerificationView view = find(activity);
             if (view == null) return;
+            view.animate().cancel();
             view.animate()
                     .alpha(0f)
                     .translationY(ThemeManager.dp(activity, -5))
