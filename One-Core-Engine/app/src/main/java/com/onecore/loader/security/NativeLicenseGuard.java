@@ -13,6 +13,7 @@ import com.onecore.loader.utils.FLog;
  * the exact installed base APK and validates the native library's executable mapping.</p>
  */
 final class NativeLicenseGuard {
+    private static final int GUARD_TRACED = 1 << 1;
     private static final boolean AVAILABLE;
 
     static {
@@ -60,11 +61,20 @@ final class NativeLicenseGuard {
                 ? null : context.getApplicationInfo().sourceDir;
         if (apkPath == null || apkPath.isEmpty()
                 || !nativeVerifyInstalledApk(apkPath, context.getPackageName())) {
+            SecurityIncidentDispatcher.raise(
+                    SecurityIncidentDispatcher.Reason.SIGNATURE,
+                    "NATIVE_APK_ATTESTATION_FAILED");
             throw new SecurityException("Secure verification environment rejected");
         }
 
         boolean proxyConfigured = hasConfiguredProxy();
         boolean debuggerConnected = Debug.isDebuggerConnected() || Debug.waitingForDebugger();
+        if (debuggerConnected) {
+            SecurityIncidentDispatcher.raise(
+                    SecurityIncidentDispatcher.Reason.DEBUGGER,
+                    "JAVA_DEBUGGER_ATTACHED");
+        }
+
         int result;
         try {
             result = nativeCheckEnvironment(
@@ -75,11 +85,23 @@ final class NativeLicenseGuard {
                     debuggerConnected);
         } catch (Throwable error) {
             FLog.error("Native licensing guard execution failed", error);
+            SecurityIncidentDispatcher.raise(
+                    SecurityIncidentDispatcher.Reason.INTEGRITY,
+                    "NATIVE_GUARD_EXECUTION_FAILED");
             throw new SecurityException("Secure verification environment rejected");
         }
 
+        if ((result & GUARD_TRACED) != 0) {
+            SecurityIncidentDispatcher.raise(
+                    SecurityIncidentDispatcher.Reason.DEBUGGER,
+                    "NATIVE_TRACER_DETECTED");
+        } else if (result != 0) {
+            SecurityIncidentDispatcher.raise(
+                    SecurityIncidentDispatcher.Reason.INTEGRITY,
+                    "NATIVE_RUNTIME_GUARD_REJECTED");
+        }
+
         if (result != 0) {
-            // Keep the public error intentionally generic so the guard does not become a bypass map.
             FLog.error("Native licensing guard rejected environment code=" + result);
             throw new SecurityException("Secure verification environment rejected");
         }
