@@ -13,6 +13,7 @@ import java.awt.RenderingHints
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
+    id 'org.lsposed.lsparanoid'
 }
 
 apply from: '../signing.gradle'
@@ -185,6 +186,31 @@ def getSigningCertificateSha256 = { signingConfig ->
 
     logger.warn("Unable to read signing certificate SHA-256 from ${signingConfig.storeFile}: ${lastError?.message}")
     return ""
+}
+
+// Aggressive release-only string protection for first-party Loader code. Keep framework/JNI/
+// generated entry points untouched so Android component loading and native symbol lookup remain
+// stable. Third-party dependencies are intentionally excluded to avoid reflection breakage.
+def loaderStringClassFilter = { String className ->
+    (className.startsWith('com.onecore.loader.') || className.startsWith('com.Jagdish.tastytoast.'))
+            && className != 'com.onecore.loader.BoxApplication'
+            && !className.startsWith('com.onecore.loader.BoxApplication$')
+            && className != 'com.onecore.loader.security.NativeSigningVerifier'
+            && !className.startsWith('com.onecore.loader.security.NativeSigningVerifier$')
+            && className != 'com.onecore.loader.BuildConfig'
+            && className != 'com.onecore.loader.R'
+            && !className.startsWith('com.onecore.loader.R$')
+            && className != 'com.onecore.loader.BR'
+            && !className.startsWith('com.onecore.loader.databinding.')
+}.dehydrate()
+
+lsparanoid {
+    seed = 0x4F4E4345
+    includeDependencies = false
+    classFilter = loaderStringClassFilter
+    variantFilter = { variant ->
+        variant.buildType == 'release'
+    }
 }
 
 android {
