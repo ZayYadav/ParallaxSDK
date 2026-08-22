@@ -327,13 +327,24 @@ public class ActivityManagerCommonProxy {
                 return method.invoke(who, args);
             }
 
-            int resultToIndex = fillInIndex + 2;
-            int resultWhoIndex = fillInIndex + 3;
-            int requestCodeIndex = fillInIndex + 4;
-            int flagsMaskIndex = fillInIndex + 5;
-            int flagsValuesIndex = fillInIndex + 6;
-            int optionsIndex = fillInIndex + 7;
-            if (optionsIndex >= args.length
+            Class<?>[] parameterTypes = method.getParameterTypes();
+            int resultToIndex = findParameterIndexAfter(
+                    parameterTypes, fillInIndex, IBinder.class);
+            int resultWhoIndex = findParameterIndexAfter(
+                    parameterTypes, resultToIndex, String.class);
+            int requestCodeIndex = findIntParameterIndexAfter(
+                    parameterTypes, resultWhoIndex);
+            int flagsMaskIndex = findIntParameterIndexAfter(
+                    parameterTypes, requestCodeIndex);
+            int flagsValuesIndex = findIntParameterIndexAfter(
+                    parameterTypes, flagsMaskIndex);
+            int optionsIndex = findLastParameterIndexAfter(
+                    parameterTypes, fillInIndex, Bundle.class);
+            if (!validIndex(resultToIndex, args)
+                    || !validIndex(resultWhoIndex, args)
+                    || !validIndex(requestCodeIndex, args)
+                    || !validIndex(flagsMaskIndex, args)
+                    || !validIndex(flagsValuesIndex, args)
                     || !(args[resultToIndex] instanceof IBinder)
                     || !(args[requestCodeIndex] instanceof Integer)
                     || !(args[flagsMaskIndex] instanceof Integer)
@@ -349,7 +360,8 @@ public class ActivityManagerCommonProxy {
             int flagsValues = (Integer) args[flagsValuesIndex];
             Intent fillInIntent = args[fillInIndex] instanceof Intent
                     ? (Intent) args[fillInIndex] : null;
-            Bundle options = args[optionsIndex] instanceof Bundle
+            Bundle options = validIndex(optionsIndex, args)
+                    && args[optionsIndex] instanceof Bundle
                     ? (Bundle) args[optionsIndex] : null;
 
             Intent bridge = ExternalAuthRouter.createIntentSenderBridgeIntent(
@@ -403,6 +415,51 @@ public class ActivityManagerCommonProxy {
                 }
             }
             return -1;
+        }
+
+        private static int findParameterIndexAfter(
+                Class<?>[] parameterTypes, int afterIndex, Class<?> expectedType) {
+            if (parameterTypes == null || expectedType == null) {
+                return -1;
+            }
+            for (int i = Math.max(0, afterIndex + 1); i < parameterTypes.length; i++) {
+                Class<?> actual = parameterTypes[i];
+                if (actual != null && expectedType.isAssignableFrom(actual)) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        private static int findLastParameterIndexAfter(
+                Class<?>[] parameterTypes, int afterIndex, Class<?> expectedType) {
+            if (parameterTypes == null || expectedType == null) {
+                return -1;
+            }
+            for (int i = parameterTypes.length - 1; i > afterIndex; i--) {
+                Class<?> actual = parameterTypes[i];
+                if (actual != null && expectedType.isAssignableFrom(actual)) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        private static int findIntParameterIndexAfter(
+                Class<?>[] parameterTypes, int afterIndex) {
+            if (parameterTypes == null) {
+                return -1;
+            }
+            for (int i = Math.max(0, afterIndex + 1); i < parameterTypes.length; i++) {
+                if (parameterTypes[i] == int.class || parameterTypes[i] == Integer.class) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        private static boolean validIndex(int index, Object[] args) {
+            return args != null && index >= 0 && index < args.length;
         }
 
         private static boolean implementsIntentSenderInterface(Object value) {

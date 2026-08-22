@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.Log;
 
 import java.util.Locale;
 
@@ -19,28 +20,23 @@ import top.niunaijun.blackbox.utils.FileUtils;
  * Host-side trampoline for browser OAuth started by a virtual application.
  *
  * The Auth Tab protocol is emitted directly so the SDK AAR stays self-contained
- * when it is copied into a host app as a raw local AAR. The browser returns the
- * final redirect URI through Activity result data; this bridge immediately routes
- * that URI into BlackBox's virtual PackageManager/ActivityManager.
+ * when it is copied into a host app as a raw local AAR. A real browser that
+ * advertises Auth Tab support is selected explicitly; the browser returns the
+ * final redirect URI through Activity result data and this bridge routes that URI
+ * into BlackBox's virtual PackageManager/ActivityManager.
  */
 @Obfuscate
 public final class VirtualOAuthBridgeActivity extends Activity {
+    private static final String TAG = "ParallaxOAuth";
     private static final int REQUEST_AUTH_TAB = 0x5041;
-
-    // Public AndroidX Browser Auth Tab protocol constants. These are browser-facing
-    // Intent extras documented by AndroidX; using the protocol directly avoids a
-    // transitive Maven dependency that a raw local AAR cannot carry by itself.
-    private static final String EXTRA_LAUNCH_AUTH_TAB =
-            "androidx.browser.auth.extra.LAUNCH_AUTH_TAB";
-    private static final String EXTRA_REDIRECT_SCHEME =
-            "androidx.browser.auth.extra.REDIRECT_SCHEME";
-    private static final String EXTRA_CUSTOM_TABS_SESSION =
-            "android.support.customtabs.extra.SESSION";
 
     private String virtualPackage;
     private Uri expectedRedirectUri;
-    private String expectedState;
+    private Uri authUri;
+    private String authProvider;
     private int userId = -1;
+    private boolean twitterFlow;
+    private boolean legacyTwitterFlow;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -55,42 +51,51 @@ public final class VirtualOAuthBridgeActivity extends Activity {
                 : launchIntent.getStringExtra(VirtualOAuthRouter.EXTRA_VIRTUAL_PACKAGE);
         userId = launchIntent == null ? -1
                 : launchIntent.getIntExtra(VirtualOAuthRouter.EXTRA_USER_ID, -1);
+        authProvider = launchIntent == null ? null
+                : launchIntent.getStringExtra(VirtualOAuthRouter.EXTRA_AUTH_PROVIDER);
 
-        Uri authUri = safeHttpsUri(authUrl);
+        authUri = safeHttpsUri(authUrl);
         Uri redirectUri = safeCustomRedirectUri(redirectUriValue);
         if (authUri == null || !VirtualOAuthRouter.isTrustedAuthUri(authUri)
                 || redirectUri == null || virtualPackage == null
-                || virtualPackage.trim().isEmpty() || userId < 0) {
+                || virtualPackage.trim().isEmpty() || userId < 0
+                || authProvider == null || authProvider.trim().isEmpty()) {
             finish();
             return;
         }
 
         expectedRedirectUri = redirectUri;
-        expectedState = authUri.getQueryParameter("state");
-        if (!redirectResolvesToVirtualPackage(redirectUri)) {
+        twitterFlow = isTwitterHost(authUri);
+        legacyTwitterFlow = twitterFlow && hasQueryParameter(authUri, "oauth_token");
+        if (!redirectResolvesToVirtualPackage(redirectUri)
+                || !AuthTabCompat.isSupportedProvider(this, authProvider, authUri)) {
+            diagnostic("setup_rejected", false, false, false, false, false);
             finish();
             return;
         }
 
         if (savedInstanceState == null) {
-            launchAuthTab(authUri, lower(expectedRedirectUri.getScheme()));
+            launchAuthTab(authUri, lower(expectedRedirectUri.getScheme()), authProvider);
         }
     }
 
-    private void launchAuthTab(Uri authUri, String redirectScheme) {
+    private void launchAuthTab(Uri authUri, String redirectScheme, String provider) {
         try {
             Intent authIntent = new Intent(Intent.ACTION_VIEW, authUri);
-            authIntent.putExtra(EXTRA_LAUNCH_AUTH_TAB, true);
-            authIntent.putExtra(EXTRA_REDIRECT_SCHEME, redirectScheme);
+            authIntent.addCategory(Intent.CATEGORY_BROWSABLE);
+            authIntent.setPackage(provider);
+            authIntent.putExtra(AuthTabCompat.EXTRA_LAUNCH_AUTH_TAB, true);
+            authIntent.putExtra(AuthTabCompat.EXTRA_REDIRECT_SCHEME, redirectScheme);
 
             // AndroidX AuthTabIntent.Builder adds a null Custom Tabs session so
-            // browsers also recognize this as a Custom Tab-style request.
+            // browsers recognize the request as a Custom Tab/Auth Tab launch.
             Bundle session = new Bundle();
-            session.putBinder(EXTRA_CUSTOM_TABS_SESSION, null);
+            session.putBinder(AuthTabCompat.EXTRA_CUSTOM_TABS_SESSION, null);
             authIntent.putExtras(session);
 
             startActivityForResult(authIntent, REQUEST_AUTH_TAB);
         } catch (Throwable ignored) {
+            diagnostic("launch_failed", false, false, false, false, false);
             finish();
         }
     }
@@ -102,17 +107,38 @@ public final class VirtualOAuthBridgeActivity extends Activity {
             return;
         }
         if (resultCode != RESULT_OK || data == null || data.getData() == null) {
+            diagnostic("auth_not_completed", false, false, false, false, false);
             finish();
             return;
         }
 
         Uri callbackUri = data.getData();
         if (!matchesExpectedCallback(callbackUri)) {
+            diagnostic("callback_mismatch", false, false, false, false, false);
             finish();
             return;
         }
 
-        dispatchToVirtualPackage(callbackUri);
+        boolean hasToken = hasQueryParameter(callbackUri, "oauth_token");
+        boolean hasVerifier = hasQueryParameter(callbackUri, "oauth_verifier");
+        boolean hasCode = hasQueryParameter(callbackUri, "code");
+        boolean denied = hasQueryParameter(callbackUri, "denied")
+                || hasQueryParameter(callbackUri, "error");
+
+        // OAuth 1.0a success requires both oauth_token and oauth_verifier. Sending
+        // a structurally incomplete callback into the virtual app only turns a
+        // browser/provider failure into an opaque in-app 9999 error, so fail closed
+        // here instead. Values are never logged or persisted.
+        if (legacyTwitterFlow && !denied && (!hasToken || !hasVerifier)) {
+            diagnostic("twitter_oauth1_incomplete",
+                    hasToken, hasVerifier, hasCode, denied, false);
+            finish();
+            return;
+        }
+
+        boolean dispatched = dispatchToVirtualPackage(callbackUri);
+        diagnostic(dispatched ? "callback_dispatched" : "callback_unresolved",
+                hasToken, hasVerifier, hasCode, denied, dispatched);
         finish();
     }
 
@@ -123,42 +149,11 @@ public final class VirtualOAuthBridgeActivity extends Activity {
      * fixed query parameters already present in redirect_uri must still match.
      */
     private boolean matchesExpectedCallback(Uri callbackUri) {
-        if (callbackUri == null || expectedRedirectUri == null) {
-            return false;
-        }
-        if (!lower(expectedRedirectUri.getScheme()).equals(lower(callbackUri.getScheme()))) {
-            return false;
-        }
-        if (!lower(expectedRedirectUri.getEncodedAuthority())
-                .equals(lower(callbackUri.getEncodedAuthority()))) {
-            return false;
-        }
-        if (!same(expectedRedirectUri.getEncodedPath(), callbackUri.getEncodedPath())) {
-            return false;
-        }
-        if (expectedRedirectUri.getFragment() != null
-                && !same(expectedRedirectUri.getEncodedFragment(),
-                callbackUri.getEncodedFragment())) {
-            return false;
-        }
-        if (expectedState != null && !expectedState.isEmpty()
-                && !expectedState.equals(callbackUri.getQueryParameter("state"))) {
-            return false;
-        }
-        try {
-            for (String name : expectedRedirectUri.getQueryParameterNames()) {
-                if (!expectedRedirectUri.getQueryParameters(name)
-                        .equals(callbackUri.getQueryParameters(name))) {
-                    return false;
-                }
-            }
-        } catch (Throwable ignored) {
-            return false;
-        }
-        return redirectResolvesToVirtualPackage(callbackUri);
+        return OAuthCallbackValidator.matches(authUri, expectedRedirectUri, callbackUri)
+                && redirectResolvesToVirtualPackage(callbackUri);
     }
 
-    private void dispatchToVirtualPackage(Uri callbackUri) {
+    private boolean dispatchToVirtualPackage(Uri callbackUri) {
         try {
             Intent callback = new Intent(Intent.ACTION_VIEW, callbackUri);
             callback.addCategory(Intent.CATEGORY_DEFAULT);
@@ -175,15 +170,17 @@ public final class VirtualOAuthBridgeActivity extends Activity {
                     userId);
             if (resolved == null || resolved.activityInfo == null
                     || !virtualPackage.equals(resolved.activityInfo.packageName)) {
-                return;
+                return false;
             }
 
             callback.setComponent(new ComponentName(
                     resolved.activityInfo.packageName,
                     resolved.activityInfo.name));
             BActivityManager.get().startActivity(callback, userId);
+            return true;
         } catch (Throwable ignored) {
-            // Fail closed. Do not leak redirect data to another package or logs.
+            // Fail closed. Redirect contents are intentionally never logged.
+            return false;
         }
     }
 
@@ -204,6 +201,49 @@ public final class VirtualOAuthBridgeActivity extends Activity {
         } catch (Throwable ignored) {
             return false;
         }
+    }
+
+    private void diagnostic(String stage,
+                            boolean hasToken,
+                            boolean hasVerifier,
+                            boolean hasCode,
+                            boolean denied,
+                            boolean dispatched) {
+        if (!twitterFlow) {
+            return;
+        }
+        // Structural booleans only. Never emit callback URI, query values,
+        // authorization tokens, verifier values, cookies, or credentials.
+        Log.i(TAG, "twitter stage=" + stage
+                + " oauth1=" + legacyTwitterFlow
+                + " token=" + hasToken
+                + " verifier=" + hasVerifier
+                + " code=" + hasCode
+                + " denied=" + denied
+                + " dispatched=" + dispatched);
+    }
+
+    private static boolean hasQueryParameter(Uri uri, String name) {
+        if (uri == null || name == null) {
+            return false;
+        }
+        try {
+            String value = uri.getQueryParameter(name);
+            return value != null && !value.trim().isEmpty();
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static boolean isTwitterHost(Uri uri) {
+        if (uri == null) {
+            return false;
+        }
+        String host = lower(uri.getHost());
+        return "twitter.com".equals(host)
+                || "x.com".equals(host)
+                || host.endsWith(".twitter.com")
+                || host.endsWith(".x.com");
     }
 
     private static Uri safeHttpsUri(String value) {
@@ -234,7 +274,7 @@ public final class VirtualOAuthBridgeActivity extends Activity {
                     || "javascript".equals(scheme)
                     || "data".equals(scheme)
                     || "intent".equals(scheme)
-                    || !scheme.matches("^[a-z][a-z0-9+.-]{1,63}$")) {
+                    || !scheme.matches("^[a-z][a-z0-9+.-]{1,127}$")) {
                 return null;
             }
             return uri;
@@ -247,7 +287,4 @@ public final class VirtualOAuthBridgeActivity extends Activity {
         return value == null ? "" : value.toLowerCase(Locale.US);
     }
 
-    private static boolean same(String left, String right) {
-        return left == null ? right == null : left.equals(right);
-    }
 }

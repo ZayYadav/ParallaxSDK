@@ -5,18 +5,21 @@ import android.content.Intent;
 import android.content.IntentSender;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
 
 import java.lang.reflect.Constructor;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Set;
 
 import org.lsposed.lsparanoid.Obfuscate;
 
 import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.BActivityThread;
+import top.niunaijun.blackbox.compat.oauth.VirtualOAuthRouter;
 import top.niunaijun.blackbox.proxy.ProxyManifest;
 
 /**
@@ -34,6 +37,8 @@ import top.niunaijun.blackbox.proxy.ProxyManifest;
 public final class ExternalAuthRouter {
     public static final String EXTRA_EXTERNAL_AUTH =
             "top.niunaijun.blackbox.auth.EXTERNAL_AUTH";
+    public static final String EXTRA_BROWSER_AUTH =
+            "top.niunaijun.blackbox.auth.BROWSER_AUTH";
     public static final String EXTRA_PROVIDER_INTENT =
             "top.niunaijun.blackbox.auth.PROVIDER_INTENT";
     public static final String EXTRA_PROVIDER_INTENT_SENDER =
@@ -141,6 +146,18 @@ public final class ExternalAuthRouter {
                 || virtualPackage == null || virtualPackage.trim().isEmpty()) {
             return null;
         }
+
+        // Browser-based X/Twitter authorization sometimes originates from
+        // startActivityForResult(). In that case the old host-main-process bridge
+        // could return a valid callback URI but lose the original Activity result
+        // token semantics. Reuse VirtualOAuthRouter only to validate/infer the
+        // provider and callback, then execute the Auth Tab from the same :pN
+        // process as the virtual app so the result can be delivered to resultTo.
+        if (isTwitterWebAuthIntent(source)) {
+            return createTwitterWebResultBridgeIntent(
+                    source, resultTo, resultWho, requestCode, virtualPackage);
+        }
+
         String providerPackage = trustedProviderPackage(source);
         if (providerPackage == null) {
             return null;
@@ -224,14 +241,85 @@ public final class ExternalAuthRouter {
                 BlackBoxCore.getHostPkg(),
                 ProxyManifest.TransparentProxyActivity(bpid)));
         bridge.putExtra(EXTRA_EXTERNAL_AUTH, true);
+        putResultTarget(bridge, resultTo, resultWho, requestCode, virtualPackage);
+        return bridge;
+    }
+
+    private static Intent createTwitterWebResultBridgeIntent(
+            Intent source,
+            IBinder resultTo,
+            String resultWho,
+            int requestCode,
+            String virtualPackage) {
+        try {
+            Intent template = VirtualOAuthRouter.createBridgeIntent(
+                    source, BActivityThread.getUserId(), virtualPackage);
+            if (template == null) {
+                return null;
+            }
+
+            int bpid = BActivityThread.getAppPid();
+            if (bpid < 0 || bpid > 24) {
+                return null;
+            }
+
+            String authUrl = template.getStringExtra(VirtualOAuthRouter.EXTRA_AUTH_URL);
+            String redirectUri = template.getStringExtra(VirtualOAuthRouter.EXTRA_REDIRECT_URI);
+            String authProvider = template.getStringExtra(VirtualOAuthRouter.EXTRA_AUTH_PROVIDER);
+            int userId = template.getIntExtra(VirtualOAuthRouter.EXTRA_USER_ID, -1);
+            if (authUrl == null || redirectUri == null || authProvider == null || userId < 0) {
+                return null;
+            }
+
+            Intent bridge = new Intent();
+            bridge.setComponent(new ComponentName(
+                    BlackBoxCore.getHostPkg(),
+                    ProxyManifest.TransparentProxyActivity(bpid)));
+            bridge.putExtra(EXTRA_BROWSER_AUTH, true);
+            bridge.putExtra(VirtualOAuthRouter.EXTRA_AUTH_URL, authUrl);
+            bridge.putExtra(VirtualOAuthRouter.EXTRA_REDIRECT_URI, redirectUri);
+            bridge.putExtra(VirtualOAuthRouter.EXTRA_AUTH_PROVIDER, authProvider);
+            bridge.putExtra(VirtualOAuthRouter.EXTRA_VIRTUAL_PACKAGE, virtualPackage);
+            bridge.putExtra(VirtualOAuthRouter.EXTRA_USER_ID, userId);
+            putResultTarget(bridge, resultTo, resultWho, requestCode, virtualPackage);
+            bridge.addFlags(source.getFlags() & (
+                    Intent.FLAG_ACTIVITY_NO_ANIMATION
+                            | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                            | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+            return bridge;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static void putResultTarget(
+            Intent bridge,
+            IBinder resultTo,
+            String resultWho,
+            int requestCode,
+            String virtualPackage) {
         bridge.putExtra(EXTRA_RESULT_WHO, resultWho);
         bridge.putExtra(EXTRA_REQUEST_CODE, requestCode);
         bridge.putExtra(EXTRA_VIRTUAL_PACKAGE, virtualPackage);
-
         Bundle binderBundle = new Bundle();
         binderBundle.putBinder(EXTRA_RESULT_BINDER, resultTo);
         bridge.putExtras(binderBundle);
-        return bridge;
+    }
+
+    private static boolean isTwitterWebAuthIntent(Intent intent) {
+        if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction())) {
+            return false;
+        }
+        Uri uri = intent.getData();
+        if (uri == null || !"https".equalsIgnoreCase(uri.getScheme())) {
+            return false;
+        }
+        String host = uri.getHost();
+        host = host == null ? "" : host.toLowerCase(Locale.US);
+        return "twitter.com".equals(host)
+                || "x.com".equals(host)
+                || host.endsWith(".twitter.com")
+                || host.endsWith(".x.com");
     }
 
     private static String trustedProviderPackage(Intent intent) {
