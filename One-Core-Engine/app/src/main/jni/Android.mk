@@ -22,7 +22,8 @@ LOCAL_MODULE := ParallaxLoader
 LOCAL_SRC_FILES := main.cpp \
     NativeApkAttestation.cpp \
     NativeLicenseAttestationBridge.cpp \
-    ProcessBindingGuard.cpp
+    ProcessBindingGuard.cpp \
+    NativeTermination.cpp
 
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/backends/external/curl-android-$(TARGET_ARCH_ABI)/include
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/backends/external/openssl-android-$(TARGET_ARCH_ABI)/include
