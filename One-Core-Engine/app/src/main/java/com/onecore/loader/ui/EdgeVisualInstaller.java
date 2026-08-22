@@ -27,16 +27,16 @@ public final class EdgeVisualInstaller {
             return;
         }
 
-        // Main screen: visual sits between the header and protected-session card.
+        // Main screen: larger theme-native visual between header and protected session.
         if (activity.findViewById(R.id.btn_settings) != null) {
             LinearLayout column = findNestedColumn(content);
             if (column != null) {
-                addVisual(column, Math.min(1, column.getChildCount()), 118, 16, 18);
+                addVisual(column, Math.min(1, column.getChildCount()), 154, 16, 18);
                 return;
             }
         }
 
-        // Login: visual sits directly above Access Console.
+        // Login: advanced visual directly above Access Console.
         if (activity.findViewById(R.id.btnSignIn) != null) {
             LinearLayout column = findNestedColumn(content);
             if (column != null) {
@@ -47,17 +47,17 @@ public final class EdgeVisualInstaller {
                         break;
                     }
                 }
-                addVisual(column, targetIndex, 124, 20, 4);
+                addVisual(column, targetIndex, 160, 20, 6);
                 return;
             }
         }
 
-        // Splash: keep it compact between subtitle and boot telemetry.
+        // Splash: compact but still large enough for the rotating wordmark ring.
         View subtitle = activity.findViewById(R.id.brandSubtitle);
         if (subtitle != null && subtitle.getParent() instanceof LinearLayout) {
             LinearLayout column = (LinearLayout) subtitle.getParent();
             int index = column.indexOfChild(subtitle) + 1;
-            addVisual(column, index, 98, 18, 4);
+            addVisual(column, index, 128, 18, 5);
         }
     }
 
@@ -95,11 +95,15 @@ public final class EdgeVisualInstaller {
         parent.addView(visual, Math.max(0, Math.min(index, parent.getChildCount())), params);
 
         visual.setAlpha(0f);
-        visual.setTranslationY(ThemeManager.dp(parent.getContext(), 8));
+        visual.setScaleX(0.985f);
+        visual.setScaleY(0.985f);
+        visual.setTranslationY(ThemeManager.dp(parent.getContext(), 10));
         visual.animate()
                 .alpha(1f)
+                .scaleX(1f)
+                .scaleY(1f)
                 .translationY(0f)
-                .setDuration(360L)
+                .setDuration(420L)
                 .start();
     }
 }
