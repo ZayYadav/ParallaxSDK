@@ -27,14 +27,10 @@ import java.security.cert.X509Certificate;
 /**
  * Fail-closed APK signing identity validation.
  *
- * <p>The authoritative checks are the installed PackageManager signer set and an independent
- * cryptographic verification of the exact installed APK with Android apksig. Both signer sets
- * must be identical and every signer must be explicitly allowed.</p>
- *
- * <p>PackageManager archive parsing and the JNI/OpenSSL digest comparison are retained only as
- * defense-in-depth diagnostics. Some Android 15/16 builds do not reliably expose signingInfo for
- * an installed APK when it is reparsed through getPackageArchiveInfo(), and an optional native
- * cross-check must not reject an APK that already passed both authoritative cryptographic paths.</p>
+ * <p>The signer decision no longer depends on PackageManager alone. The exact installed APK must
+ * pass three independent paths: native APK Signature Scheme v2 verification with a signer digest
+ * compiled into libParallaxLoader, Android apksig cryptographic archive verification, and the
+ * PackageManager active signer view. Any disagreement is a rejection.</p>
  */
 public final class AppIntegrity {
     private static final long MIN_APK_BYTES = 4 * 1024L;
@@ -108,7 +104,36 @@ public final class AppIntegrity {
                 return result(Status.APK_SOURCE_INVALID);
             }
 
-            // Authoritative path #1: Android PackageManager active signer set.
+            // Authoritative path #1: native verifier parses APK Signature Scheme v2 from base.apk,
+            // validates its compiled-in signer identity, verifies signed-data + APK content digest,
+            // and checks libParallaxLoader executable bytes against the on-disk ELF.
+            if (!NativeSigningVerifier.verifyInstalledApk(apkFile.getAbsolutePath(), packageName)) {
+                return result(Status.NATIVE_VERIFICATION_FAILED);
+            }
+
+            // Authoritative path #2: Android apksig independently verifies the exact installed APK.
+            byte[][] cryptographicCertificates = verifyApkAndGetCertificates(apkFile);
+            if (cryptographicCertificates.length == 0) {
+                return result(Status.APK_SIGNATURE_INVALID);
+            }
+            byte[][] cryptographicDigests = sha256Digests(cryptographicCertificates);
+            if (!matchesAllowedSignerDigests(allowedDigests, cryptographicDigests)) {
+                return result(Status.APK_SIGNATURE_INVALID);
+            }
+
+            // A second native digest comparison is intentionally mandatory and consumes the
+            // certificates produced by apksig rather than PackageManager metadata.
+            if (!NativeSigningVerifier.verify(
+                    allowedDigests,
+                    cryptographicCertificates,
+                    packageName,
+                    BuildConfig.APPLICATION_ID)) {
+                return result(Status.NATIVE_VERIFICATION_FAILED);
+            }
+
+            // Authoritative path #3: PackageManager must agree with both independent on-disk paths.
+            // A hooked PackageManager therefore cannot make a re-signed APK valid; disagreement
+            // simply fails closed.
             Signature[] installedSigners = getActiveSigners(installedInfo);
             if (installedSigners.length == 0) {
                 return result(Status.SIGNER_MISSING);
@@ -118,21 +143,13 @@ public final class AppIntegrity {
             if (!matchesAllowedSignerDigests(allowedDigests, installedDigests)) {
                 return result(Status.SIGNER_MISMATCH);
             }
-
-            // Authoritative path #2: parse and cryptographically verify the exact installed APK.
-            byte[][] cryptographicCertificates = verifyApkAndGetCertificates(apkFile);
-            if (cryptographicCertificates.length == 0) {
-                return result(Status.APK_SIGNATURE_INVALID);
-            }
-            byte[][] cryptographicDigests = sha256Digests(cryptographicCertificates);
-            if (!matchesAllowedSignerDigests(allowedDigests, cryptographicDigests)
-                    || !sameSignerSets(installedDigests, cryptographicDigests)) {
-                return result(Status.APK_SIGNATURE_INVALID);
+            if (!sameSignerSets(installedDigests, cryptographicDigests)) {
+                return result(Status.SIGNER_MISMATCH);
             }
 
-            // Best-effort PackageManager archive cross-check. Android 15/16 may return archive
-            // metadata without signingInfo for an already-installed base APK, so absence is not an
-            // identity failure after the two authoritative signer checks above have succeeded.
+            // Extra archive PackageManager parse remains a cross-check only. If the platform can
+            // parse it, it must agree; Android versions that omit archive signingInfo are tolerated
+            // because the two independent on-disk cryptographic verifiers already succeeded.
             try {
                 PackageInfo archiveInfo = getArchivePackageInfo(packageManager, apkFile);
                 if (archiveInfo != null) {
@@ -142,24 +159,14 @@ public final class AppIntegrity {
                     Signature[] archiveSigners = getActiveSigners(archiveInfo);
                     if (archiveSigners.length > 0
                             && !sameSignerSets(
-                                    installedDigests,
+                                    cryptographicDigests,
                                     sha256Digests(certificateBytes(archiveSigners)))) {
                         return result(Status.ARCHIVE_SIGNER_MISMATCH);
                     }
                 }
             } catch (Throwable archiveError) {
-                FLog.info("Optional archive signer cross-check unavailable: "
+                FLog.info("Archive signer cross-check unavailable: "
                         + archiveError.getClass().getSimpleName());
-            }
-
-            // Best-effort native digest cross-check. Do not turn a JNI/library availability issue
-            // into a false identity rejection after PackageManager + apksig already agreed exactly.
-            if (!NativeSigningVerifier.verify(
-                    allowedDigests,
-                    installedCertificates,
-                    packageName,
-                    BuildConfig.APPLICATION_ID)) {
-                FLog.info("Optional native signing cross-check unavailable or rejected the duplicate check");
             }
 
             return result(Status.VALID);
@@ -169,20 +176,24 @@ public final class AppIntegrity {
         }
     }
 
-    /** Returns the first active APK signing certificate as uppercase SHA-256 hex. */
+    /**
+     * Returns the first on-disk cryptographically verified APK signer certificate as uppercase
+     * SHA-256 hex. This deliberately avoids trusting PackageManager for the value sent to backend.
+     */
     public static String currentSigningCertificateSha256(Context context) {
         Verification verification = verify(context);
         if (!verification.isValid()) {
             throw new IllegalStateException("APK signing identity is invalid: " + verification.status());
         }
         try {
-            PackageInfo packageInfo = getInstalledPackageInfo(
-                    context.getPackageManager(), context.getPackageName());
-            Signature[] signatures = getActiveSigners(packageInfo);
-            if (signatures.length == 0) {
-                throw new IllegalStateException("APK has no active signing certificate");
+            Context appContext = context.getApplicationContext();
+            if (appContext == null) appContext = context;
+            File apkFile = new File(appContext.getApplicationInfo().sourceDir).getCanonicalFile();
+            byte[][] certificates = verifyApkAndGetCertificates(apkFile);
+            if (certificates.length == 0) {
+                throw new IllegalStateException("APK has no cryptographically verified signer");
             }
-            return encodeHex(sha256(signatures[0].toByteArray()));
+            return encodeHex(sha256(certificates[0]));
         } catch (Exception exception) {
             throw new IllegalStateException("Unable to read APK signing certificate", exception);
         }
@@ -231,7 +242,8 @@ public final class AppIntegrity {
     private static File canonicalApk(
             ApplicationInfo installedInfo,
             ApplicationInfo contextInfo) throws IOException {
-        if (installedInfo.sourceDir == null || contextInfo.sourceDir == null) {
+        if (installedInfo == null || contextInfo == null
+                || installedInfo.sourceDir == null || contextInfo.sourceDir == null) {
             throw new IOException("APK source path is unavailable");
         }
         File installed = new File(installedInfo.sourceDir).getCanonicalFile();
