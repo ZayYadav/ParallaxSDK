@@ -34,7 +34,7 @@
 -keep class top.niunaijun.jnihook.** { *; }
 -keep class black.** { *; }
 
-# Native signing verifier is resolved by its exact JNI class/member name.
+# Native signing verifier is resolved by its exact JNI class/member names.
 -keep class com.onecore.loader.security.NativeSigningVerifier {
     private static native boolean verifySigningIdentity(
         byte[][],
@@ -42,8 +42,19 @@
         java.lang.String,
         java.lang.String
     );
+    private static native boolean verifyInstalledApkNative(
+        java.lang.String,
+        java.lang.String
+    );
 }
 -keepnames class com.onecore.loader.security.NativeSigningVerifier
+
+# Native licensing guard also owns conventional JNI entry points, including the independent APK
+# attestation bridge used immediately before network license verification.
+-keep class com.onecore.loader.security.NativeLicenseGuard {
+    private static native <methods>;
+}
+-keepnames class com.onecore.loader.security.NativeLicenseGuard
 
 # Preserve every class/member name that is bound through conventional JNI.
 -keepclasseswithmembernames class * {
