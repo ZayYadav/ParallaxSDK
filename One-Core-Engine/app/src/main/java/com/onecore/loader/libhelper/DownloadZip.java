@@ -2,23 +2,24 @@ package com.onecore.loader.libhelper;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.res.ColorStateList;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.RectF;
 import android.graphics.Typeface;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
-import android.view.animation.AlphaAnimation;
-import android.view.animation.Animation;
-import android.view.animation.LinearInterpolator;
-import android.view.animation.RotateAnimation;
-import android.view.animation.ScaleAnimation;
-import android.widget.FrameLayout;
-import android.widget.ImageView;
+import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast;
+
+import com.onecore.loader.R;
+import com.onecore.loader.ui.ThemeManager;
 
 import net.lingala.zip4j.ZipFile;
 
@@ -51,17 +52,14 @@ public class DownloadZip {
     private final Context context;
     private final ExecutorService executor;
     private final Handler handler;
-    
-    // Animation views
-    private static LinearLayout downloadOverlay = null;
+
+    private LinearLayout downloadPanel;
+    private RingProgressView ringProgressView;
     private TextView downloadTitleText;
     private TextView downloadMessageText;
-    private TextView downloadProgressText;
+    private TextView securityStateText;
     private ProgressBar downloadProgressBar;
-    private ImageView downloadIcon;
     private static boolean isDownloading = false;
-    private Runnable dotRunnable;
-    private long startTime = 0;
     private long downloadedBytes = 0;
 
     private native String PASSJKPAPA();
@@ -78,261 +76,258 @@ public class DownloadZip {
         executor = Executors.newSingleThreadExecutor();
         handler = new Handler(Looper.getMainLooper());
     }
-    
-    private Typeface getPremiumFont() {
-        try {
-            if (androidx.core.content.res.ResourcesCompat.getFont(context, com.onecore.loader.R.font.acme) != null) {
-                return androidx.core.content.res.ResourcesCompat.getFont(context, com.onecore.loader.R.font.acme);
-            }
-        } catch (Exception e) {
-            // Fallback
+
+    /** Circular percentage indicator used by the inline runtime download card. */
+    private static final class RingProgressView extends View {
+        private final Paint trackPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint progressPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint valuePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint labelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final RectF oval = new RectF();
+        private int progress;
+
+        RingProgressView(Context context) {
+            super(context);
+            trackPaint.setStyle(Paint.Style.STROKE);
+            progressPaint.setStyle(Paint.Style.STROKE);
+            trackPaint.setStrokeCap(Paint.Cap.ROUND);
+            progressPaint.setStrokeCap(Paint.Cap.ROUND);
+            valuePaint.setTextAlign(Paint.Align.CENTER);
+            valuePaint.setTypeface(Typeface.create("sans-serif-black", Typeface.BOLD));
+            labelPaint.setTextAlign(Paint.Align.CENTER);
+            labelPaint.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
         }
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            return Typeface.create("sans-serif-condensed", Typeface.BOLD);
+
+        void setProgressValue(int value) {
+            progress = Math.max(0, Math.min(100, value));
+            invalidate();
         }
-        return Typeface.DEFAULT_BOLD;
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            ThemeManager.ThemeSpec theme = ThemeManager.current(getContext());
+            float density = getResources().getDisplayMetrics().density;
+            float stroke = 8f * density;
+            float inset = 11f * density;
+            trackPaint.setStrokeWidth(stroke);
+            progressPaint.setStrokeWidth(stroke);
+            trackPaint.setColor(ThemeManager.withAlpha(theme.muted, 50));
+            progressPaint.setColor(theme.accent);
+
+            oval.set(inset, inset, getWidth() - inset, getHeight() - inset);
+            canvas.drawArc(oval, -90f, 360f, false, trackPaint);
+            canvas.drawArc(oval, -90f, 360f * progress / 100f, false, progressPaint);
+
+            valuePaint.setColor(theme.text);
+            valuePaint.setTextSize(27f * density);
+            labelPaint.setColor(theme.accent);
+            labelPaint.setTextSize(8.5f * density);
+            float centerX = getWidth() / 2f;
+            float centerY = getHeight() / 2f;
+            canvas.drawText(progress + "%", centerX, centerY + 2f * density, valuePaint);
+            canvas.drawText(progress >= 100 ? "READY" : "DOWNLOADING",
+                    centerX, centerY + 24f * density, labelPaint);
+        }
     }
-    
-    private void showDownloadAnimation(String message) {
-        if (isDownloading) return;
+
+    private void showDownloadAnimation(String ignoredMessage) {
+        if (isDownloading || !(context instanceof Activity)) {
+            return;
+        }
         isDownloading = true;
-        
-        ((Activity) context).runOnUiThread(() -> {
-            if (downloadOverlay != null && downloadOverlay.getParent() != null) {
-                try {
-                    ((FrameLayout) downloadOverlay.getParent()).removeView(downloadOverlay);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-                downloadOverlay = null;
+        Activity activity = (Activity) context;
+        activity.runOnUiThread(() -> {
+            TextView startButton = activity.findViewById(R.id.btn_start_game);
+            View privacyMode = activity.findViewById(R.id.tv_hide_esp);
+            if (startButton == null || !(startButton.getParent() instanceof ViewGroup)) {
+                return;
             }
-            
-            downloadOverlay = new LinearLayout(context);
-            downloadOverlay.setLayoutParams(new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.MATCH_PARENT));
-            downloadOverlay.setGravity(Gravity.CENTER);
-            downloadOverlay.setBackgroundColor(Color.parseColor("#CC000000"));
-            downloadOverlay.setOrientation(LinearLayout.VERTICAL);
-            downloadOverlay.setClickable(true);
-            downloadOverlay.setFocusable(true);
-            
-            Typeface premiumFont = getPremiumFont();
-            
-            // Download icon with rotation
-            downloadIcon = new ImageView(context);
-            downloadIcon.setImageResource(android.R.drawable.stat_sys_download);
-            downloadIcon.setColorFilter(Color.parseColor("#FFD700"));
-            LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(70, 70);
-            iconParams.bottomMargin = 20;
-            downloadIcon.setLayoutParams(iconParams);
-            
-            // Title text
+
+            ViewGroup runtimeContainer = (ViewGroup) startButton.getParent();
+            if (downloadPanel != null && downloadPanel.getParent() instanceof ViewGroup) {
+                ((ViewGroup) downloadPanel.getParent()).removeView(downloadPanel);
+            }
+
+            ThemeManager.ThemeSpec theme = ThemeManager.current(context);
+            int pad = ThemeManager.dp(context, 16);
+
+            downloadPanel = new LinearLayout(context);
+            downloadPanel.setOrientation(LinearLayout.VERTICAL);
+            downloadPanel.setPadding(pad, pad, pad, pad);
+            downloadPanel.setBackground(ThemeManager.themedPanel(context, true));
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                downloadPanel.setElevation(ThemeManager.dp(context, Math.max(6f, theme.elevationDp)));
+            }
+
+            LinearLayout hero = new LinearLayout(context);
+            hero.setOrientation(LinearLayout.HORIZONTAL);
+            hero.setGravity(Gravity.CENTER_VERTICAL);
+
+            ringProgressView = new RingProgressView(context);
+            ringProgressView.setProgressValue(0);
+            LinearLayout.LayoutParams ringParams = new LinearLayout.LayoutParams(
+                    ThemeManager.dp(context, 118), ThemeManager.dp(context, 118));
+            ringParams.rightMargin = ThemeManager.dp(context, 16);
+            hero.addView(ringProgressView, ringParams);
+
+            LinearLayout copy = new LinearLayout(context);
+            copy.setOrientation(LinearLayout.VERTICAL);
+            copy.setGravity(Gravity.CENTER_VERTICAL);
+            hero.addView(copy, new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
             downloadTitleText = new TextView(context);
-            downloadTitleText.setText("✦ DOWNLOADING FILES ✦");
-            downloadTitleText.setTextColor(Color.parseColor("#FFD700"));
-            downloadTitleText.setTextSize(18);
-            downloadTitleText.setTypeface(premiumFont);
-            downloadTitleText.setGravity(Gravity.CENTER);
-            downloadTitleText.setPadding(0, 10, 0, 10);
-            
-            // Message text
+            downloadTitleText.setText("DOWNLOADING FILES");
+            downloadTitleText.setTextColor(theme.accent);
+            downloadTitleText.setTextSize(19f);
+            downloadTitleText.setTypeface(Typeface.create(theme.headingFont, Typeface.BOLD));
+            downloadTitleText.setLetterSpacing(0.045f);
+            copy.addView(downloadTitleText, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
             downloadMessageText = new TextView(context);
-            downloadMessageText.setText(message);
-            downloadMessageText.setTextColor(Color.parseColor("#CCFFD700"));
-            downloadMessageText.setTextSize(12);
-            downloadMessageText.setTypeface(premiumFont);
-            downloadMessageText.setGravity(Gravity.CENTER);
-            downloadMessageText.setPadding(0, 5, 0, 5);
-            
-            // Progress bar
+            downloadMessageText.setText("Installing secure assets");
+            downloadMessageText.setTextColor(theme.muted);
+            downloadMessageText.setTextSize(12f);
+            LinearLayout.LayoutParams messageParams = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            messageParams.topMargin = ThemeManager.dp(context, 5);
+            copy.addView(downloadMessageText, messageParams);
+
             downloadProgressBar = new ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal);
             downloadProgressBar.setMax(100);
             downloadProgressBar.setProgress(0);
-            LinearLayout.LayoutParams progressParams = new LinearLayout.LayoutParams(250, 6);
-            progressParams.topMargin = 15;
-            progressParams.bottomMargin = 10;
-            downloadProgressBar.setLayoutParams(progressParams);
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                downloadProgressBar.setProgressTintList(android.content.res.ColorStateList.valueOf(Color.parseColor("#FFD700")));
-                downloadProgressBar.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.parseColor("#33FFD700")));
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                downloadProgressBar.setProgressTintList(ColorStateList.valueOf(theme.accent));
+                downloadProgressBar.setProgressBackgroundTintList(
+                        ColorStateList.valueOf(ThemeManager.withAlpha(theme.muted, 45)));
             }
-            
-            // Progress text
-            downloadProgressText = new TextView(context);
-            downloadProgressText.setText("0% • 0.00 MB / 0.00 MB");
-            downloadProgressText.setTextColor(Color.parseColor("#FFD700"));
-            downloadProgressText.setTextSize(11);
-            downloadProgressText.setTypeface(premiumFont);
-            downloadProgressText.setGravity(Gravity.CENTER);
-            downloadProgressText.setPadding(0, 5, 0, 0);
-            
-            downloadOverlay.addView(downloadIcon);
-            downloadOverlay.addView(downloadTitleText);
-            downloadOverlay.addView(downloadMessageText);
-            downloadOverlay.addView(downloadProgressBar);
-            downloadOverlay.addView(downloadProgressText);
-            
-            ((Activity) context).addContentView(downloadOverlay, downloadOverlay.getLayoutParams());
-            
-            // Fade in
-            downloadOverlay.setAlpha(0f);
-            downloadOverlay.animate().alpha(1f).setDuration(300).start();
-            
-            // Rotate icon
-            RotateAnimation rotateAnim = new RotateAnimation(0f, 360f, 
-                    Animation.RELATIVE_TO_SELF, 0.5f, 
-                    Animation.RELATIVE_TO_SELF, 0.5f);
-            rotateAnim.setDuration(1500);
-            rotateAnim.setRepeatCount(Animation.INFINITE);
-            rotateAnim.setInterpolator(new LinearInterpolator());
-            downloadIcon.startAnimation(rotateAnim);
-            
-            // Pulse text
-            ScaleAnimation scaleAnim = new ScaleAnimation(
-                    1f, 1.05f, 1f, 1.05f,
-                    Animation.RELATIVE_TO_SELF, 0.5f,
-                    Animation.RELATIVE_TO_SELF, 0.5f);
-            scaleAnim.setDuration(800);
-            scaleAnim.setRepeatCount(Animation.INFINITE);
-            scaleAnim.setRepeatMode(Animation.REVERSE);
-            downloadTitleText.startAnimation(scaleAnim);
-            
-            // Dots animation
-            startDotsAnimation();
+            LinearLayout.LayoutParams barParams = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ThemeManager.dp(context, 9));
+            barParams.topMargin = ThemeManager.dp(context, 14);
+            copy.addView(downloadProgressBar, barParams);
+
+            securityStateText = new TextView(context);
+            securityStateText.setText("SECURE   •   VERIFIED   •   OPTIMIZED");
+            securityStateText.setTextColor(theme.success);
+            securityStateText.setTextSize(10f);
+            securityStateText.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
+            securityStateText.setLetterSpacing(0.035f);
+            LinearLayout.LayoutParams secureParams = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            secureParams.topMargin = ThemeManager.dp(context, 12);
+            copy.addView(securityStateText, secureParams);
+
+            downloadPanel.addView(hero, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+            LinearLayout.LayoutParams panelParams = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            panelParams.topMargin = ThemeManager.dp(context, 14);
+            panelParams.bottomMargin = ThemeManager.dp(context, 8);
+
+            int insertIndex = privacyMode == null ? -1 : runtimeContainer.indexOfChild(privacyMode);
+            if (insertIndex < 0) {
+                insertIndex = Math.max(0, runtimeContainer.indexOfChild(startButton));
+            }
+            runtimeContainer.addView(downloadPanel, insertIndex, panelParams);
+
+            downloadPanel.setAlpha(0f);
+            downloadPanel.setTranslationY(ThemeManager.dp(context, 10));
+            downloadPanel.animate().alpha(1f).translationY(0f).setDuration(240L).start();
         });
     }
-    
-    private void startDotsAnimation() {
-        final int[] dotCount = {0};
-        final String[] dotPattern = {"", ".", "..", "..."};
-        
-        dotRunnable = new Runnable() {
-            @Override
-            public void run() {
-                if (downloadTitleText != null && isDownloading) {
-                    downloadTitleText.setText("✦ DOWNLOADING FILES" + dotPattern[dotCount[0]] + " ✦");
-                    dotCount[0] = (dotCount[0] + 1) % dotPattern.length;
-                    handler.postDelayed(this, 400);
+
+    private void updateDownloadProgress(int progress, String message, long downloaded, long total) {
+        if (!(context instanceof Activity)) {
+            return;
+        }
+        ((Activity) context).runOnUiThread(() -> {
+            if (!isDownloading || downloadPanel == null) {
+                return;
+            }
+            if (ringProgressView != null) {
+                ringProgressView.setProgressValue(progress);
+            }
+            if (downloadProgressBar != null) {
+                downloadProgressBar.setIndeterminate(false);
+                downloadProgressBar.setProgress(progress);
+            }
+            if (downloadMessageText != null) {
+                if (progress >= 100 || (message != null && message.toLowerCase(Locale.US).contains("validat"))) {
+                    downloadMessageText.setText("Validating encrypted runtime package");
+                } else {
+                    downloadMessageText.setText("Installing secure assets");
                 }
             }
-        };
-        handler.post(dotRunnable);
-    }
-    
-    private void updateDownloadProgress(int progress, String message, long downloaded, long total) {
-        ((Activity) context).runOnUiThread(() -> {
-            if (downloadProgressBar != null && isDownloading) {
-                downloadProgressBar.setProgress(progress);
-                downloadProgressBar.setIndeterminate(false);
-                
-                String progressText = String.format(Locale.getDefault(), 
-                        "%d%% • %.2f MB / %.2f MB", 
-                        progress, downloaded / (1024.0 * 1024.0), total / (1024.0 * 1024.0));
-                downloadProgressText.setText(progressText);
-                
-                String timeMessage = String.format(Locale.getDefault(),
-                        "⏱️ Time: %d ms", System.currentTimeMillis() - startTime);
-                downloadMessageText.setText(timeMessage);
-                
-                AlphaAnimation fadeAnim = new AlphaAnimation(0.5f, 1f);
-                fadeAnim.setDuration(300);
-                downloadProgressText.startAnimation(fadeAnim);
-            }
         });
     }
-    
+
     private void hideDownloadAnimation(boolean success, String resultMessage) {
-        if (!isDownloading) return;
-        isDownloading = false;
-        
-        if (handler != null && dotRunnable != null) {
-            handler.removeCallbacks(dotRunnable);
+        if (!isDownloading || !(context instanceof Activity)) {
+            return;
         }
-        
-        ((Activity) context).runOnUiThread(() -> {
-            if (downloadOverlay != null) {
-                downloadOverlay.animate().alpha(0f).setDuration(300).withEndAction(() -> {
-                    if (downloadOverlay.getParent() != null) {
-                        ((FrameLayout) downloadOverlay.getParent()).removeView(downloadOverlay);
-                    }
-                    if (downloadIcon != null) downloadIcon.clearAnimation();
-                    if (downloadTitleText != null) downloadTitleText.clearAnimation();
-                    downloadOverlay = null;
-                    downloadIcon = null;
-                    downloadTitleText = null;
-                    downloadMessageText = null;
-                    downloadProgressBar = null;
-                    downloadProgressText = null;
-                    
-                    // Show result dialog
-                    showResultDialog(success, resultMessage);
-                }).start();
+        isDownloading = false;
+        Activity activity = (Activity) context;
+        activity.runOnUiThread(() -> {
+            if (downloadPanel == null) {
+                return;
             }
+            ThemeManager.ThemeSpec theme = ThemeManager.current(context);
+            if (ringProgressView != null && success) {
+                ringProgressView.setProgressValue(100);
+            }
+            if (downloadProgressBar != null && success) {
+                downloadProgressBar.setProgress(100);
+            }
+            if (downloadTitleText != null) {
+                downloadTitleText.setText(success ? "RUNTIME READY" : "DOWNLOAD FAILED");
+                downloadTitleText.setTextColor(success ? theme.success : theme.error);
+            }
+            if (downloadMessageText != null) {
+                downloadMessageText.setText(success
+                        ? "Secure assets verified and installed"
+                        : cleanError(resultMessage));
+            }
+            if (securityStateText != null) {
+                securityStateText.setText(success
+                        ? "VERIFIED   •   READY TO START"
+                        : "RETRY REQUIRED");
+                securityStateText.setTextColor(success ? theme.success : theme.error);
+            }
+
+            long delay = success ? 850L : 1800L;
+            handler.postDelayed(() -> activity.runOnUiThread(() -> {
+                if (downloadPanel == null) {
+                    return;
+                }
+                LinearLayout panel = downloadPanel;
+                panel.animate().alpha(0f).translationY(ThemeManager.dp(context, -8))
+                        .setDuration(220L)
+                        .withEndAction(() -> {
+                            if (panel.getParent() instanceof ViewGroup) {
+                                ((ViewGroup) panel.getParent()).removeView(panel);
+                            }
+                            if (downloadPanel == panel) {
+                                downloadPanel = null;
+                                ringProgressView = null;
+                                downloadTitleText = null;
+                                downloadMessageText = null;
+                                securityStateText = null;
+                                downloadProgressBar = null;
+                            }
+                        }).start();
+            }), delay);
         });
     }
-    
-    private void showResultDialog(boolean success, String message) {
-        ((Activity) context).runOnUiThread(() -> {
-            android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(context);
-            LinearLayout dialogLayout = new LinearLayout(context);
-            dialogLayout.setOrientation(LinearLayout.VERTICAL);
-            dialogLayout.setPadding(40, 40, 40, 40);
-            dialogLayout.setBackgroundColor(Color.parseColor("#1A1A1A"));
-            
-            android.graphics.drawable.GradientDrawable bgShape = new android.graphics.drawable.GradientDrawable();
-            bgShape.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
-            bgShape.setCornerRadius(16);
-            bgShape.setColor(Color.parseColor("#1A1A1A"));
-            dialogLayout.setBackground(bgShape);
-            
-            TextView titleText = new TextView(context);
-            titleText.setText(success ? "✓ SUCCESS ✓" : "✗ FAILED ✗");
-            titleText.setTextSize(20);
-            titleText.setTypeface(getPremiumFont(), Typeface.BOLD);
-            titleText.setGravity(Gravity.CENTER);
-            titleText.setTextColor(success ? Color.parseColor("#FFD700") : Color.parseColor("#FF4444"));
-            titleText.setPadding(0, 0, 0, 20);
-            
-            TextView messageText = new TextView(context);
-            messageText.setText(message);
-            messageText.setTextSize(14);
-            messageText.setTypeface(getPremiumFont());
-            messageText.setGravity(Gravity.CENTER);
-            messageText.setTextColor(Color.parseColor("#FFFFFF"));
-            messageText.setPadding(0, 0, 0, 30);
-            
-            TextView buttonText = new TextView(context);
-            buttonText.setText("OK");
-            buttonText.setTextSize(16);
-            buttonText.setTypeface(getPremiumFont(), Typeface.BOLD);
-            buttonText.setGravity(Gravity.CENTER);
-            buttonText.setTextColor(Color.parseColor("#000000"));
-            buttonText.setPadding(50, 15, 50, 15);
-            buttonText.setClickable(true);
-            buttonText.setFocusable(true);
-            
-            android.graphics.drawable.GradientDrawable buttonShape = new android.graphics.drawable.GradientDrawable();
-            buttonShape.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
-            buttonShape.setCornerRadius(25);
-            buttonShape.setColor(Color.parseColor("#FFD700"));
-            buttonText.setBackground(buttonShape);
-            
-            dialogLayout.addView(titleText);
-            dialogLayout.addView(messageText);
-            dialogLayout.addView(buttonText);
-            
-            builder.setView(dialogLayout);
-            builder.setCancelable(false);
-            
-            android.app.AlertDialog dialog = builder.create();
-            dialog.show();
-            
-            buttonText.setOnClickListener(v -> dialog.dismiss());
-            
-            dialogLayout.setAlpha(0f);
-            dialogLayout.animate().alpha(1f).setDuration(300).start();
-        });
+
+    private String cleanError(String message) {
+        if (message == null || message.trim().isEmpty()) {
+            return "Secure asset sync failed";
+        }
+        String cleaned = message.replace("✗", "").replace('\n', ' ').trim();
+        return cleaned.length() > 90 ? cleaned.substring(0, 90) : cleaned;
     }
 
     public void startDownload(String downloadUrl) {
@@ -340,20 +335,19 @@ public class DownloadZip {
     }
 
     public void startDownload(String downloadUrl, DownloadCallback callback) {
-        showDownloadAnimation("Initializing download...");
+        showDownloadAnimation("Preparing secure runtime");
 
         if (callback != null) {
             callback.onStart();
         }
 
-        startTime = System.currentTimeMillis();
         downloadedBytes = 0;
 
         executor.execute(() -> {
             boolean downloaded = downloadFile(downloadUrl, callback);
             if (!downloaded) {
                 handler.post(() -> {
-                    hideDownloadAnimation(false, "✗ Download failed!\n✗ Check the HTTPS URL or connection");
+                    hideDownloadAnimation(false, "Download failed. Check the HTTPS connection.");
                     if (callback != null) {
                         callback.onError("Download failed");
                     }
@@ -376,13 +370,12 @@ public class DownloadZip {
 
             handler.post(() -> {
                 if (extractionResult.success) {
-                    hideDownloadAnimation(true,
-                            "✓ Download Complete!\n✓ Archive validated and installed successfully!");
+                    hideDownloadAnimation(true, "Runtime ready");
                     if (callback != null) {
                         callback.onSuccess();
                     }
                 } else {
-                    hideDownloadAnimation(false, "✗ " + extractionResult.message);
+                    hideDownloadAnimation(false, extractionResult.message);
                     if (callback != null) {
                         callback.onError(extractionResult.message);
                     }
@@ -433,9 +426,7 @@ public class DownloadZip {
                     final int finalProgress = progress;
                     final long progressBytes = downloadedBytes;
                     handler.post(() -> {
-                        if (downloadProgressBar != null && isDownloading) {
-                            updateDownloadProgress(finalProgress, "Downloading...", progressBytes, totalBytes);
-                        }
+                        updateDownloadProgress(finalProgress, "Downloading...", progressBytes, totalBytes);
                         if (callback != null) {
                             callback.onProgress(finalProgress);
                         }
@@ -446,7 +437,6 @@ public class DownloadZip {
             }
 
             return outputZip.isFile() && outputZip.length() > 0;
-
         } catch (Exception e) {
             outputZip.delete();
             return false;
