@@ -80,9 +80,7 @@ import top.niunaijun.blackbox.utils.compat.ActivityManagerCompat;
 import top.niunaijun.blackbox.utils.compat.BuildCompat;
 import top.niunaijun.blackbox.utils.compat.ContextCompat;
 import top.niunaijun.blackbox.utils.compat.StrictModeCompat;
-import org.lsposed.lsparanoid.Obfuscate;
 
-@Obfuscate
 public class BActivityThread extends IBActivityThread.Stub {
     public static final String TAG = "BActivityThread";
     private static final Object mConfigLock = new Object();

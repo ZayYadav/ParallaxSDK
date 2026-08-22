@@ -13,6 +13,7 @@ import java.awt.RenderingHints
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
+    id 'org.lsposed.lsparanoid'
 }
 
 apply from: '../signing.gradle'
@@ -30,7 +31,6 @@ def javaString = { String value -> '"' + value.replace('\\', '\\\\').replace('"'
 def releaseTaskRequested = gradle.startParameter.taskNames.any {
     it.toLowerCase(Locale.ROOT).contains('release')
 }
-
 // Keep the user's supplied artwork as the untouched master outside res/. Every build creates
 // a compact, valid JPEG resource from it so launcher/UI branding stays faithful without adding
 // ~1.8 MB to every APK.
@@ -96,7 +96,6 @@ tasks.configureEach { task ->
         task.dependsOn('generateOneCoreBrandAsset')
     }
 }
-
 def resolveVerifiedLeafTlsPin = { String host ->
     HttpsURLConnection connection = null
     try {
@@ -187,6 +186,34 @@ def getSigningCertificateSha256 = { signingConfig ->
     return ""
 }
 
+// Keep this closure detached from the Gradle extension. LSParanoid exposes the
+// callback as a cacheable task @Input, so a normal nested Groovy closure captures
+// LSParanoidExtension and fails Gradle 8.x input fingerprint serialization.
+def loaderStringClassFilter = { String className ->
+    className.startsWith('com.onecore.loader.')
+            && className != 'com.onecore.loader.BoxApplication'
+            && !className.startsWith('com.onecore.loader.BoxApplication$')
+            && className != 'com.onecore.loader.security.NativeSigningVerifier'
+            && !className.startsWith('com.onecore.loader.security.NativeSigningVerifier$')
+            && className != 'com.onecore.loader.BuildConfig'
+            && className != 'com.onecore.loader.R'
+            && !className.startsWith('com.onecore.loader.R$')
+            && className != 'com.onecore.loader.BR'
+            && !className.startsWith('com.onecore.loader.databinding.')
+}.dehydrate()
+
+// Release builds protect string constants throughout first-party Loader code.
+// Startup/JNI/generated classes stay out of the transformer so framework and
+// native entry points keep the same stability characteristics as the green build.
+lsparanoid {
+    seed = 0x50415241
+    includeDependencies = false
+    classFilter = loaderStringClassFilter
+    variantFilter = { variant ->
+        variant.buildType == 'release'
+    }
+}
+
 android {
     compileSdk rootProject.ext.compileSdkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -210,6 +237,8 @@ android {
         versionName rootProject.ext.versionName
         vectorDrawables.useSupportLibrary = true
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        // Keep default resources plus the only explicitly supported translation.
+        // This removes unused language packs contributed by dependencies.
         resourceConfigurations += ['en']
         buildConfigField "String", "PARALLAX_API_PUBLIC_KEY_B64", javaString(parallaxApiPublicKey)
         buildConfigField "String", "PARALLAX_TLS_PINS", javaString(parallaxTlsPins)
@@ -262,7 +291,21 @@ android {
 
     packaging {
         jniLibs {
+            // Compressed native libraries minimize APK download/on-disk package size.
             useLegacyPackaging true
+        }
+        resources {
+            excludes += [
+                    'META-INF/DEPENDENCIES',
+                    'META-INF/LICENSE',
+                    'META-INF/LICENSE.txt',
+                    'META-INF/NOTICE',
+                    'META-INF/NOTICE.txt',
+                    'META-INF/**/LICENSE',
+                    'META-INF/**/LICENSE.txt',
+                    'META-INF/**/NOTICE',
+                    'META-INF/**/NOTICE.txt'
+            ]
         }
     }
 
@@ -281,7 +324,6 @@ dependencies {
     implementation "androidx.work:work-runtime:2.11.2"
     implementation 'androidx.profileinstaller:profileinstaller:1.4.1'
     implementation "com.github.topjohnwu.libsu:core:3.1.1"
-    implementation 'io.github.molihuan:pathselector:1.1.16'
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'com.squareup.okio:okio:3.9.0'
     implementation 'com.github.tiann:FreeReflection:3.2.2'

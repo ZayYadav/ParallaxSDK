@@ -10,6 +10,8 @@ import android.util.Log;
 
 import java.util.Locale;
 
+import org.lsposed.lsparanoid.Obfuscate;
+
 import top.niunaijun.blackbox.fake.frameworks.BActivityManager;
 import top.niunaijun.blackbox.fake.frameworks.BPackageManager;
 import top.niunaijun.blackbox.utils.FileUtils;
@@ -23,12 +25,14 @@ import top.niunaijun.blackbox.utils.FileUtils;
  * final redirect URI through Activity result data and this bridge routes that URI
  * into BlackBox's virtual PackageManager/ActivityManager.
  */
+@Obfuscate
 public final class VirtualOAuthBridgeActivity extends Activity {
     private static final String TAG = "ParallaxOAuth";
     private static final int REQUEST_AUTH_TAB = 0x5041;
 
     private String virtualPackage;
-    private String expectedRedirectScheme;
+    private Uri expectedRedirectUri;
+    private Uri authUri;
     private String authProvider;
     private int userId = -1;
     private boolean twitterFlow;
@@ -50,18 +54,19 @@ public final class VirtualOAuthBridgeActivity extends Activity {
         authProvider = launchIntent == null ? null
                 : launchIntent.getStringExtra(VirtualOAuthRouter.EXTRA_AUTH_PROVIDER);
 
-        Uri authUri = safeHttpsUri(authUrl);
+        authUri = safeHttpsUri(authUrl);
         Uri redirectUri = safeCustomRedirectUri(redirectUriValue);
-        if (authUri == null || redirectUri == null || virtualPackage == null
+        if (authUri == null || !VirtualOAuthRouter.isTrustedAuthUri(authUri)
+                || redirectUri == null || virtualPackage == null
                 || virtualPackage.trim().isEmpty() || userId < 0
                 || authProvider == null || authProvider.trim().isEmpty()) {
             finish();
             return;
         }
 
+        expectedRedirectUri = redirectUri;
         twitterFlow = isTwitterHost(authUri);
         legacyTwitterFlow = twitterFlow && hasQueryParameter(authUri, "oauth_token");
-        expectedRedirectScheme = lower(redirectUri.getScheme());
         if (!redirectResolvesToVirtualPackage(redirectUri)
                 || !AuthTabCompat.isSupportedProvider(this, authProvider, authUri)) {
             diagnostic("setup_rejected", false, false, false, false, false);
@@ -70,7 +75,7 @@ public final class VirtualOAuthBridgeActivity extends Activity {
         }
 
         if (savedInstanceState == null) {
-            launchAuthTab(authUri, expectedRedirectScheme, authProvider);
+            launchAuthTab(authUri, lower(expectedRedirectUri.getScheme()), authProvider);
         }
     }
 
@@ -108,8 +113,8 @@ public final class VirtualOAuthBridgeActivity extends Activity {
         }
 
         Uri callbackUri = data.getData();
-        if (!expectedRedirectScheme.equals(lower(callbackUri.getScheme()))) {
-            diagnostic("scheme_mismatch", false, false, false, false, false);
+        if (!matchesExpectedCallback(callbackUri)) {
+            diagnostic("callback_mismatch", false, false, false, false, false);
             finish();
             return;
         }
@@ -135,6 +140,17 @@ public final class VirtualOAuthBridgeActivity extends Activity {
         diagnostic(dispatched ? "callback_dispatched" : "callback_unresolved",
                 hasToken, hasVerifier, hasCode, denied, dispatched);
         finish();
+    }
+
+    /**
+     * Auth Tabs return an arbitrary URI supplied by the browser, so validate the
+     * entire registered callback target and OAuth state before crossing back into
+     * the virtual package. Provider-added code/error query parameters are allowed;
+     * fixed query parameters already present in redirect_uri must still match.
+     */
+    private boolean matchesExpectedCallback(Uri callbackUri) {
+        return OAuthCallbackValidator.matches(authUri, expectedRedirectUri, callbackUri)
+                && redirectResolvesToVirtualPackage(callbackUri);
     }
 
     private boolean dispatchToVirtualPackage(Uri callbackUri) {
@@ -270,4 +286,5 @@ public final class VirtualOAuthBridgeActivity extends Activity {
     private static String lower(String value) {
         return value == null ? "" : value.toLowerCase(Locale.US);
     }
+
 }

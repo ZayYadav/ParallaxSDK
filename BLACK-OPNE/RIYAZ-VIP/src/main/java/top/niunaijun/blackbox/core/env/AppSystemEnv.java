@@ -9,9 +9,7 @@ import java.util.List;
 
 import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.core.GmsCore;
-import org.lsposed.lsparanoid.Obfuscate;
 
-@Obfuscate
 public class AppSystemEnv {
     private static final List<String> sSystemPackages = new ArrayList<>();
     private static final List<String> sSuPackages = new ArrayList<>();
@@ -86,6 +84,7 @@ public class AppSystemEnv {
 
         // Real Facebook apps/services.
         sSystemPackages.add("com.facebook.katana");
+        sSystemPackages.add("com.facebook.wakizashi");
         sSystemPackages.add("com.facebook.orca");
         sSystemPackages.add("com.facebook.lite");
         sSystemPackages.add("com.facebook.mlite");

@@ -21,7 +21,6 @@ import android.widget.TextView;
 
 import androidx.annotation.Nullable;
 
-import org.lsposed.lsparanoid.Obfuscate;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,7 +29,6 @@ import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.R;
 import top.niunaijun.blackbox.utils.Slog;
 
-@Obfuscate
 public class LauncherActivity extends Activity {
 
     public static final String TAG = "ParallaxLaunch";

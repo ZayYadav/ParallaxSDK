@@ -74,26 +74,17 @@ The CI workflow performs both stages automatically.
   `ONECORE_ALLOWED_SIGNING_SHA256`. Multiple approved rotation certificates
   may be comma-separated. If omitted, the build derives the digest from its
   configured keystore.
-- Release builds minify resources and code, remove verbose logs, and block
-  screen capture on sensitive activities.
-- Production release APKs additionally run BlackObfuscator control-flow
-  flattening at depth 2 over first-party security, license, download, and
-  activity code after R8. Generated binding/resource classes, the exact native
-  signing entrypoint, and third-party libraries are excluded for runtime
-  compatibility, as recommended by BlackObfuscator upstream.
-- High-value license transport classes are also marked for the existing
-  LSParanoid release string transformation; this conceals fixed endpoint,
-  algorithm, binding, and parser strings in the packaged DEX without pretending
-  that the whole DEX is cryptographically sealed at runtime.
-- BlackObfuscator is disabled unless the release task explicitly sets
-  `-PblackObfuscatorEnabled=true`. CI pins upstream commit
-  `67aec4c457be0d2644224100fa85aed7eac87cb6`, rejects fewer than 50 transformed
-  methods or conversion stack traces, validates every packaged DEX with
-  `dexdump`, rejects plaintext high-value license strings, and verifies APK
-  signing plus ZIP alignment. CI builds and uploads both release and debug APKs.
-  When production transport variables or signing secrets are missing, artifact
-  names contain `ci-nonproduction`; only fully configured artifacts are labeled
-  `production`. BlackObfuscator remains enabled only for the release APK.
+- Release builds use R8 code minification and resource shrinking, remove verbose
+  logs, and block screen capture on sensitive activities.
+- High-value license transport classes are marked for the existing LSParanoid
+  release string transformation; this conceals fixed endpoint, algorithm,
+  binding, and parser strings in the packaged DEX without pretending that the
+  whole DEX is cryptographically sealed at runtime.
+- CI validates every packaged DEX with `dexdump`, rejects plaintext high-value
+  license strings, and verifies APK signing plus ZIP alignment. CI builds and
+  uploads both release and debug APKs. When production transport variables or
+  signing secrets are missing, artifact names contain `ci-nonproduction`; only
+  fully configured artifacts are labeled `production`.
 - Tapjacking protection rejects obscured touches on the license input, while
   WorkManager and notification registrations are delegated to their current
   AndroidX manifests for modern Android compatibility.

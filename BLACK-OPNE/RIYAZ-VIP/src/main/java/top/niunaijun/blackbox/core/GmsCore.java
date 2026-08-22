@@ -20,9 +20,7 @@ import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.BActivityThread;
 import top.niunaijun.blackbox.entity.pm.InstallResult;
 import top.niunaijun.blackbox.utils.auth.Auth;
-import org.lsposed.lsparanoid.Obfuscate;
 
-@Obfuscate
 public class GmsCore {
     private static final HashSet<String> GOOGLE_APP = new HashSet<>();
     private static final HashSet<String> GOOGLE_SERVICE = new HashSet<>();

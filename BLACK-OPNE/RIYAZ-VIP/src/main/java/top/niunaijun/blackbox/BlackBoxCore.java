@@ -65,7 +65,6 @@ import top.niunaijun.blackbox.utils.compat.BundleCompat;
 import top.niunaijun.blackbox.utils.compat.XposedParserCompat;
 import top.niunaijun.blackbox.utils.provider.ProviderCall;
 import top.niunaijun.blackbox.core.system.api.MetaActivationManager;
-import org.lsposed.lsparanoid.Obfuscate;
 /**
  * Created by @RIYAZXERO on 3/30/21.
  * * ∧＿∧
@@ -74,7 +73,6 @@ import org.lsposed.lsparanoid.Obfuscate;
  * しーＪ
  * 此处无Bug
  */
-@Obfuscate
 @SuppressLint({"StaticFieldLeak", "NewApi"})
 public class BlackBoxCore extends ClientConfiguration {
     public static final String TAG = "BlackBoxCore";

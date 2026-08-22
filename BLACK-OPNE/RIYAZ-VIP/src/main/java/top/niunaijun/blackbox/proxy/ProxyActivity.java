@@ -2,6 +2,7 @@ package top.niunaijun.blackbox.proxy;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.IntentSender;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -12,6 +13,7 @@ import androidx.annotation.Nullable;
 import top.niunaijun.blackbox.app.BActivityThread;
 import top.niunaijun.blackbox.compat.auth.ExternalAuthRouter;
 import top.niunaijun.blackbox.compat.oauth.AuthTabCompat;
+import top.niunaijun.blackbox.compat.oauth.OAuthCallbackValidator;
 import top.niunaijun.blackbox.compat.oauth.VirtualOAuthRouter;
 import top.niunaijun.blackbox.fake.frameworks.BActivityManager;
 import top.niunaijun.blackbox.fake.hook.HookManager;
@@ -72,9 +74,39 @@ public class ProxyActivity extends Activity {
 
     private void launchExternalProvider(Intent bridgeIntent) {
         try {
+            IntentSender providerSender = bridgeIntent.getParcelableExtra(
+                    ExternalAuthRouter.EXTRA_PROVIDER_INTENT_SENDER);
+            if (providerSender != null) {
+                if (!ExternalAuthRouter.isTrustedProviderIntentSender(providerSender)) {
+                    deliverOriginalActivityResult(RESULT_CANCELED, null);
+                    finish();
+                    return;
+                }
+
+                Intent fillInIntent = bridgeIntent.getParcelableExtra(
+                        ExternalAuthRouter.EXTRA_PROVIDER_FILL_IN_INTENT);
+                int flagsMask = bridgeIntent.getIntExtra(
+                        ExternalAuthRouter.EXTRA_PROVIDER_FLAGS_MASK, 0);
+                int flagsValues = bridgeIntent.getIntExtra(
+                        ExternalAuthRouter.EXTRA_PROVIDER_FLAGS_VALUES, 0);
+                Bundle options = bridgeIntent.getBundleExtra(
+                        ExternalAuthRouter.EXTRA_PROVIDER_OPTIONS);
+
+                startIntentSenderForResult(
+                        providerSender,
+                        REQUEST_EXTERNAL_AUTH,
+                        fillInIntent,
+                        flagsMask,
+                        flagsValues,
+                        0,
+                        options);
+                return;
+            }
+
             Intent providerIntent = bridgeIntent.getParcelableExtra(
                     ExternalAuthRouter.EXTRA_PROVIDER_INTENT);
             if (!ExternalAuthRouter.isTrustedProviderIntent(providerIntent)) {
+                deliverOriginalActivityResult(RESULT_CANCELED, null);
                 finish();
                 return;
             }
@@ -94,7 +126,8 @@ public class ProxyActivity extends Activity {
                     VirtualOAuthRouter.EXTRA_REDIRECT_URI));
             String provider = bridgeIntent.getStringExtra(
                     VirtualOAuthRouter.EXTRA_AUTH_PROVIDER);
-            if (authUri == null || redirectUri == null || provider == null
+            if (authUri == null || !VirtualOAuthRouter.isTrustedAuthUri(authUri)
+                    || redirectUri == null || provider == null
                     || !AuthTabCompat.isSupportedProvider(this, provider, authUri)) {
                 oauthDiagnostic("result_bridge_setup_rejected", authUri, null, false);
                 deliverOriginalActivityResult(RESULT_CANCELED, null);
@@ -150,18 +183,18 @@ public class ProxyActivity extends Activity {
             return;
         }
 
-        String expectedScheme = expectedRedirect.getScheme();
-        String actualScheme = callback.getScheme();
-        if (expectedScheme == null || actualScheme == null
-                || !expectedScheme.equalsIgnoreCase(actualScheme)) {
-            oauthDiagnostic("result_bridge_scheme_mismatch", authUri, callback, false);
+        if (!VirtualOAuthRouter.isTrustedAuthUri(authUri)
+                || !OAuthCallbackValidator.matches(authUri, expectedRedirect, callback)) {
+            oauthDiagnostic("result_bridge_callback_mismatch", authUri, callback, false);
             deliverOriginalActivityResult(RESULT_CANCELED, null);
             return;
         }
 
         boolean legacyTwitter = isTwitterHost(authUri)
                 && hasQueryParameter(authUri, "oauth_token");
-        if (legacyTwitter
+        boolean denied = hasQueryParameter(callback, "denied")
+                || hasQueryParameter(callback, "error");
+        if (legacyTwitter && !denied
                 && (!hasQueryParameter(callback, "oauth_token")
                 || !hasQueryParameter(callback, "oauth_verifier"))) {
             oauthDiagnostic("result_bridge_incomplete_oauth1", authUri, callback, false);
