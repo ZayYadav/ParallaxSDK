@@ -27,10 +27,12 @@ import java.security.cert.X509Certificate;
 /**
  * Fail-closed APK signing identity validation.
  *
- * <p>The signer decision no longer depends on PackageManager alone. The exact installed APK must
- * pass three independent paths: native APK Signature Scheme v2 verification with a signer digest
- * compiled into libParallaxLoader, Android apksig cryptographic archive verification, and the
- * PackageManager active signer view. Any disagreement is a rejection.</p>
+ * <p>The signer decision does not depend on PackageManager alone. The claimed APK is first bound
+ * in native code to the real installed base.apk of the currently executing Loader process. The
+ * exact bound archive must then pass apksig cryptographic verification, its signer certificate
+ * must match the build-pinned SHA-256 identity in both Java and native code, and PackageManager
+ * must independently agree with that signer set. Runtime relocated native-text state is purposely
+ * not mixed into signer identity because it is not stable proof of who signed an APK.</p>
  */
 public final class AppIntegrity {
     private static final long MIN_APK_BYTES = 4 * 1024L;
@@ -104,14 +106,14 @@ public final class AppIntegrity {
                 return result(Status.APK_SOURCE_INVALID);
             }
 
-            // Authoritative path #1: native verifier parses APK Signature Scheme v2 from base.apk,
-            // validates its compiled-in signer identity, verifies signed-data + APK content digest,
-            // and checks libParallaxLoader executable bytes against the on-disk ELF.
+            // Native path binding makes sure an embedded untouched original APK cannot be supplied
+            // in place of the host that is actually executing this Loader process.
             if (!NativeSigningVerifier.verifyInstalledApk(apkFile.getAbsolutePath(), packageName)) {
                 return result(Status.NATIVE_VERIFICATION_FAILED);
             }
 
-            // Authoritative path #2: Android apksig independently verifies the exact installed APK.
+            // Authoritative archive verification: validate the exact bound APK and obtain the
+            // signer certificates from its cryptographically verified signing data.
             byte[][] cryptographicCertificates = verifyApkAndGetCertificates(apkFile);
             if (cryptographicCertificates.length == 0) {
                 return result(Status.APK_SIGNATURE_INVALID);
@@ -121,8 +123,8 @@ public final class AppIntegrity {
                 return result(Status.APK_SIGNATURE_INVALID);
             }
 
-            // A second native digest comparison is intentionally mandatory and consumes the
-            // certificates produced by apksig rather than PackageManager metadata.
+            // Native expected-certificate comparison consumes certificates produced by apksig,
+            // not PackageManager metadata. A different signing key therefore still fails closed.
             if (!NativeSigningVerifier.verify(
                     allowedDigests,
                     cryptographicCertificates,
@@ -131,9 +133,8 @@ public final class AppIntegrity {
                 return result(Status.NATIVE_VERIFICATION_FAILED);
             }
 
-            // Authoritative path #3: PackageManager must agree with both independent on-disk paths.
-            // A hooked PackageManager therefore cannot make a re-signed APK valid; disagreement
-            // simply fails closed.
+            // PackageManager is a third cross-check only. Hooking it alone cannot make a re-signed
+            // APK valid because the bound archive and build-pinned signer have already been checked.
             Signature[] installedSigners = getActiveSigners(installedInfo);
             if (installedSigners.length == 0) {
                 return result(Status.SIGNER_MISSING);
@@ -149,7 +150,7 @@ public final class AppIntegrity {
 
             // Extra archive PackageManager parse remains a cross-check only. If the platform can
             // parse it, it must agree; Android versions that omit archive signingInfo are tolerated
-            // because the two independent on-disk cryptographic verifiers already succeeded.
+            // because the bound archive has already passed cryptographic verification above.
             try {
                 PackageInfo archiveInfo = getArchivePackageInfo(packageManager, apkFile);
                 if (archiveInfo != null) {
@@ -167,6 +168,11 @@ public final class AppIntegrity {
             } catch (Throwable archiveError) {
                 FLog.info("Archive signer cross-check unavailable: "
                         + archiveError.getClass().getSimpleName());
+            }
+
+            // Re-bind after the expensive archive checks to close a simple path-swap/TOCTOU window.
+            if (!NativeSigningVerifier.verifyInstalledApk(apkFile.getAbsolutePath(), packageName)) {
+                return result(Status.NATIVE_VERIFICATION_FAILED);
             }
 
             return result(Status.VALID);
