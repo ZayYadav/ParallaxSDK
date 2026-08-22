@@ -1,7 +1,10 @@
 package com.onecore.loader;
 
+import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
+import android.os.Bundle;
+import android.view.WindowManager;
 
 import androidx.appcompat.app.AppCompatDelegate;
 
@@ -75,6 +78,7 @@ public class BoxApplication extends Application {
     public void onCreate() {
         super.onCreate();
         gApp = this;
+        allowScreenshotsAcrossLoader();
         FLog.info("Startup: Application.onCreate begin");
 
         IntegrityEnforcer.install(this);
@@ -111,6 +115,47 @@ public class BoxApplication extends Application {
         }
 
         FLog.info("Startup: Application.onCreate complete");
+    }
+
+    private void allowScreenshotsAcrossLoader() {
+        registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
+            private void clearSecureFlag(Activity activity) {
+                if (activity != null && activity.getWindow() != null) {
+                    activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+                }
+            }
+
+            @Override
+            public void onActivityCreated(Activity activity, Bundle savedInstanceState) {
+                clearSecureFlag(activity);
+            }
+
+            @Override
+            public void onActivityStarted(Activity activity) {
+                clearSecureFlag(activity);
+            }
+
+            @Override
+            public void onActivityResumed(Activity activity) {
+                clearSecureFlag(activity);
+            }
+
+            @Override
+            public void onActivityPaused(Activity activity) {
+            }
+
+            @Override
+            public void onActivityStopped(Activity activity) {
+            }
+
+            @Override
+            public void onActivitySaveInstanceState(Activity activity, Bundle outState) {
+            }
+
+            @Override
+            public void onActivityDestroyed(Activity activity) {
+            }
+        });
     }
 
     public void showToastWithImage(String msg, int type) {
