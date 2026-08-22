@@ -3,6 +3,7 @@ package com.onecore.loader;
 import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.view.WindowManager;
 
@@ -19,6 +20,7 @@ import com.onecore.loader.utils.NetworkConnection;
 import com.topjohnwu.superuser.Shell;
 
 import java.io.IOException;
+import java.util.Random;
 
 import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.configuration.ClientConfiguration;
@@ -26,6 +28,9 @@ import top.niunaijun.blackbox.core.system.api.MetaActivationManager;
 
 public class BoxApplication extends Application {
     public static final String STATUS_BY = "online";
+    private static final String UI_PREFS = "onecore_edge_ui";
+    private static final String UI_THEME_KEY = "theme_index";
+
     private native String BoxApp();
     public static BoxApplication gApp;
 
@@ -80,6 +85,7 @@ public class BoxApplication extends Application {
     public void onCreate() {
         super.onCreate();
         gApp = this;
+        selectRandomThemeForLaunch();
         configureLoaderActivities();
         FLog.info("Startup: Application.onCreate begin");
 
@@ -117,6 +123,31 @@ public class BoxApplication extends Application {
         }
 
         FLog.info("Startup: Application.onCreate complete");
+    }
+
+    private void selectRandomThemeForLaunch() {
+        int themeCount = ThemeManager.themeCount();
+        if (themeCount <= 0) {
+            return;
+        }
+
+        SharedPreferences preferences = getSharedPreferences(UI_PREFS, Context.MODE_PRIVATE);
+        int previousTheme = preferences.getInt(UI_THEME_KEY, -1);
+        Random random = new Random(System.nanoTime() ^ android.os.Process.myPid());
+
+        int nextTheme;
+        if (themeCount == 1) {
+            nextTheme = 0;
+        } else if (previousTheme >= 0 && previousTheme < themeCount) {
+            // Pick from the other themes so consecutive cold launches never look identical.
+            int offset = 1 + random.nextInt(themeCount - 1);
+            nextTheme = (previousTheme + offset) % themeCount;
+        } else {
+            nextTheme = random.nextInt(themeCount);
+        }
+
+        preferences.edit().putInt(UI_THEME_KEY, nextTheme).apply();
+        FLog.info("UI: selected random launch theme " + nextTheme + " of " + themeCount);
     }
 
     private void configureLoaderActivities() {
