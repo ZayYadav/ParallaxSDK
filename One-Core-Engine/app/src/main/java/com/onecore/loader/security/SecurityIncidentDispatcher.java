@@ -11,10 +11,11 @@ import java.lang.ref.WeakReference;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Bridges fail-closed security detections to the foreground cinematic blocker.
+ * Routes security incidents to the appropriate fail-closed response.
  *
- * <p>The security decision never depends on the UI. The dialog is presentation only; when the
- * cinematic completes, fails, or exceeds its watchdog, this dispatcher terminates the process.</p>
+ * <p>The cinematic is intentionally reserved for confirmed APK signing/integrity rejection.
+ * Debugger/tracer/runtime guard events still terminate fail-closed, but cannot accidentally show
+ * the cracked/re-signed APK video on an otherwise genuine signed installation.</p>
  */
 public final class SecurityIncidentDispatcher {
     public enum Reason {
@@ -40,7 +41,7 @@ public final class SecurityIncidentDispatcher {
         Reason reason = pendingReason;
         if (reason != null && !ACTIVE.get()) {
             String detail = pendingDetail;
-            MAIN.post(() -> showIfPossible(activity, reason, detail));
+            MAIN.post(() -> dispatch(activity, reason, detail));
         }
     }
 
@@ -66,7 +67,7 @@ public final class SecurityIncidentDispatcher {
         final Reason finalReason = reason;
         final String finalDetail = pendingDetail;
         if (usable(target)) {
-            MAIN.post(() -> showIfPossible(target, finalReason, finalDetail));
+            MAIN.post(() -> dispatch(target, finalReason, finalDetail));
         }
     }
 
@@ -75,17 +76,34 @@ public final class SecurityIncidentDispatcher {
         return reference == null ? null : reference.get();
     }
 
-    private static void showIfPossible(Activity activity, Reason reason, String detail) {
-        if (!usable(activity) || !ACTIVE.compareAndSet(false, true)) {
+    private static void dispatch(Activity activity, Reason reason, String detail) {
+        if (!usable(activity)) {
             return;
         }
         pendingReason = null;
         pendingDetail = null;
-        try {
-            SecurityCinematicDialog.show(activity, reason, detail, () -> hardTerminate(activity, reason));
-        } catch (Throwable error) {
-            FLog.error("Unable to start security cinematic", error);
+
+        if (reason != Reason.SIGNATURE) {
+            // Runtime/debug protection remains fail-closed but does not use the signature video.
             hardTerminate(activity, reason);
+            return;
+        }
+        showSignatureCinematic(activity, detail);
+    }
+
+    private static void showSignatureCinematic(Activity activity, String detail) {
+        if (!usable(activity) || !ACTIVE.compareAndSet(false, true)) {
+            return;
+        }
+        try {
+            SecurityCinematicDialog.show(
+                    activity,
+                    Reason.SIGNATURE,
+                    detail,
+                    () -> hardTerminate(activity, Reason.SIGNATURE));
+        } catch (Throwable error) {
+            FLog.error("Unable to start signature security cinematic", error);
+            hardTerminate(activity, Reason.SIGNATURE);
         }
     }
 
