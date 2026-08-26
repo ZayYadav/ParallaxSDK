@@ -1,5 +1,6 @@
 package top.niunaijun.blackbox.compat.auth;
 
+import android.content.Context;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.IInterface;
@@ -44,6 +45,7 @@ public final class GmsBrokerCompat {
             "com.google.android.gms.common.internal.GetServiceRequest";
     private static final String BASE_GMS_CLIENT_CLASS =
             "com.google.android.gms.common.internal.BaseGmsClient";
+    private static final String GMS_PACKAGE = "com.google.android.gms";
     private static final int GET_SERVICE_TRANSACTION = 46;
 
     private static final Map<IBinder, IBinder> BINDER_CACHE =
@@ -76,6 +78,29 @@ public final class GmsBrokerCompat {
                             IInterface broker = getOrCreateBrokerProxy(base, (IBinder) proxy);
                             if (broker != null) {
                                 return broker;
+                            }
+                        }
+
+                        // R8/modern Play-services clients commonly skip a loadable
+                        // IGmsServiceBroker Java interface and talk to the Binder
+                        // directly. Handle transaction 46 as well, otherwise the
+                        // unmodified virtual package reaches real GMS and Android 16
+                        // rejects it as "Unknown calling package name".
+                        if ("transact".equals(method.getName())
+                                && args != null
+                                && args.length >= 4
+                                && args[0] instanceof Integer
+                                && ((Integer) args[0]) == GET_SERVICE_TRANSACTION
+                                && args[1] instanceof Parcel
+                                && args[2] instanceof Parcel
+                                && args[3] instanceof Integer) {
+                            Boolean handled = transactGetServiceParcel(
+                                    base,
+                                    (Parcel) args[1],
+                                    (Parcel) args[2],
+                                    (Integer) args[3]);
+                            if (handled != null) {
+                                return handled;
                             }
                         }
                         return invokeBase(base, method, args);
@@ -231,6 +256,7 @@ public final class GmsBrokerCompat {
             data.writeStrongBinder(callbacks == null ? null : callbacks.asBinder());
             data.writeInt(1);
             request.writeToParcel(data, 0);
+            data.setDataPosition(0);
             if (!base.transact(GET_SERVICE_TRANSACTION, data, reply, 0)) {
                 throw new RemoteException("Google Play services broker rejected getService");
             }
@@ -238,6 +264,100 @@ public final class GmsBrokerCompat {
         } finally {
             reply.recycle();
             data.recycle();
+        }
+    }
+
+    /**
+     * Direct Binder fallback for obfuscated Play-services clients. Returns null
+     * when the parcel layout cannot be decoded, which makes the caller use the
+     * untouched original transaction instead of corrupting a request.
+     */
+    private static Boolean transactGetServiceParcel(
+            IBinder base, Parcel original, Parcel reply, int flags) {
+        if (base == null || original == null || reply == null) {
+            return null;
+        }
+
+        final int oldPosition = original.dataPosition();
+        Parcel patched = null;
+        try {
+            original.setDataPosition(0);
+            original.enforceInterface(BROKER_DESCRIPTOR);
+            IBinder callbacks = original.readStrongBinder();
+            int present = original.readInt();
+            if (present == 0) {
+                return null;
+            }
+
+            Parcelable request = readServiceRequest(original);
+            if (request == null) {
+                return null;
+            }
+            normalizeServiceRequest(request);
+
+            patched = Parcel.obtain();
+            patched.writeInterfaceToken(BROKER_DESCRIPTOR);
+            patched.writeStrongBinder(callbacks);
+            patched.writeInt(1);
+            request.writeToParcel(patched, 0);
+            patched.setDataPosition(0);
+            return base.transact(GET_SERVICE_TRANSACTION, patched, reply, flags);
+        } catch (Throwable ignored) {
+            return null;
+        } finally {
+            try {
+                original.setDataPosition(oldPosition);
+            } catch (Throwable ignored) {
+            }
+            if (patched != null) {
+                patched.recycle();
+            }
+        }
+    }
+
+    private static Parcelable readServiceRequest(Parcel data) {
+        Parcelable.Creator<?> creator = findServiceRequestCreator(resolveVirtualClassLoader());
+        if (creator == null) {
+            creator = findServiceRequestCreator(resolveRealGmsClassLoader());
+        }
+        if (creator == null) {
+            return null;
+        }
+        try {
+            Object value = creator.createFromParcel(data);
+            return value instanceof Parcelable ? (Parcelable) value : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static Parcelable.Creator<?> findServiceRequestCreator(ClassLoader loader) {
+        if (loader == null) {
+            return null;
+        }
+        try {
+            Class<?> requestClass = Class.forName(SERVICE_REQUEST_CLASS, false, loader);
+            Field creatorField = requestClass.getField("CREATOR");
+            Object creator = creatorField.get(null);
+            return creator instanceof Parcelable.Creator
+                    ? (Parcelable.Creator<?>) creator : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static ClassLoader resolveRealGmsClassLoader() {
+        try {
+            Context context = BlackBoxCore.getContext();
+            if (context == null) {
+                return null;
+            }
+            Context gms = context.createPackageContext(
+                    GMS_PACKAGE,
+                    Context.CONTEXT_INCLUDE_CODE | Context.CONTEXT_IGNORE_SECURITY);
+            return gms == null ? null : gms.getClassLoader();
+        } catch (Throwable ignored) {
+            return null;
         }
     }
 
