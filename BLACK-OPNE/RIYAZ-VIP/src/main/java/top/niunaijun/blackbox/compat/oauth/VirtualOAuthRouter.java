@@ -85,14 +85,6 @@ public final class VirtualOAuthRouter {
             return null;
         }
 
-        // BOXSDK keeps Twitter/X authorization on Android's original ACTION_VIEW
-        // path. Do the same here instead of forcing Twitter through Auth Tab: OAuth
-        // 1.0a authorize URLs often omit the callback URI, and bridging that flow
-        // can break the original virtual activity-result/callback semantics.
-        if (isTwitterHost(authUri)) {
-            return null;
-        }
-
         Uri redirectUri = extractRedirectUri(authUri);
         if (redirectUri == null && isTwitterHost(authUri)) {
             redirectUri = inferLegacyTwitterRedirect(virtualPackage, userId);

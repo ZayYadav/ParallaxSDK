@@ -67,7 +67,10 @@ public final class ExternalAuthRouter {
             "com.google.android.play.games",
             "com.facebook.katana",
             "com.facebook.wakizashi",
-            "com.facebook.lite"
+            "com.facebook.lite",
+            "com.twitter.android",
+            "com.twitter.android.lite",
+            "com.x.android"
     ));
 
     private ExternalAuthRouter() {
