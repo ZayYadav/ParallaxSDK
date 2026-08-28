@@ -5,6 +5,7 @@ import android.content.pm.ActivityInfo;
 import android.os.IBinder;
 
 import top.niunaijun.blackbox.utils.compat.BundleCompat;
+import top.niunaijun.blackbox.utils.compat.IntentRedirectCompat;
 
 /**
  * Created by @RIYAZXERO on 3/31/21.
@@ -32,6 +33,13 @@ public class ProxyActivityRecord {
         shadow.putExtra("_G_|_activity_info_", activityInfo);
         shadow.putExtra("_G_|_target_", target);
         BundleCompat.putBinder(shadow, "_G_|_activity_record_v_", activityRecord);
+
+        // Android 16's intent-redirection hardening expects the top-level
+        // outgoing Intent to identify every nested Intent extra before it is
+        // handed to system_server. Shadow Intents are sometimes created below
+        // Instrumentation's normal prepare-to-leave-process path, so collect the
+        // nested target key here without opting out of launch protection.
+        IntentRedirectCompat.collectNestedIntentKeys(shadow);
     }
 
     public static ProxyActivityRecord create(Intent intent) {
