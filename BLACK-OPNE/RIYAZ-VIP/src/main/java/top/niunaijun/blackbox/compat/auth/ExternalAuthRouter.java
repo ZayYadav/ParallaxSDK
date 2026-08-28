@@ -35,13 +35,10 @@ import top.niunaijun.blackbox.utils.compat.IntentRedirectCompat;
  * package, so a cloned app cannot use this bridge for arbitrary external flows.
  *
  * Android 16 compatibility note: provider UI is launched from the host-main
- * bridge rather than from the guest :pN process. Some provider transitions can
- * tear down an embedded guest task when the real provider is launched directly
- * by a TransparentProxyActivity. Keeping the trampoline in the stable host
- * process preserves the virtual app process while the provider is foreground.
- * The original Activity result is relayed back to the exact :pN process through
- * its private ProxyContentProvider; no provider identity or result payload is
- * rewritten.
+ * bridge rather than from the guest :pN process. A normal startActivityForResult
+ * bridge remains attached to Android's original resultTo token, so the host
+ * trampoline returns exactly one system-delivered result. Only detached
+ * IntentSender bridges use the private :pN provider relay.
  */
 @Obfuscate
 public final class ExternalAuthRouter {
@@ -81,6 +78,8 @@ public final class ExternalAuthRouter {
             "top.niunaijun.blackbox.auth.RESULT_DATA";
     public static final String EXTRA_RESULT_DELIVERED =
             "top.niunaijun.blackbox.auth.RESULT_DELIVERED";
+    public static final String EXTRA_MANUAL_RESULT_RELAY =
+            "top.niunaijun.blackbox.auth.MANUAL_RESULT_RELAY";
 
     public static final String METHOD_DELIVER_ACTIVITY_RESULT =
             "_Black_|_auth_activity_result_";
@@ -132,11 +131,6 @@ public final class ExternalAuthRouter {
         }
     }
 
-    /**
-     * Converts the hidden IIntentSender argument used by ActivityManager into the
-     * public IntentSender wrapper. The target and its creator identity remain
-     * owned by Android and are never modified.
-     */
     public static IntentSender wrapIntentSender(Object target) {
         if (target == null) {
             return null;
@@ -157,8 +151,6 @@ public final class ExternalAuthRouter {
                 return wrapped instanceof IntentSender ? (IntentSender) wrapped : null;
             }
         } catch (Throwable ignored) {
-            // OEM hidden API layouts can differ. Fail closed and let Android
-            // handle the original sender when it cannot be verified.
         }
         return null;
     }
@@ -205,11 +197,6 @@ public final class ExternalAuthRouter {
         return prepareBridgeForLaunch(bridge);
     }
 
-    /**
-     * Creates a result bridge for provider-owned PendingIntent/IntentSender auth
-     * resolutions. The provider executes the sender unchanged; the host proxy
-     * only forwards its result to the original virtual Activity token.
-     */
     public static Intent createIntentSenderBridgeIntent(
             IntentSender sender,
             Intent fillInIntent,
@@ -235,6 +222,7 @@ public final class ExternalAuthRouter {
 
         Intent bridge = createBaseBridge(
                 resultTo, resultWho, requestCode, virtualPackage, bpid);
+        bridge.putExtra(EXTRA_MANUAL_RESULT_RELAY, true);
         bridge.putExtra(EXTRA_PROVIDER_INTENT_SENDER, sender);
         if (fillInIntent != null) {
             bridge.putExtra(EXTRA_PROVIDER_FILL_IN_INTENT, new Intent(fillInIntent));
