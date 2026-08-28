@@ -25,11 +25,10 @@ import top.niunaijun.blackbox.utils.provider.ProviderCall;
 /**
  * Stable host-main trampoline for browser OAuth and trusted native provider auth.
  *
- * Browser OAuth keeps the existing callback-validation path. Native provider
- * activity/IntentSender flows are deliberately launched from this host process
- * instead of a guest :pN TransparentProxyActivity. The provider result is then
- * relayed through the private process-specific ProxyContentProvider so Android's
- * ActivityResultItem is scheduled inside the original virtual process.
+ * Normal startActivityForResult bridges stay attached to Android's original
+ * resultTo token and return exactly one result with setResult(). Detached
+ * IntentSender bridges have no system result link, so only those use the private
+ * process-specific ProxyContentProvider relay.
  *
  * No provider package/signature identity is spoofed and no OAuth/provider result
  * values are logged or persisted.
@@ -51,6 +50,7 @@ public final class VirtualOAuthBridgeActivity extends Activity {
     private boolean legacyTwitterFlow;
     private boolean resultBridgeMode;
     private boolean externalAuthMode;
+    private boolean manualResultRelay;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -61,6 +61,9 @@ public final class VirtualOAuthBridgeActivity extends Activity {
                 && launchIntent.getBooleanExtra(ExternalAuthRouter.EXTRA_EXTERNAL_AUTH, false);
         resultBridgeMode = launchIntent != null
                 && launchIntent.getBooleanExtra(ExternalAuthRouter.EXTRA_BROWSER_AUTH, false);
+        manualResultRelay = launchIntent != null
+                && launchIntent.getBooleanExtra(
+                ExternalAuthRouter.EXTRA_MANUAL_RESULT_RELAY, false);
         resultBpid = launchIntent == null ? -1
                 : launchIntent.getIntExtra(ExternalAuthRouter.EXTRA_BPID, -1);
 
@@ -96,9 +99,10 @@ public final class VirtualOAuthBridgeActivity extends Activity {
                 || virtualPackage.trim().isEmpty() || userId < 0
                 || authProvider == null || authProvider.trim().isEmpty()) {
             if (resultBridgeMode) {
-                relayOriginalActivityResult(RESULT_CANCELED, null);
+                completeBridgeResult(RESULT_CANCELED, null);
+            } else {
+                finish();
             }
-            finish();
             return;
         }
 
@@ -109,9 +113,10 @@ public final class VirtualOAuthBridgeActivity extends Activity {
                 || !AuthTabCompat.isSupportedProvider(this, authProvider, authUri)) {
             diagnostic("setup_rejected", false, false, false, false, false);
             if (resultBridgeMode) {
-                relayOriginalActivityResult(RESULT_CANCELED, null);
+                completeBridgeResult(RESULT_CANCELED, null);
+            } else {
+                finish();
             }
-            finish();
             return;
         }
 
@@ -133,8 +138,7 @@ public final class VirtualOAuthBridgeActivity extends Activity {
             if (providerSender != null) {
                 if (!ExternalAuthRouter.isTrustedProviderIntentSender(providerSender)) {
                     authDiagnostic("sender_rejected", null, false);
-                    relayOriginalActivityResult(RESULT_CANCELED, null);
-                    finish();
+                    completeBridgeResult(RESULT_CANCELED, null);
                     return;
                 }
 
@@ -164,8 +168,7 @@ public final class VirtualOAuthBridgeActivity extends Activity {
             String providerPackage = ExternalAuthRouter.getTrustedProviderPackage(providerIntent);
             if (providerPackage == null) {
                 authDiagnostic("provider_rejected", null, false);
-                relayOriginalActivityResult(RESULT_CANCELED, null);
-                finish();
+                completeBridgeResult(RESULT_CANCELED, null);
                 return;
             }
 
@@ -174,8 +177,7 @@ public final class VirtualOAuthBridgeActivity extends Activity {
             startActivityForResult(providerIntent, REQUEST_EXTERNAL_AUTH);
         } catch (Throwable error) {
             authDiagnostic("provider_launch_failed", null, false);
-            relayOriginalActivityResult(RESULT_CANCELED, null);
-            finish();
+            completeBridgeResult(RESULT_CANCELED, null);
         }
     }
 
@@ -195,9 +197,10 @@ public final class VirtualOAuthBridgeActivity extends Activity {
         } catch (Throwable ignored) {
             diagnostic("launch_failed", false, false, false, false, false);
             if (resultBridgeMode) {
-                relayOriginalActivityResult(RESULT_CANCELED, null);
+                completeBridgeResult(RESULT_CANCELED, null);
+            } else {
+                finish();
             }
-            finish();
         }
     }
 
@@ -206,9 +209,8 @@ public final class VirtualOAuthBridgeActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
 
         if (requestCode == REQUEST_EXTERNAL_AUTH && externalAuthMode) {
-            boolean delivered = relayOriginalActivityResult(resultCode, data);
+            boolean delivered = completeBridgeResult(resultCode, data);
             authDiagnostic("provider_result", providerPackageFromBridge(), delivered);
-            finish();
             return;
         }
 
@@ -218,9 +220,10 @@ public final class VirtualOAuthBridgeActivity extends Activity {
         if (resultCode != RESULT_OK || data == null || data.getData() == null) {
             diagnostic("auth_not_completed", false, false, false, false, false);
             if (resultBridgeMode) {
-                relayOriginalActivityResult(RESULT_CANCELED, null);
+                completeBridgeResult(RESULT_CANCELED, null);
+            } else {
+                finish();
             }
-            finish();
             return;
         }
 
@@ -228,9 +231,10 @@ public final class VirtualOAuthBridgeActivity extends Activity {
         if (!matchesExpectedCallback(callbackUri)) {
             diagnostic("callback_mismatch", false, false, false, false, false);
             if (resultBridgeMode) {
-                relayOriginalActivityResult(RESULT_CANCELED, null);
+                completeBridgeResult(RESULT_CANCELED, null);
+            } else {
+                finish();
             }
-            finish();
             return;
         }
 
@@ -244,17 +248,17 @@ public final class VirtualOAuthBridgeActivity extends Activity {
             diagnostic("twitter_oauth1_incomplete",
                     hasToken, hasVerifier, hasCode, denied, false);
             if (resultBridgeMode) {
-                relayOriginalActivityResult(RESULT_CANCELED, null);
+                completeBridgeResult(RESULT_CANCELED, null);
+            } else {
+                finish();
             }
-            finish();
             return;
         }
 
         if (resultBridgeMode) {
-            boolean delivered = relayOriginalActivityResult(resultCode, data);
+            boolean delivered = completeBridgeResult(resultCode, data);
             diagnostic(delivered ? "result_bridge_delivered" : "result_bridge_delivery_failed",
                     hasToken, hasVerifier, hasCode, denied, delivered);
-            finish();
             return;
         }
 
@@ -262,6 +266,29 @@ public final class VirtualOAuthBridgeActivity extends Activity {
         diagnostic(dispatched ? "callback_dispatched" : "callback_unresolved",
                 hasToken, hasVerifier, hasCode, denied, dispatched);
         finish();
+    }
+
+    /**
+     * Normal intercepted startActivityForResult calls retain Android's original
+     * resultTo/requestCode on the host bridge. Returning via setResult is therefore
+     * the single authoritative path. Detached IntentSender bridges are started
+     * with Context.startActivity and must relay explicitly to the guest provider.
+     */
+    private boolean completeBridgeResult(int resultCode, Intent data) {
+        if (!manualResultRelay) {
+            try {
+                setResult(resultCode, data);
+                finish();
+                return true;
+            } catch (Throwable ignored) {
+                finish();
+                return false;
+            }
+        }
+
+        boolean delivered = relayOriginalActivityResult(resultCode, data);
+        finish();
+        return delivered;
     }
 
     private boolean validResultTarget(Intent launchIntent) {
