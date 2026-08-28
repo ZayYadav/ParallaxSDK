@@ -61,7 +61,6 @@ public final class VirtualOAuthBridgeActivity extends Activity {
     private boolean legacyTwitterFlow;
     private boolean resultBridgeMode;
     private boolean externalAuthMode;
-    private boolean manualResultRelay;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -72,9 +71,6 @@ public final class VirtualOAuthBridgeActivity extends Activity {
                 && launchIntent.getBooleanExtra(ExternalAuthRouter.EXTRA_EXTERNAL_AUTH, false);
         resultBridgeMode = launchIntent != null
                 && launchIntent.getBooleanExtra(ExternalAuthRouter.EXTRA_BROWSER_AUTH, false);
-        manualResultRelay = launchIntent != null
-                && launchIntent.getBooleanExtra(
-                ExternalAuthRouter.EXTRA_MANUAL_RESULT_RELAY, false);
         resultBpid = launchIntent == null ? -1
                 : launchIntent.getIntExtra(ExternalAuthRouter.EXTRA_BPID, -1);
 
@@ -111,8 +107,10 @@ public final class VirtualOAuthBridgeActivity extends Activity {
                 || redirectUri == null || virtualPackage == null
                 || virtualPackage.trim().isEmpty() || userId < 0
                 || authProvider == null || authProvider.trim().isEmpty()) {
-            if (resultBridgeMode) completeBridgeResult(RESULT_CANCELED, null);
-            else finish();
+            if (resultBridgeMode) {
+                relayOriginalActivityResult(RESULT_CANCELED, null);
+            }
+            finish();
             return;
         }
 
@@ -125,8 +123,10 @@ public final class VirtualOAuthBridgeActivity extends Activity {
                 || !AuthTabCompat.isSupportedProvider(this, authProvider, authUri)) {
             diagnostic("setup_rejected", false, false, false, false, false);
             facebookDiagnostic("setup_rejected", false);
-            if (resultBridgeMode) completeBridgeResult(RESULT_CANCELED, null);
-            else finish();
+            if (resultBridgeMode) {
+                relayOriginalActivityResult(RESULT_CANCELED, null);
+            }
+            finish();
             return;
         }
 
@@ -148,7 +148,8 @@ public final class VirtualOAuthBridgeActivity extends Activity {
             if (sender != null) {
                 if (!ExternalAuthRouter.isTrustedProviderIntentSender(sender)) {
                     authDiagnostic("legacy_sender_rejected", null, false);
-                    completeBridgeResult(RESULT_CANCELED, null);
+                    relayOriginalActivityResult(RESULT_CANCELED, null);
+                    finish();
                     return;
                 }
                 Intent fillIn = bridgeIntent.getParcelableExtra(
@@ -168,12 +169,14 @@ public final class VirtualOAuthBridgeActivity extends Activity {
                     ExternalAuthRouter.EXTRA_PROVIDER_INTENT);
             String provider = ExternalAuthRouter.getTrustedProviderPackage(providerIntent);
             if (provider == null) {
-                completeBridgeResult(RESULT_CANCELED, null);
+                relayOriginalActivityResult(RESULT_CANCELED, null);
+                finish();
                 return;
             }
             startActivityForResult(providerIntent, REQUEST_EXTERNAL_AUTH);
         } catch (Throwable ignored) {
-            completeBridgeResult(RESULT_CANCELED, null);
+            relayOriginalActivityResult(RESULT_CANCELED, null);
+            finish();
         }
     }
 
@@ -191,8 +194,10 @@ public final class VirtualOAuthBridgeActivity extends Activity {
         } catch (Throwable ignored) {
             diagnostic("launch_failed", false, false, false, false, false);
             facebookDiagnostic("launch_failed", false);
-            if (resultBridgeMode) completeBridgeResult(RESULT_CANCELED, null);
-            else finish();
+            if (resultBridgeMode) {
+                relayOriginalActivityResult(RESULT_CANCELED, null);
+            }
+            finish();
         }
     }
 
@@ -201,8 +206,9 @@ public final class VirtualOAuthBridgeActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
 
         if (requestCode == REQUEST_EXTERNAL_AUTH && externalAuthMode) {
-            boolean delivered = completeBridgeResult(resultCode, data);
+            boolean delivered = relayOriginalActivityResult(resultCode, data);
             authDiagnostic("legacy_provider_result", providerPackageFromBridge(), delivered);
+            finish();
             return;
         }
 
@@ -210,8 +216,10 @@ public final class VirtualOAuthBridgeActivity extends Activity {
         if (resultCode != RESULT_OK || data == null || data.getData() == null) {
             diagnostic("auth_not_completed", false, false, false, false, false);
             facebookDiagnostic("auth_not_completed", false);
-            if (resultBridgeMode) completeBridgeResult(RESULT_CANCELED, null);
-            else finish();
+            if (resultBridgeMode) {
+                relayOriginalActivityResult(RESULT_CANCELED, null);
+            }
+            finish();
             return;
         }
 
@@ -219,8 +227,10 @@ public final class VirtualOAuthBridgeActivity extends Activity {
         if (!matchesExpectedCallback(callbackUri)) {
             diagnostic("callback_mismatch", false, false, false, false, false);
             facebookDiagnostic("callback_mismatch", false);
-            if (resultBridgeMode) completeBridgeResult(RESULT_CANCELED, null);
-            else finish();
+            if (resultBridgeMode) {
+                relayOriginalActivityResult(RESULT_CANCELED, null);
+            }
+            finish();
             return;
         }
 
@@ -232,24 +242,32 @@ public final class VirtualOAuthBridgeActivity extends Activity {
 
         if (legacyTwitterFlow && !denied && (!hasToken || !hasVerifier)) {
             diagnostic("twitter_oauth1_incomplete", hasToken, hasVerifier, hasCode, denied, false);
-            if (resultBridgeMode) completeBridgeResult(RESULT_CANCELED, null);
-            else finish();
+            if (resultBridgeMode) {
+                relayOriginalActivityResult(RESULT_CANCELED, null);
+            }
+            finish();
             return;
         }
 
         if (facebookFlow) {
             boolean dispatched = dispatchFacebookCustomTabResult(callbackUri);
             facebookDiagnostic(dispatched ? "redirect_dispatched" : "redirect_unresolved", dispatched);
-            if (dispatched) finishFacebookBridgeAfterDispatch();
-            else if (resultBridgeMode) completeBridgeResult(RESULT_CANCELED, null);
-            else finish();
+            if (dispatched) {
+                finishFacebookBridgeAfterDispatch();
+            } else {
+                if (resultBridgeMode) {
+                    relayOriginalActivityResult(RESULT_CANCELED, null);
+                }
+                finish();
+            }
             return;
         }
 
         if (resultBridgeMode) {
-            boolean delivered = completeBridgeResult(resultCode, data);
+            boolean delivered = relayOriginalActivityResult(resultCode, data);
             diagnostic(delivered ? "result_bridge_delivered" : "result_bridge_delivery_failed",
                     hasToken, hasVerifier, hasCode, denied, delivered);
+            finish();
             return;
         }
 
@@ -321,22 +339,6 @@ public final class VirtualOAuthBridgeActivity extends Activity {
         } catch (Throwable ignored) {
             finish();
         }
-    }
-
-    private boolean completeBridgeResult(int resultCode, Intent data) {
-        if (!manualResultRelay) {
-            try {
-                setResult(resultCode, data);
-                finish();
-                return true;
-            } catch (Throwable ignored) {
-                finish();
-                return false;
-            }
-        }
-        boolean delivered = relayOriginalActivityResult(resultCode, data);
-        finish();
-        return delivered;
     }
 
     private boolean validResultTarget(Intent launchIntent) {
