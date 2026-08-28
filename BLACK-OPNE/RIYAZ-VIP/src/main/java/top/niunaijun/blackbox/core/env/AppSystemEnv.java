@@ -79,6 +79,7 @@ public class AppSystemEnv {
 
         // Real Twitter / X apps. Do not clone them merely for authentication.
         sSystemPackages.add("com.twitter.android");
+        sSystemPackages.add("com.twitter.android.beta");
         sSystemPackages.add("com.twitter.android.lite");
         sSystemPackages.add("com.x.android");
 
