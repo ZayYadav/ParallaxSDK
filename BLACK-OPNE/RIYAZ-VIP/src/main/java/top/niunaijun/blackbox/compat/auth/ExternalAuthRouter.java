@@ -196,19 +196,12 @@ public final class ExternalAuthRouter {
         Intent bridge = createBaseBridge(
                 resultTo, resultWho, requestCode, virtualPackage, bpid);
 
-        // Preferred path: seal the exact provider Intent into Android's PendingIntent
-        // while we are still in the guest process/class-loader boundary. The host
-        // trampoline receives only an IntentSender binder and never unmarshals
-        // Google/Facebook/Twitter SDK-specific nested Parcelables.
         IntentSender opaqueSender = createOpaqueProviderSender(providerIntent);
         if (opaqueSender != null) {
             bridge.putExtra(EXTRA_PROVIDER_INTENT_SENDER, opaqueSender);
             bridge.putExtra(EXTRA_INTERNAL_OPAQUE_PROVIDER_SENDER, true);
             bridge.putExtra(EXTRA_VALIDATED_PROVIDER_PACKAGE, providerPackage);
         } else {
-            // Compatibility fallback for OEMs that reject PendingIntent creation.
-            // Keep the previous bridge behavior, but mark the provider dispatch so
-            // the guest hooks do not recursively wrap it if this fallback is used.
             providerIntent.putExtra(EXTRA_DIRECT_PROVIDER_DISPATCH, true);
             bridge.putExtra(EXTRA_PROVIDER_INTENT, providerIntent);
         }
@@ -290,7 +283,7 @@ public final class ExternalAuthRouter {
         Intent bridge = new Intent();
         bridge.setComponent(new ComponentName(
                 BlackBoxCore.getHostPkg(),
-                VirtualOAuthBridgeActivity.class.getName()));
+                NativeAuthBridgeActivity.class.getName()));
         bridge.putExtra(EXTRA_EXTERNAL_AUTH, true);
         bridge.putExtra(EXTRA_BPID, bpid);
         bridge.putExtra(EXTRA_USER_ID, BActivityThread.getUserId());
