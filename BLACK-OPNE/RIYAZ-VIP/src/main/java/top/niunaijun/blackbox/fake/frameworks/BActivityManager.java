@@ -12,7 +12,6 @@ import black.android.app.ActivityThread;
 import black.android.app.ActivityThreadContext;
 import black.android.app.BRActivityThread;
 import black.android.app.BRActivityThreadActivityClientRecord;
-import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.BActivityThread;
 import top.niunaijun.blackbox.core.system.ServiceManager;
 import top.niunaijun.blackbox.core.system.am.IBActivityManagerService;
@@ -167,12 +166,11 @@ public class BActivityManager extends BlackManager<IBActivityManagerService> {
             return null;
         }
         try {
-            Object mainThread = BlackBoxCore.mainThread();
-            if (mainThread == null) {
-                return null;
-            }
-            Object r = BRActivityThread.get(mainThread).mActivities().get(token);
+            Object r = BRActivityThread.get(BActivityThread.currentActivityThread())
+                    .mActivities().get(token);
             if (r != null) {
+                // BRActivityThreadActivityClientRecord wraps the ActivityClientRecord,
+                // not the IBinder key used to find it.
                 return BRActivityThreadActivityClientRecord.get(r).activity();
             }
         } catch (Throwable ignored) {
@@ -184,32 +182,21 @@ public class BActivityManager extends BlackManager<IBActivityManagerService> {
         sendActivityResult(resultTo, resultWho, requestCode, null, 0);
     }
 
-    /**
-     * Schedule an Activity result on Android's real framework ActivityThread.
-     *
-     * BActivityThread.currentActivityThread() is the BlackBox client Binder stub,
-     * not android.app.ActivityThread. Using it with BRActivityThread makes result
-     * delivery fail reflectively. The framework main thread is owned by
-     * BlackBoxCore and is the object ActivityThread.sendActivityResult expects.
-     *
-     * @return true only when the framework scheduling call completed successfully.
-     */
-    public boolean sendActivityResult(IBinder resultTo, String resultWho, int requestCode, Intent data, int resultCode) {
+    public void sendActivityResult(IBinder resultTo, String resultWho, int requestCode, Intent data, int resultCode) {
         if (resultTo == null || requestCode < 0) {
-            return false;
+            return;
         }
 
         try {
-            Object mainThread = BlackBoxCore.mainThread();
-            if (mainThread == null) {
-                return false;
-            }
+            // Android 16 ActivityThread.sendActivityResult() schedules an
+            // ActivityResultItem transaction for the supplied token. Do not gate
+            // that scheduling on a brittle local Activity lookup: the target may
+            // be transitioning back from Google/Facebook/X when the result arrives.
+            Object mainThread = BActivityThread.currentActivityThread();
             BRActivityThread.get(mainThread).sendActivityResult(
                     resultTo, resultWho, requestCode, resultCode, data);
-            return true;
         } catch (Throwable ignored) {
             // Provider result contents are intentionally not logged.
-            return false;
         }
     }
 
@@ -250,6 +237,7 @@ public class BActivityManager extends BlackManager<IBActivityManagerService> {
 
     public void onActivityResumed(IBinder token) {
         try {
+            // Fix https://github.com/FBlackBox/BlackBox/issues/28
             if ("com.tencent.mm".equals(BActivityThread.getAppPackageName())) {
                 Activity activityByToken = BActivityThread.getActivityByToken(token);
                 if (activityByToken != null) {

@@ -1,56 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
-
-    <!--
-      Real social/auth providers must be visible to the *final Loader APK* on
-      Android 11+. The SDK/AAR manifest also declares these, but keeping them in
-      the application manifest makes the requirement explicit and prevents a
-      manifest-merger/build-variant from silently removing native SSO discovery.
-      These are visibility declarations only; the Loader does not claim provider
-      web domains or spoof any provider package/signature.
-    -->
-    <queries tools:node="merge">
-        <!-- Google / Play Games -->
-        <package android:name="com.google.android.gms" />
-        <package android:name="com.google.android.gsf" />
-        <package android:name="com.android.vending" />
-        <package android:name="com.google.android.play.games" />
-
-        <!-- Facebook / Meta -->
-        <package android:name="com.facebook.katana" />
-        <package android:name="com.facebook.wakizashi" />
-        <package android:name="com.facebook.lite" />
-        <package android:name="com.facebook.orca" />
-        <provider android:authorities="com.facebook.katana.provider.PlatformProvider" />
-
-        <!-- Twitter / X. Legacy TwitterKit also checks the beta package. -->
-        <package android:name="com.twitter.android" />
-        <package android:name="com.twitter.android.beta" />
-        <package android:name="com.twitter.android.lite" />
-        <package android:name="com.x.android" />
-
-        <!-- Browser/Auth Tab discovery used only when a provider SDK chooses web fallback. -->
-        <intent>
-            <action android:name="android.support.customtabs.action.CustomTabsService" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="https" />
-        </intent>
-
-        <!-- Explicit auth intent visibility. -->
-        <intent>
-            <action android:name="com.google.android.gms.auth.GOOGLE_SIGN_IN" />
-        </intent>
-        <intent>
-            <action android:name="com.facebook.platform.PLATFORM_ACTIVITY" />
-        </intent>
-        <intent>
-            <action android:name="com.facebook.platform.PLATFORM_SERVICE" />
-        </intent>
-    </queries>
     
     <!-- Essential permissions -->
     <uses-permission android:name="android.permission.INTERNET" />

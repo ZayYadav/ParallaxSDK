@@ -109,14 +109,14 @@ public class ProxyContentProvider extends ContentProvider {
                         BActivityThread.getApplication().getClassLoader());
             }
 
-            boolean delivered = BActivityManager.get().sendActivityResult(
+            // This provider executes inside the exact :pN process selected by the
+            // bridge. BActivityManager therefore schedules ActivityResultItem on
+            // the correct local ActivityThread without exposing or rewriting any
+            // provider result payload.
+            BActivityManager.get().sendActivityResult(
                     resultTo, resultWho, requestCode, data, resultCode);
-            response.putBoolean(ExternalAuthRouter.EXTRA_RESULT_DELIVERED, delivered);
-            if (delivered) {
-                Log.i(TAG, "External auth result relayed to virtual activity");
-            } else {
-                Log.w(TAG, "External auth result scheduling failed");
-            }
+            response.putBoolean(ExternalAuthRouter.EXTRA_RESULT_DELIVERED, true);
+            Log.i(TAG, "External auth result relayed to virtual activity");
             return response;
         } catch (Throwable error) {
             Log.w(TAG, "External auth result relay failed: "

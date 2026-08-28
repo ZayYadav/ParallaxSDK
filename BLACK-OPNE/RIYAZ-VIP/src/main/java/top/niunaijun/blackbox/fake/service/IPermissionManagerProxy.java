@@ -1,6 +1,9 @@
 package top.niunaijun.blackbox.fake.service;
 
+import android.Manifest;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.os.Build;
 
 import java.lang.reflect.Method;
 
@@ -10,7 +13,8 @@ import black.android.os.BRServiceManager;
 import black.android.permission.BRIPermissionManagerStub;
 
 import top.niunaijun.blackbox.BlackBoxCore;
-import top.niunaijun.blackbox.compat.auth.SocialPermissionCompat;
+import top.niunaijun.blackbox.app.BActivityThread;
+import top.niunaijun.blackbox.fake.frameworks.BPackageManager;
 import top.niunaijun.blackbox.fake.hook.BinderInvocationStub;
 import top.niunaijun.blackbox.fake.hook.MethodHook;
 import top.niunaijun.blackbox.fake.hook.ProxyMethod;
@@ -45,8 +49,7 @@ public class IPermissionManagerProxy extends BinderInvocationStub {
         PackageManager packageManager = BRContextImpl.get(systemContext).mPackageManager();
         if (packageManager != null) {
             try {
-                Reflector.on("android.app.ApplicationPackageManager")
-                        .field("mPermissionManager").set(packageManager, proxyInvocation);
+                Reflector.on("android.app.ApplicationPackageManager").field("mPermissionManager").set(packageManager, proxyInvocation);
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -75,28 +78,17 @@ public class IPermissionManagerProxy extends BinderInvocationStub {
 
     /**
      * Facebook/Meta and several sign-in SDKs perform an early INTERNET permission
-     * self-check. Only report a normal network permission as granted when the
-     * virtual APK actually declared it. Runtime/dangerous permissions are untouched.
+     * self-check. On Android 16 the real PermissionManager sees the Loader UID,
+     * while the SDK asks about the virtual package, so the normal permission can
+     * incorrectly look denied. Only grant normal network permissions that the
+     * virtual APK actually declared; dangerous/runtime permissions are untouched.
      */
     @ProxyMethod("checkPermission")
     public static class CheckPermission extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             String permission = findPermission(args);
-            if (SocialPermissionCompat.guestDeclaresNormalNetworkPermission(permission)) {
-                return PackageManager.PERMISSION_GRANTED;
-            }
-            return method.invoke(who, args);
-        }
-    }
-
-    /** Some Android/OEM permission-manager variants expose UID checks separately. */
-    @ProxyMethod("checkUidPermission")
-    public static class CheckUidPermission extends MethodHook {
-        @Override
-        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            String permission = findPermission(args);
-            if (SocialPermissionCompat.guestDeclaresNormalNetworkPermission(permission)) {
+            if (isNetworkPermission(permission) && virtualPackageDeclares(permission)) {
                 return PackageManager.PERMISSION_GRANTED;
             }
             return method.invoke(who, args);
@@ -115,8 +107,33 @@ public class IPermissionManagerProxy extends BinderInvocationStub {
         return null;
     }
 
+    private static boolean isNetworkPermission(String permission) {
+        return Manifest.permission.INTERNET.equals(permission)
+                || Manifest.permission.ACCESS_NETWORK_STATE.equals(permission)
+                || Manifest.permission.ACCESS_WIFI_STATE.equals(permission);
+    }
+
+    private static boolean virtualPackageDeclares(String permission) {
+        if (permission == null) return false;
+        try {
+            String pkg = BActivityThread.getAppPackageName();
+            if (pkg == null || pkg.length() == 0) return false;
+            PackageInfo info = BPackageManager.get().getPackageInfo(
+                    pkg, PackageManager.GET_PERMISSIONS, BActivityThread.getUserId());
+            if (info == null || info.requestedPermissions == null) return false;
+            for (String requested : info.requestedPermissions) {
+                if (permission.equals(requested)) {
+                    return true;
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return false;
+    }
+
     @Override
     public boolean isBadEnv() {
         return false;
     }
+
 }

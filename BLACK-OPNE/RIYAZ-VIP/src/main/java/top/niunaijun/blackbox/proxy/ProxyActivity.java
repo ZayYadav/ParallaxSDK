@@ -28,7 +28,6 @@ public class ProxyActivity extends Activity {
 
     public static final String TAG = "ProxyActivity";
     private static final String OAUTH_TAG = "ParallaxOAuth";
-    private static final String NATIVE_AUTH_TAG = "ParallaxNativeAuth";
     private static final int REQUEST_EXTERNAL_AUTH = 0x5042;
     private static final int REQUEST_BROWSER_AUTH = 0x5043;
 
@@ -37,14 +36,6 @@ public class ProxyActivity extends Activity {
         super.onCreate(savedInstanceState);
 
         Intent launchIntent = getIntent();
-        ClassLoader guestLoader = guestClassLoader();
-        if (launchIntent != null && guestLoader != null) {
-            // The bridge itself contains only framework types plus a nested provider
-            // Intent. Point lazy Bundle unparcelling at the guest loader before the
-            // nested Google/Twitter/Facebook configuration is touched.
-            launchIntent.setExtrasClassLoader(guestLoader);
-        }
-
         if (isExternalAuthBridge(launchIntent)) {
             HookManager.get().checkEnv(HCallbackStub.class);
             if (savedInstanceState == null) {
@@ -66,9 +57,7 @@ public class ProxyActivity extends Activity {
         HookManager.get().checkEnv(HCallbackStub.class);
         ProxyActivityRecord record = ProxyActivityRecord.create(launchIntent);
         if (record.mTarget != null) {
-            if (guestLoader != null) {
-                record.mTarget.setExtrasClassLoader(guestLoader);
-            }
+            record.mTarget.setExtrasClassLoader(BActivityThread.getApplication().getClassLoader());
             startActivity(record.mTarget);
         }
     }
@@ -89,7 +78,6 @@ public class ProxyActivity extends Activity {
                     ExternalAuthRouter.EXTRA_PROVIDER_INTENT_SENDER);
             if (providerSender != null) {
                 if (!ExternalAuthRouter.isTrustedProviderIntentSender(providerSender)) {
-                    nativeDiagnostic("sender_rejected", null, false);
                     deliverOriginalActivityResult(RESULT_CANCELED, null);
                     finish();
                     return;
@@ -97,9 +85,6 @@ public class ProxyActivity extends Activity {
 
                 Intent fillInIntent = bridgeIntent.getParcelableExtra(
                         ExternalAuthRouter.EXTRA_PROVIDER_FILL_IN_INTENT);
-                if (fillInIntent != null && guestClassLoader() != null) {
-                    fillInIntent.setExtrasClassLoader(guestClassLoader());
-                }
                 int flagsMask = bridgeIntent.getIntExtra(
                         ExternalAuthRouter.EXTRA_PROVIDER_FLAGS_MASK, 0);
                 int flagsValues = bridgeIntent.getIntExtra(
@@ -107,8 +92,6 @@ public class ProxyActivity extends Activity {
                 Bundle options = bridgeIntent.getBundleExtra(
                         ExternalAuthRouter.EXTRA_PROVIDER_OPTIONS);
 
-                String provider = safeCreatorPackage(providerSender);
-                nativeDiagnostic("sender_launch", provider, false);
                 startIntentSenderForResult(
                         providerSender,
                         REQUEST_EXTERNAL_AUTH,
@@ -123,24 +106,13 @@ public class ProxyActivity extends Activity {
             Intent providerIntent = bridgeIntent.getParcelableExtra(
                     ExternalAuthRouter.EXTRA_PROVIDER_INTENT);
             if (!ExternalAuthRouter.isTrustedProviderIntent(providerIntent)) {
-                nativeDiagnostic("intent_rejected", null, false);
                 deliverOriginalActivityResult(RESULT_CANCELED, null);
                 finish();
                 return;
             }
-
-            ClassLoader guestLoader = guestClassLoader();
-            if (guestLoader != null) {
-                // Critical for Google SignInConfiguration and other SDK parcelables:
-                // decode with the guest's own Play-services/SDK classes, not with
-                // the Loader/ParallaxCore class loader.
-                providerIntent.setExtrasClassLoader(guestLoader);
-            }
-            String provider = ExternalAuthRouter.getTrustedProviderPackage(providerIntent);
-            nativeDiagnostic("intent_launch", provider, false);
+            providerIntent.setExtrasClassLoader(getClassLoader());
             startActivityForResult(providerIntent, REQUEST_EXTERNAL_AUTH);
-        } catch (Throwable error) {
-            nativeDiagnostic("launch_failed", null, false);
+        } catch (Throwable ignored) {
             deliverOriginalActivityResult(RESULT_CANCELED, null);
             finish();
         }
@@ -186,9 +158,7 @@ public class ProxyActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
 
         if (requestCode == REQUEST_EXTERNAL_AUTH && isExternalAuthBridge(getIntent())) {
-            String provider = providerPackageFromBridge();
             deliverOriginalActivityResult(resultCode, data);
-            nativeDiagnostic("result_delivered", provider, true);
             finish();
             return;
         }
@@ -252,7 +222,8 @@ public class ProxyActivity extends Activity {
             }
 
             // This proxy instance runs in the same :pN process as the virtual app,
-            // so the exact guest Activity token/requestCode/resultWho stay intact.
+            // so BActivityManager can deliver the result to the exact original
+            // virtual Activity token and preserve its requestCode/resultWho.
             BActivityManager.get().sendActivityResult(
                     resultTo,
                     resultWho,
@@ -260,42 +231,7 @@ public class ProxyActivity extends Activity {
                     data,
                     resultCode);
         } catch (Throwable ignored) {
-            // Provider result contents are intentionally never logged.
-        }
-    }
-
-    private String providerPackageFromBridge() {
-        try {
-            Intent bridge = getIntent();
-            if (bridge == null) return null;
-            Intent providerIntent = bridge.getParcelableExtra(
-                    ExternalAuthRouter.EXTRA_PROVIDER_INTENT);
-            if (providerIntent != null) {
-                return ExternalAuthRouter.getTrustedProviderPackage(providerIntent);
-            }
-            IntentSender sender = bridge.getParcelableExtra(
-                    ExternalAuthRouter.EXTRA_PROVIDER_INTENT_SENDER);
-            return safeCreatorPackage(sender);
-        } catch (Throwable ignored) {
-            return null;
-        }
-    }
-
-    private static ClassLoader guestClassLoader() {
-        try {
-            if (BActivityThread.getApplication() != null) {
-                return BActivityThread.getApplication().getClassLoader();
-            }
-        } catch (Throwable ignored) {
-        }
-        return null;
-    }
-
-    private static String safeCreatorPackage(IntentSender sender) {
-        try {
-            return sender == null ? null : sender.getCreatorPackage();
-        } catch (Throwable ignored) {
-            return null;
+            // Fail closed. Provider result contents are intentionally not logged.
         }
     }
 
@@ -355,13 +291,6 @@ public class ProxyActivity extends Activity {
                 || "x.com".equals(host)
                 || host.endsWith(".twitter.com")
                 || host.endsWith(".x.com");
-    }
-
-    private static void nativeDiagnostic(String stage, String provider, boolean delivered) {
-        String safeProvider = ExternalAuthRouter.isTrustedProviderPackage(provider)
-                ? provider : "unknown";
-        Log.i(NATIVE_AUTH_TAG,
-                "stage=" + stage + " provider=" + safeProvider + " delivered=" + delivered);
     }
 
     private static void oauthDiagnostic(
