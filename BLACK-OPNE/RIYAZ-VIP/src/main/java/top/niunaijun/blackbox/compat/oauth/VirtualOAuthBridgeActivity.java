@@ -3,46 +3,101 @@ package top.niunaijun.blackbox.compat.oauth;
 import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Intent;
+import android.content.IntentSender;
+import android.content.pm.ActivityInfo;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.util.Log;
 
 import java.util.Locale;
 
 import org.lsposed.lsparanoid.Obfuscate;
 
+import top.niunaijun.blackbox.compat.auth.ExternalAuthRouter;
 import top.niunaijun.blackbox.fake.frameworks.BActivityManager;
 import top.niunaijun.blackbox.fake.frameworks.BPackageManager;
+import top.niunaijun.blackbox.proxy.ProxyManifest;
 import top.niunaijun.blackbox.utils.FileUtils;
+import top.niunaijun.blackbox.utils.compat.BundleCompat;
+import top.niunaijun.blackbox.utils.provider.ProviderCall;
 
 /**
- * Host-side trampoline for browser OAuth started by a virtual application.
+ * Stable host-main trampoline for browser OAuth and trusted native provider auth.
  *
- * The Auth Tab protocol is emitted directly so the SDK AAR stays self-contained
- * when it is copied into a host app as a raw local AAR. A real browser that
- * advertises Auth Tab support is selected explicitly; the browser returns the
- * final redirect URI through Activity result data and this bridge routes that URI
- * into BlackBox's virtual PackageManager/ActivityManager.
+ * Normal startActivityForResult bridges stay attached to Android's original
+ * resultTo token and return exactly one result with setResult(). Detached
+ * IntentSender bridges have no system result link, so only those use the private
+ * process-specific ProxyContentProvider relay.
+ *
+ * Facebook Custom Tabs are special: Meta's SDK expects the browser callback to
+ * re-enter the already-running CustomTabMainActivity using the SDK redirect
+ * action/extra contract. Replaying that contract avoids the onResume cancellation
+ * path while keeping the callback validation in this bridge authoritative.
+ *
+ * No provider package/signature identity is spoofed and no OAuth/provider result
+ * values are logged or persisted.
  */
 @Obfuscate
 public final class VirtualOAuthBridgeActivity extends Activity {
     private static final String TAG = "ParallaxOAuth";
+    private static final String AUTH_TAG = "ParallaxAuth";
     private static final int REQUEST_AUTH_TAB = 0x5041;
+    private static final int REQUEST_EXTERNAL_AUTH = 0x5042;
+
+    // Facebook SDK constants are stable because they are derived from the simple
+    // class names in com.facebook.CustomTabActivity/CustomTabMainActivity.
+    private static final String FACEBOOK_CUSTOM_TAB_MAIN_ACTIVITY =
+            "com.facebook.CustomTabMainActivity";
+    private static final String FACEBOOK_REDIRECT_ACTION =
+            "CustomTabActivity.action_customTabRedirect";
+    private static final String FACEBOOK_EXTRA_URL =
+            "CustomTabMainActivity.extra_url";
+    private static final long FACEBOOK_BRIDGE_FINISH_DELAY_MS = 650L;
 
     private String virtualPackage;
     private Uri expectedRedirectUri;
     private Uri authUri;
     private String authProvider;
     private int userId = -1;
+    private int resultBpid = -1;
     private boolean twitterFlow;
+    private boolean facebookFlow;
     private boolean legacyTwitterFlow;
+    private boolean resultBridgeMode;
+    private boolean externalAuthMode;
+    private boolean manualResultRelay;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         Intent launchIntent = getIntent();
+        externalAuthMode = launchIntent != null
+                && launchIntent.getBooleanExtra(ExternalAuthRouter.EXTRA_EXTERNAL_AUTH, false);
+        resultBridgeMode = launchIntent != null
+                && launchIntent.getBooleanExtra(ExternalAuthRouter.EXTRA_BROWSER_AUTH, false);
+        manualResultRelay = launchIntent != null
+                && launchIntent.getBooleanExtra(
+                ExternalAuthRouter.EXTRA_MANUAL_RESULT_RELAY, false);
+        resultBpid = launchIntent == null ? -1
+                : launchIntent.getIntExtra(ExternalAuthRouter.EXTRA_BPID, -1);
+
+        if (externalAuthMode) {
+            virtualPackage = launchIntent.getStringExtra(
+                    ExternalAuthRouter.EXTRA_VIRTUAL_PACKAGE);
+            userId = launchIntent.getIntExtra(ExternalAuthRouter.EXTRA_USER_ID, -1);
+            if (!validResultTarget(launchIntent)) {
+                finish();
+                return;
+            }
+            if (savedInstanceState == null) {
+                launchExternalProvider(launchIntent);
+            }
+            return;
+        }
+
         String authUrl = launchIntent == null ? null
                 : launchIntent.getStringExtra(VirtualOAuthRouter.EXTRA_AUTH_URL);
         String redirectUriValue = launchIntent == null ? null
@@ -60,22 +115,94 @@ public final class VirtualOAuthBridgeActivity extends Activity {
                 || redirectUri == null || virtualPackage == null
                 || virtualPackage.trim().isEmpty() || userId < 0
                 || authProvider == null || authProvider.trim().isEmpty()) {
-            finish();
+            if (resultBridgeMode) {
+                completeBridgeResult(RESULT_CANCELED, null);
+            } else {
+                finish();
+            }
             return;
         }
 
         expectedRedirectUri = redirectUri;
         twitterFlow = isTwitterHost(authUri);
+        facebookFlow = isFacebookHost(authUri);
         legacyTwitterFlow = twitterFlow && hasQueryParameter(authUri, "oauth_token");
+
         if (!redirectResolvesToVirtualPackage(redirectUri)
                 || !AuthTabCompat.isSupportedProvider(this, authProvider, authUri)) {
             diagnostic("setup_rejected", false, false, false, false, false);
+            facebookDiagnostic("setup_rejected", false);
+            if (resultBridgeMode) {
+                completeBridgeResult(RESULT_CANCELED, null);
+            } else {
+                finish();
+            }
+            return;
+        }
+
+        if (resultBridgeMode && !validResultTarget(launchIntent)) {
+            diagnostic("result_bridge_target_rejected", false, false, false, false, false);
             finish();
             return;
         }
 
         if (savedInstanceState == null) {
             launchAuthTab(authUri, lower(expectedRedirectUri.getScheme()), authProvider);
+        }
+    }
+
+    private void launchExternalProvider(Intent bridgeIntent) {
+        try {
+            IntentSender providerSender = bridgeIntent.getParcelableExtra(
+                    ExternalAuthRouter.EXTRA_PROVIDER_INTENT_SENDER);
+            if (providerSender != null) {
+                if (!ExternalAuthRouter.isTrustedProviderIntentSender(providerSender)) {
+                    authDiagnostic("sender_rejected", null, false);
+                    completeBridgeResult(RESULT_CANCELED, null);
+                    return;
+                }
+
+                Intent fillInIntent = bridgeIntent.getParcelableExtra(
+                        ExternalAuthRouter.EXTRA_PROVIDER_FILL_IN_INTENT);
+                int flagsMask = bridgeIntent.getIntExtra(
+                        ExternalAuthRouter.EXTRA_PROVIDER_FLAGS_MASK, 0);
+                int flagsValues = bridgeIntent.getIntExtra(
+                        ExternalAuthRouter.EXTRA_PROVIDER_FLAGS_VALUES, 0);
+                Bundle options = bridgeIntent.getBundleExtra(
+                        ExternalAuthRouter.EXTRA_PROVIDER_OPTIONS);
+
+                authDiagnostic("sender_launch", providerSender.getCreatorPackage(), false);
+                startIntentSenderForResult(
+                        providerSender,
+                        REQUEST_EXTERNAL_AUTH,
+                        fillInIntent,
+                        flagsMask,
+                        flagsValues,
+                        0,
+                        options);
+                return;
+            }
+
+            Intent providerIntent = bridgeIntent.getParcelableExtra(
+                    ExternalAuthRouter.EXTRA_PROVIDER_INTENT);
+            String providerPackage = ExternalAuthRouter.getTrustedProviderPackage(providerIntent);
+            if (providerPackage == null) {
+                authDiagnostic("provider_rejected", null, false);
+                completeBridgeResult(RESULT_CANCELED, null);
+                return;
+            }
+
+            // Important for Google Sign-In: do not replace the nested provider
+            // Intent's extras ClassLoader with the Loader's host ClassLoader.
+            // GOOGLE_SIGN_IN may carry Play-services Parcelable configuration
+            // objects created by the guest client. Keeping the Intent opaque lets
+            // Android/the real provider unmarshal those objects with a compatible
+            // class loader instead of turning a valid request into a cancel/error.
+            authDiagnostic("provider_launch", providerPackage, false);
+            startActivityForResult(providerIntent, REQUEST_EXTERNAL_AUTH);
+        } catch (Throwable error) {
+            authDiagnostic("provider_launch_failed", null, false);
+            completeBridgeResult(RESULT_CANCELED, null);
         }
     }
 
@@ -87,8 +214,6 @@ public final class VirtualOAuthBridgeActivity extends Activity {
             authIntent.putExtra(AuthTabCompat.EXTRA_LAUNCH_AUTH_TAB, true);
             authIntent.putExtra(AuthTabCompat.EXTRA_REDIRECT_SCHEME, redirectScheme);
 
-            // AndroidX AuthTabIntent.Builder adds a null Custom Tabs session so
-            // browsers recognize the request as a Custom Tab/Auth Tab launch.
             Bundle session = new Bundle();
             session.putBinder(AuthTabCompat.EXTRA_CUSTOM_TABS_SESSION, null);
             authIntent.putExtras(session);
@@ -96,26 +221,48 @@ public final class VirtualOAuthBridgeActivity extends Activity {
             startActivityForResult(authIntent, REQUEST_AUTH_TAB);
         } catch (Throwable ignored) {
             diagnostic("launch_failed", false, false, false, false, false);
-            finish();
+            facebookDiagnostic("launch_failed", false);
+            if (resultBridgeMode) {
+                completeBridgeResult(RESULT_CANCELED, null);
+            } else {
+                finish();
+            }
         }
     }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode == REQUEST_EXTERNAL_AUTH && externalAuthMode) {
+            boolean delivered = completeBridgeResult(resultCode, data);
+            authDiagnostic("provider_result", providerPackageFromBridge(), delivered);
+            return;
+        }
+
         if (requestCode != REQUEST_AUTH_TAB) {
             return;
         }
         if (resultCode != RESULT_OK || data == null || data.getData() == null) {
             diagnostic("auth_not_completed", false, false, false, false, false);
-            finish();
+            facebookDiagnostic("auth_not_completed", false);
+            if (resultBridgeMode) {
+                completeBridgeResult(RESULT_CANCELED, null);
+            } else {
+                finish();
+            }
             return;
         }
 
         Uri callbackUri = data.getData();
         if (!matchesExpectedCallback(callbackUri)) {
             diagnostic("callback_mismatch", false, false, false, false, false);
-            finish();
+            facebookDiagnostic("callback_mismatch", false);
+            if (resultBridgeMode) {
+                completeBridgeResult(RESULT_CANCELED, null);
+            } else {
+                finish();
+            }
             return;
         }
 
@@ -125,14 +272,41 @@ public final class VirtualOAuthBridgeActivity extends Activity {
         boolean denied = hasQueryParameter(callbackUri, "denied")
                 || hasQueryParameter(callbackUri, "error");
 
-        // OAuth 1.0a success requires both oauth_token and oauth_verifier. Sending
-        // a structurally incomplete callback into the virtual app only turns a
-        // browser/provider failure into an opaque in-app 9999 error, so fail closed
-        // here instead. Values are never logged or persisted.
         if (legacyTwitterFlow && !denied && (!hasToken || !hasVerifier)) {
             diagnostic("twitter_oauth1_incomplete",
                     hasToken, hasVerifier, hasCode, denied, false);
-            finish();
+            if (resultBridgeMode) {
+                completeBridgeResult(RESULT_CANCELED, null);
+            } else {
+                finish();
+            }
+            return;
+        }
+
+        // Meta's browser callback does not return directly as an Activity result
+        // to CustomTabMainActivity. The SDK's exported CustomTabActivity normally
+        // converts the callback URI into this explicit onNewIntent contract.
+        // Reproduce only that public SDK protocol after our existing callback
+        // validation succeeds; values remain inside the provider/guest flow.
+        if (facebookFlow) {
+            boolean dispatched = dispatchFacebookCustomTabResult(callbackUri);
+            facebookDiagnostic(
+                    dispatched ? "redirect_dispatched" : "redirect_unresolved",
+                    dispatched);
+            if (dispatched) {
+                finishFacebookBridgeAfterDispatch();
+            } else if (resultBridgeMode) {
+                completeBridgeResult(RESULT_CANCELED, null);
+            } else {
+                finish();
+            }
+            return;
+        }
+
+        if (resultBridgeMode) {
+            boolean delivered = completeBridgeResult(resultCode, data);
+            diagnostic(delivered ? "result_bridge_delivered" : "result_bridge_delivery_failed",
+                    hasToken, hasVerifier, hasCode, denied, delivered);
             return;
         }
 
@@ -142,12 +316,151 @@ public final class VirtualOAuthBridgeActivity extends Activity {
         finish();
     }
 
+    private boolean dispatchFacebookCustomTabResult(Uri callbackUri) {
+        if (callbackUri == null || virtualPackage == null
+                || virtualPackage.trim().isEmpty() || userId < 0) {
+            return false;
+        }
+        try {
+            ComponentName component = new ComponentName(
+                    virtualPackage, FACEBOOK_CUSTOM_TAB_MAIN_ACTIVITY);
+            ActivityInfo info = BPackageManager.get().getActivityInfo(component, 0, userId);
+            if (info == null || !virtualPackage.equals(info.packageName)) {
+                return false;
+            }
+
+            Intent redirect = new Intent();
+            redirect.setComponent(component);
+            redirect.setAction(FACEBOOK_REDIRECT_ACTION);
+            redirect.putExtra(FACEBOOK_EXTRA_URL, callbackUri.toString());
+            redirect.addFlags(
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            BActivityManager.get().startActivity(redirect, userId);
+            return true;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
     /**
-     * Auth Tabs return an arbitrary URI supplied by the browser, so validate the
-     * entire registered callback target and OAuth state before crossing back into
-     * the virtual package. Provider-added code/error query parameters are allowed;
-     * fixed query parameters already present in redirect_uri must still match.
+     * The host bridge itself is still attached to the original framework result
+     * token. Give the guest's CustomTabMainActivity enough time to process the
+     * explicit redirect, send its RESULT_OK to FacebookActivity and finish before
+     * this trampoline is removed. Any late framework result to the already-finished
+     * CustomTabMainActivity token is then harmless instead of racing its redirect.
      */
+    private void finishFacebookBridgeAfterDispatch() {
+        try {
+            getWindow().getDecorView().postDelayed(
+                    this::finish, FACEBOOK_BRIDGE_FINISH_DELAY_MS);
+        } catch (Throwable ignored) {
+            finish();
+        }
+    }
+
+    /**
+     * Normal intercepted startActivityForResult calls retain Android's original
+     * resultTo/requestCode on the host bridge. Returning via setResult is therefore
+     * the single authoritative path. Detached IntentSender bridges are started
+     * with Context.startActivity and must relay explicitly to the guest provider.
+     */
+    private boolean completeBridgeResult(int resultCode, Intent data) {
+        if (!manualResultRelay) {
+            try {
+                setResult(resultCode, data);
+                finish();
+                return true;
+            } catch (Throwable ignored) {
+                finish();
+                return false;
+            }
+        }
+
+        boolean delivered = relayOriginalActivityResult(resultCode, data);
+        finish();
+        return delivered;
+    }
+
+    private boolean validResultTarget(Intent launchIntent) {
+        if (launchIntent == null || resultBpid < 0 || resultBpid > 24) {
+            return false;
+        }
+        Bundle extras = launchIntent.getExtras();
+        if (extras == null) {
+            return false;
+        }
+        IBinder resultTo = extras.getBinder(ExternalAuthRouter.EXTRA_RESULT_BINDER);
+        int requestCode = extras.getInt(ExternalAuthRouter.EXTRA_REQUEST_CODE, -1);
+        String targetPackage = extras.getString(ExternalAuthRouter.EXTRA_VIRTUAL_PACKAGE);
+        return resultTo != null
+                && requestCode >= 0
+                && targetPackage != null
+                && !targetPackage.trim().isEmpty();
+    }
+
+    private boolean relayOriginalActivityResult(int resultCode, Intent data) {
+        try {
+            Intent bridgeIntent = getIntent();
+            Bundle extras = bridgeIntent == null ? null : bridgeIntent.getExtras();
+            if (extras == null || resultBpid < 0 || resultBpid > 24) {
+                return false;
+            }
+
+            IBinder resultTo = extras.getBinder(ExternalAuthRouter.EXTRA_RESULT_BINDER);
+            String resultWho = extras.getString(ExternalAuthRouter.EXTRA_RESULT_WHO);
+            int originalRequestCode = extras.getInt(
+                    ExternalAuthRouter.EXTRA_REQUEST_CODE, -1);
+            String targetPackage = extras.getString(
+                    ExternalAuthRouter.EXTRA_VIRTUAL_PACKAGE);
+            if (resultTo == null || originalRequestCode < 0
+                    || targetPackage == null || targetPackage.trim().isEmpty()) {
+                return false;
+            }
+
+            Bundle relay = new Bundle();
+            BundleCompat.putBinder(
+                    relay, ExternalAuthRouter.EXTRA_RESULT_BINDER, resultTo);
+            relay.putString(ExternalAuthRouter.EXTRA_RESULT_WHO, resultWho);
+            relay.putInt(ExternalAuthRouter.EXTRA_REQUEST_CODE, originalRequestCode);
+            relay.putInt(ExternalAuthRouter.EXTRA_RESULT_CODE, resultCode);
+            relay.putInt(ExternalAuthRouter.EXTRA_BPID, resultBpid);
+            relay.putInt(ExternalAuthRouter.EXTRA_USER_ID, userId);
+            relay.putString(ExternalAuthRouter.EXTRA_VIRTUAL_PACKAGE, targetPackage);
+            if (data != null) {
+                relay.putParcelable(
+                        ExternalAuthRouter.EXTRA_RESULT_DATA, new Intent(data));
+            }
+
+            Bundle response = ProviderCall.callSafely(
+                    ProxyManifest.getProxyAuthorities(resultBpid),
+                    ExternalAuthRouter.METHOD_DELIVER_ACTIVITY_RESULT,
+                    null,
+                    relay);
+            return response != null
+                    && response.getBoolean(
+                    ExternalAuthRouter.EXTRA_RESULT_DELIVERED, false);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private String providerPackageFromBridge() {
+        try {
+            Intent bridgeIntent = getIntent();
+            if (bridgeIntent == null) return null;
+            Intent providerIntent = bridgeIntent.getParcelableExtra(
+                    ExternalAuthRouter.EXTRA_PROVIDER_INTENT);
+            if (providerIntent != null) {
+                return ExternalAuthRouter.getTrustedProviderPackage(providerIntent);
+            }
+            IntentSender sender = bridgeIntent.getParcelableExtra(
+                    ExternalAuthRouter.EXTRA_PROVIDER_INTENT_SENDER);
+            return sender == null ? null : sender.getCreatorPackage();
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
     private boolean matchesExpectedCallback(Uri callbackUri) {
         return OAuthCallbackValidator.matches(authUri, expectedRedirectUri, callbackUri)
                 && redirectResolvesToVirtualPackage(callbackUri);
@@ -179,7 +492,6 @@ public final class VirtualOAuthBridgeActivity extends Activity {
             BActivityManager.get().startActivity(callback, userId);
             return true;
         } catch (Throwable ignored) {
-            // Fail closed. Redirect contents are intentionally never logged.
             return false;
         }
     }
@@ -212,8 +524,6 @@ public final class VirtualOAuthBridgeActivity extends Activity {
         if (!twitterFlow) {
             return;
         }
-        // Structural booleans only. Never emit callback URI, query values,
-        // authorization tokens, verifier values, cookies, or credentials.
         Log.i(TAG, "twitter stage=" + stage
                 + " oauth1=" + legacyTwitterFlow
                 + " token=" + hasToken
@@ -221,6 +531,21 @@ public final class VirtualOAuthBridgeActivity extends Activity {
                 + " code=" + hasCode
                 + " denied=" + denied
                 + " dispatched=" + dispatched);
+    }
+
+    private void facebookDiagnostic(String stage, boolean dispatched) {
+        if (!facebookFlow) {
+            return;
+        }
+        Log.i(TAG, "facebook stage=" + stage + " dispatched=" + dispatched);
+    }
+
+    private static void authDiagnostic(String stage, String provider, boolean delivered) {
+        String safeProvider = ExternalAuthRouter.isTrustedProviderPackage(provider)
+                ? provider : "unknown";
+        Log.i(AUTH_TAG, "native stage=" + stage
+                + " provider=" + safeProvider
+                + " delivered=" + delivered);
     }
 
     private static boolean hasQueryParameter(Uri uri, String name) {
@@ -244,6 +569,15 @@ public final class VirtualOAuthBridgeActivity extends Activity {
                 || "x.com".equals(host)
                 || host.endsWith(".twitter.com")
                 || host.endsWith(".x.com");
+    }
+
+    private static boolean isFacebookHost(Uri uri) {
+        if (uri == null) {
+            return false;
+        }
+        String host = lower(uri.getHost());
+        return "facebook.com".equals(host)
+                || host.endsWith(".facebook.com");
     }
 
     private static Uri safeHttpsUri(String value) {
@@ -286,5 +620,4 @@ public final class VirtualOAuthBridgeActivity extends Activity {
     private static String lower(String value) {
         return value == null ? "" : value.toLowerCase(Locale.US);
     }
-
 }

@@ -1,7 +1,6 @@
 package top.niunaijun.blackbox.compat.auth;
 
 import android.content.Context;
-import android.os.Bundle;
 import android.os.IBinder;
 import android.os.IInterface;
 import android.os.Parcel;
@@ -29,13 +28,15 @@ import top.niunaijun.blackbox.utils.compat.ContextCompat;
  * Compatibility facade for the real Google Play services broker.
  *
  * Virtual applications run inside the Loader UID. Modern Play services validates
- * the package name carried in GetServiceRequest against Binder.getCallingUid().
- * Sending the virtual package therefore fails on Android 16 because that package
- * is not installed for the Loader UID. This facade only normalizes the broker
- * caller identity to the actual host package/UID before forwarding the request.
+ * the package carried in the top-level GetServiceRequest against the actual Binder
+ * calling UID. The Binder caller is the Loader process, so only that direct broker
+ * caller field is normalized to the real host package.
  *
- * OAuth client ids, accounts, tokens, signatures and provider responses are never
- * modified here. Provider-side authorization remains authoritative.
+ * Nested request bundles are deliberately left untouched. They can contain the
+ * logical OAuth client package/configuration chosen by the guest Google client;
+ * rewriting those values to the host package can make an otherwise valid sign-in
+ * request select the wrong client configuration. OAuth client IDs, accounts,
+ * scopes, tokens, signatures and provider responses are never modified here.
  */
 @Obfuscate
 public final class GmsBrokerCompat {
@@ -81,11 +82,9 @@ public final class GmsBrokerCompat {
                             }
                         }
 
-                        // R8/modern Play-services clients commonly skip a loadable
-                        // IGmsServiceBroker Java interface and talk to the Binder
-                        // directly. Handle transaction 46 as well, otherwise the
-                        // unmodified virtual package reaches real GMS and Android 16
-                        // rejects it as "Unknown calling package name".
+                        // Modern/R8 Play-services clients frequently transact on
+                        // the Binder directly instead of using a loadable Java
+                        // IGmsServiceBroker interface. Transaction 46 is getService.
                         if ("transact".equals(method.getName())
                                 && args != null
                                 && args.length >= 4
@@ -160,11 +159,8 @@ public final class GmsBrokerCompat {
     }
 
     /**
-     * Client applications commonly run R8 over their bundled Play services
-     * client. The Binder descriptor remains stable, but IGmsServiceBroker's Java
-     * class may become a short name such as common.internal.l. Resolve the actual
-     * interface from BaseGmsClient's field/method types instead of assuming that
-     * the descriptor is also a loadable class name.
+     * R8 may rename the Java broker interface while its Binder descriptor remains
+     * stable. Resolve the interface from BaseGmsClient field/method signatures.
      */
     private static Class<?> resolveBrokerInterface(ClassLoader loader) {
         try {
@@ -269,8 +265,8 @@ public final class GmsBrokerCompat {
 
     /**
      * Direct Binder fallback for obfuscated Play-services clients. Returns null
-     * when the parcel layout cannot be decoded, which makes the caller use the
-     * untouched original transaction instead of corrupting a request.
+     * when the parcel layout cannot be decoded so the untouched original call is
+     * used instead of risking request corruption.
      */
     private static Boolean transactGetServiceParcel(
             IBinder base, Parcel original, Parcel reply, int flags) {
@@ -403,6 +399,12 @@ public final class GmsBrokerCompat {
         }
     }
 
+    /**
+     * Normalize only direct fields on GetServiceRequest. In current Play services
+     * the direct package String is the Binder caller identity checked against UID.
+     * Do not recurse into Bundle fields: those are logical client metadata and may
+     * legitimately keep com.pubg.imobile even though Binder is hosted by Loader.
+     */
     private static void normalizeServiceRequest(Object request) {
         final String virtualPackage = BActivityThread.getAppPackageName();
         final String hostPackage = BlackBoxCore.getHostPkg();
@@ -422,8 +424,6 @@ public final class GmsBrokerCompat {
                     Object value = field.get(request);
                     if (value instanceof String && virtualPackage.equals(value)) {
                         field.set(request, hostPackage);
-                    } else if (value instanceof Bundle) {
-                        normalizeBundle((Bundle) value, virtualPackage, hostPackage);
                     } else if (value != null
                             && "android.content.AttributionSource".equals(
                             value.getClass().getName())) {
@@ -431,32 +431,11 @@ public final class GmsBrokerCompat {
                                 value, BlackBoxCore.getHostUid());
                     }
                 } catch (Throwable ignored) {
-                    // Play services internals vary by version. Normalize the fields
-                    // that are accessible and leave every other field untouched.
+                    // Play-services internals vary by version. Change only fields
+                    // that are accessible; everything else stays provider-owned.
                 }
             }
             type = type.getSuperclass();
-        }
-    }
-
-    private static void normalizeBundle(
-            Bundle bundle, String virtualPackage, String hostPackage) {
-        if (bundle == null) {
-            return;
-        }
-        try {
-            for (String key : bundle.keySet()) {
-                Object value = bundle.get(key);
-                if (value instanceof String && virtualPackage.equals(value)) {
-                    bundle.putString(key, hostPackage);
-                } else if (value != null
-                        && "android.content.AttributionSource".equals(
-                        value.getClass().getName())) {
-                    ContextCompat.fixAttributionSourceState(
-                            value, BlackBoxCore.getHostUid());
-                }
-            }
-        } catch (Throwable ignored) {
         }
     }
 
