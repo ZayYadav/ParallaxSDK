@@ -24,22 +24,23 @@ import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.BActivityThread;
 import top.niunaijun.blackbox.compat.oauth.VirtualOAuthBridgeActivity;
 import top.niunaijun.blackbox.compat.oauth.VirtualOAuthRouter;
+import top.niunaijun.blackbox.proxy.ProxyManifest;
 import top.niunaijun.blackbox.utils.compat.IntentRedirectCompat;
 
 /**
  * Routes native sign-in activities and provider-owned IntentSenders to the real
- * provider app installed on the phone while keeping the activity-result target
- * inside the virtual process.
+ * provider app installed on the phone while preserving the original virtual
+ * Activity result target.
  *
  * Package/signature identity is never spoofed. Explicit provider intents are
  * accepted directly; implicit intents are resolved with Android's real package
  * manager and accepted only when the resolved app is on the trusted allowlist.
  *
- * For normal native provider Intents, the guest process seals the already-
- * validated Intent into a system PendingIntent and passes only its IntentSender
- * binder to the stable host-main bridge. This is important for Google Sign-In:
- * Play-services configuration Parcelables stay marshalled by Android instead of
- * being unpacked/repacked by the Loader host class loader.
+ * Native provider UI is intentionally launched from the same :pN process bridge
+ * as the guest. This keeps Android's caller/result chain attached to the virtual
+ * SignInHub/Facebook/Twitter activity and avoids changing the provider launch into
+ * a host-created PendingIntent call. Provider-specific Parcelable extras stay lazy
+ * until ProxyActivity assigns the guest class loader immediately before launch.
  */
 @Obfuscate
 public final class ExternalAuthRouter {
@@ -81,6 +82,9 @@ public final class ExternalAuthRouter {
             "top.niunaijun.blackbox.auth.RESULT_DELIVERED";
     public static final String EXTRA_MANUAL_RESULT_RELAY =
             "top.niunaijun.blackbox.auth.MANUAL_RESULT_RELAY";
+
+    // Retained for binary/source compatibility with the host bridge class. The
+    // normal provider-Intent path below no longer uses a host-created opaque sender.
     public static final String EXTRA_INTERNAL_OPAQUE_PROVIDER_SENDER =
             "top.niunaijun.blackbox.auth.INTERNAL_OPAQUE_PROVIDER_SENDER";
     public static final String EXTRA_VALIDATED_PROVIDER_PACKAGE =
@@ -96,10 +100,13 @@ public final class ExternalAuthRouter {
             "com.facebook.wakizashi",
             "com.facebook.lite",
             "com.twitter.android",
+            "com.twitter.android.beta",
             "com.twitter.android.lite",
             "com.x.android"
     ));
 
+    // Kept only for compatibility with older callers/builds that may still invoke
+    // createOpaqueProviderSender through inlined code. New direct auth does not use it.
     private static final AtomicInteger NEXT_PENDING_REQUEST = new AtomicInteger(0x4300);
 
     private ExternalAuthRouter() {
@@ -173,6 +180,9 @@ public final class ExternalAuthRouter {
             return null;
         }
 
+        // Web OAuth remains a fallback only when the guest/provider SDK itself
+        // selected a browser URL. Native Twitter discovery is handled by the real
+        // package/signature visibility path and therefore never gets forced here.
         if (isTwitterWebAuthIntent(source)) {
             return createTwitterWebResultBridgeIntent(
                     source, resultTo, resultWho, requestCode, virtualPackage);
@@ -192,20 +202,12 @@ public final class ExternalAuthRouter {
         if (providerIntent.getComponent() == null && providerIntent.getPackage() == null) {
             providerIntent.setPackage(providerPackage);
         }
+        providerIntent.putExtra(EXTRA_DIRECT_PROVIDER_DISPATCH, true);
 
-        Intent bridge = createBaseBridge(
+        Intent bridge = createProcessBridge(
                 resultTo, resultWho, requestCode, virtualPackage, bpid);
-
-        IntentSender opaqueSender = createOpaqueProviderSender(providerIntent);
-        if (opaqueSender != null) {
-            bridge.putExtra(EXTRA_PROVIDER_INTENT_SENDER, opaqueSender);
-            bridge.putExtra(EXTRA_INTERNAL_OPAQUE_PROVIDER_SENDER, true);
-            bridge.putExtra(EXTRA_VALIDATED_PROVIDER_PACKAGE, providerPackage);
-        } else {
-            providerIntent.putExtra(EXTRA_DIRECT_PROVIDER_DISPATCH, true);
-            bridge.putExtra(EXTRA_PROVIDER_INTENT, providerIntent);
-        }
-
+        bridge.putExtra(EXTRA_PROVIDER_INTENT, providerIntent);
+        bridge.putExtra(EXTRA_VALIDATED_PROVIDER_PACKAGE, providerPackage);
         bridge.addFlags(source.getFlags() & (
                 Intent.FLAG_ACTIVITY_NO_ANIMATION
                         | Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -236,10 +238,12 @@ public final class ExternalAuthRouter {
             return null;
         }
 
-        Intent bridge = createBaseBridge(
+        // Provider-owned IntentSenders also run through the same :pN proxy. Their
+        // creator identity stays provider-owned; the proxy only preserves resultTo.
+        Intent bridge = createProcessBridge(
                 resultTo, resultWho, requestCode, virtualPackage, bpid);
-        bridge.putExtra(EXTRA_MANUAL_RESULT_RELAY, true);
         bridge.putExtra(EXTRA_PROVIDER_INTENT_SENDER, sender);
+        bridge.putExtra(EXTRA_VALIDATED_PROVIDER_PACKAGE, safeCreatorPackage(sender));
         if (fillInIntent != null) {
             bridge.putExtra(EXTRA_PROVIDER_FILL_IN_INTENT, new Intent(fillInIntent));
         }
@@ -248,10 +252,31 @@ public final class ExternalAuthRouter {
         if (options != null) {
             bridge.putExtra(EXTRA_PROVIDER_OPTIONS, new Bundle(options));
         }
-        bridge.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         return prepareBridgeForLaunch(bridge);
     }
 
+    private static Intent createProcessBridge(
+            IBinder resultTo,
+            String resultWho,
+            int requestCode,
+            String virtualPackage,
+            int bpid) {
+        Intent bridge = new Intent();
+        bridge.setComponent(new ComponentName(
+                BlackBoxCore.getHostPkg(),
+                ProxyManifest.TransparentProxyActivity(bpid)));
+        bridge.putExtra(EXTRA_EXTERNAL_AUTH, true);
+        bridge.putExtra(EXTRA_BPID, bpid);
+        bridge.putExtra(EXTRA_USER_ID, BActivityThread.getUserId());
+        putResultTarget(bridge, resultTo, resultWho, requestCode, virtualPackage);
+        return bridge;
+    }
+
+    /**
+     * Legacy helper kept for ABI/source compatibility. New provider-Intent routing
+     * deliberately does not call it because changing a normal Google/Twitter/Facebook
+     * Activity launch into a host-owned PendingIntent changes caller semantics.
+     */
     private static IntentSender createOpaqueProviderSender(Intent providerIntent) {
         try {
             if (providerIntent == null || BlackBoxCore.getContext() == null) {
@@ -272,23 +297,6 @@ public final class ExternalAuthRouter {
         } catch (Throwable ignored) {
             return null;
         }
-    }
-
-    private static Intent createBaseBridge(
-            IBinder resultTo,
-            String resultWho,
-            int requestCode,
-            String virtualPackage,
-            int bpid) {
-        Intent bridge = new Intent();
-        bridge.setComponent(new ComponentName(
-                BlackBoxCore.getHostPkg(),
-                NativeAuthBridgeActivity.class.getName()));
-        bridge.putExtra(EXTRA_EXTERNAL_AUTH, true);
-        bridge.putExtra(EXTRA_BPID, bpid);
-        bridge.putExtra(EXTRA_USER_ID, BActivityThread.getUserId());
-        putResultTarget(bridge, resultTo, resultWho, requestCode, virtualPackage);
-        return bridge;
     }
 
     private static Intent createTwitterWebResultBridgeIntent(
@@ -396,6 +404,14 @@ public final class ExternalAuthRouter {
             }
             String resolvedPackage = resolved.activityInfo.packageName;
             return isTrustedProviderPackage(resolvedPackage) ? resolvedPackage : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static String safeCreatorPackage(IntentSender sender) {
+        try {
+            return sender == null ? null : sender.getCreatorPackage();
         } catch (Throwable ignored) {
             return null;
         }
