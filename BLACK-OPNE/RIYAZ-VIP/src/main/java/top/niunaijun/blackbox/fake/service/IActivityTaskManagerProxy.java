@@ -11,7 +11,6 @@ import black.android.app.BRIActivityTaskManagerStub;
 import black.android.os.BRServiceManager;
 import black.android.util.BRSingleton;
 
-import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.BActivityThread;
 import top.niunaijun.blackbox.compat.auth.ExternalAuthRouter;
 import top.niunaijun.blackbox.compat.oauth.VirtualOAuthRouter;
@@ -93,9 +92,9 @@ public class IActivityTaskManagerProxy extends BinderInvocationStub {
                     prepareHostLaunch(method, args);
                     return method.invoke(who, args);
                 }
-                // A virtual app can forge the marker extra. Do not turn that
-                // marker into authorization for an untrusted external target.
-                return method.invoke(who, args);
+                // A virtual app can forge the marker extra. Fail closed instead
+                // of letting an untrusted target escape the virtual namespace.
+                return 0;
             }
 
             IBinder resultTo = findResultTo(method, args, intentIndex);
