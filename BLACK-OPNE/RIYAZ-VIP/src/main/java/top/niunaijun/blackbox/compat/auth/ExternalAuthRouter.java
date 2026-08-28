@@ -21,6 +21,7 @@ import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.BActivityThread;
 import top.niunaijun.blackbox.compat.oauth.VirtualOAuthRouter;
 import top.niunaijun.blackbox.proxy.ProxyManifest;
+import top.niunaijun.blackbox.utils.compat.IntentRedirectCompat;
 
 /**
  * Routes native sign-in activities and provider-owned IntentSenders to the real
@@ -184,7 +185,7 @@ public final class ExternalAuthRouter {
                 Intent.FLAG_ACTIVITY_NO_ANIMATION
                         | Intent.FLAG_ACTIVITY_CLEAR_TOP
                         | Intent.FLAG_ACTIVITY_SINGLE_TOP));
-        return bridge;
+        return prepareBridgeForLaunch(bridge);
     }
 
     /**
@@ -227,7 +228,7 @@ public final class ExternalAuthRouter {
             bridge.putExtra(EXTRA_PROVIDER_OPTIONS, new Bundle(options));
         }
         bridge.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        return bridge;
+        return prepareBridgeForLaunch(bridge);
     }
 
     private static Intent createBaseBridge(
@@ -286,10 +287,15 @@ public final class ExternalAuthRouter {
                     Intent.FLAG_ACTIVITY_NO_ANIMATION
                             | Intent.FLAG_ACTIVITY_CLEAR_TOP
                             | Intent.FLAG_ACTIVITY_SINGLE_TOP));
-            return bridge;
+            return prepareBridgeForLaunch(bridge);
         } catch (Throwable ignored) {
             return null;
         }
+    }
+
+    private static Intent prepareBridgeForLaunch(Intent bridge) {
+        IntentRedirectCompat.collectNestedIntentKeys(bridge);
+        return bridge;
     }
 
     private static void putResultTarget(
