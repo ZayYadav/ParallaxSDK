@@ -4,17 +4,20 @@ import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
 import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.BActivityThread;
+import top.niunaijun.blackbox.compat.auth.SocialPermissionCompat;
 import top.niunaijun.blackbox.core.env.AppSystemEnv;
 import top.niunaijun.blackbox.fake.frameworks.BPackageManager;
 import top.niunaijun.blackbox.fake.hook.MethodHook;
@@ -26,11 +29,23 @@ import top.niunaijun.blackbox.utils.compat.ParceledListSliceCompat;
  * Package visibility compatibility for real social/auth providers.
  *
  * The virtual package manager remains authoritative for guest components. Real
- * Android results are merged only for packages already present in AppSystemEnv's
- * open/trusted allowlist. No package identity, signature or UID is fabricated.
+ * Android results are merged only for a fixed trusted provider set that is also
+ * present in AppSystemEnv. No package identity, signature or UID is fabricated.
  */
 public final class ISocialPackageManagerProxy extends IPackageManagerProxy {
     private static final String TAG = "SocialPackageManager";
+
+    private static final List<String> AUTH_PROVIDER_PACKAGES = Arrays.asList(
+            "com.twitter.android",
+            "com.twitter.android.beta",
+            "com.twitter.android.lite",
+            "com.x.android",
+            "com.facebook.katana",
+            "com.facebook.wakizashi",
+            "com.facebook.lite",
+            "com.google.android.gms",
+            "com.google.android.play.games"
+    );
 
     @Override
     public void injectHook() {
@@ -50,6 +65,7 @@ public final class ISocialPackageManagerProxy extends IPackageManagerProxy {
         addMethodHook("getInstalledApplications", new GetInstalledApplications());
         addMethodHook("getInstalledPackages", new GetInstalledPackages());
         addMethodHook("getPackagesForUid", new GetPackagesForUid());
+        addMethodHook("checkPermission", new CheckPermission());
         addMethodHook("checkUidSignatures", new CheckUidSignatures());
     }
 
@@ -66,7 +82,9 @@ public final class ISocialPackageManagerProxy extends IPackageManagerProxy {
                         intent, flags, resolvedType, BActivityThread.getUserId());
                 if (virtual != null) merged.addAll(virtual);
             }
+
             mergeTrustedResolveInfos(merged, unwrapList(method.invoke(who, args)), true);
+            mergeScopedTrustedQueries(who, method, args, intent, merged, true);
             Slog.d(TAG, "queryIntentActivities trustedMerged=" + merged.size());
             return adaptListReturn(method, merged);
         }
@@ -87,7 +105,9 @@ public final class ISocialPackageManagerProxy extends IPackageManagerProxy {
                 }
             } catch (Throwable ignored) {
             }
+
             mergeTrustedResolveInfos(merged, unwrapList(method.invoke(who, args)), false);
+            mergeScopedTrustedQueries(who, method, args, intent, merged, false);
             Slog.d(TAG, "queryIntentServices trustedMerged=" + merged.size());
             return adaptListReturn(method, merged);
         }
@@ -106,7 +126,9 @@ public final class ISocialPackageManagerProxy extends IPackageManagerProxy {
                         intent, flags, resolvedType, BActivityThread.getUserId());
                 if (virtual != null) merged.addAll(virtual);
             }
+
             mergeTrustedResolveInfos(merged, unwrapList(method.invoke(who, args)), true);
+            mergeScopedTrustedQueries(who, method, args, intent, merged, true);
             Slog.d(TAG, "queryIntentReceivers trustedMerged=" + merged.size());
             return adaptListReturn(method, merged);
         }
@@ -116,8 +138,11 @@ public final class ISocialPackageManagerProxy extends IPackageManagerProxy {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             int flags = firstFlags(args);
-            List<ApplicationInfo> merged = new ArrayList<>(
-                    BPackageManager.get().getInstalledApplications(flags, BActivityThread.getUserId()));
+            List<ApplicationInfo> source = BPackageManager.get()
+                    .getInstalledApplications(flags, BActivityThread.getUserId());
+            List<ApplicationInfo> merged = new ArrayList<>();
+            if (source != null) merged.addAll(source);
+
             Set<String> seen = new HashSet<>();
             for (ApplicationInfo info : merged) {
                 if (info != null && info.packageName != null) seen.add(info.packageName);
@@ -139,8 +164,11 @@ public final class ISocialPackageManagerProxy extends IPackageManagerProxy {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             int flags = firstFlags(args);
-            List<PackageInfo> merged = new ArrayList<>(
-                    BPackageManager.get().getInstalledPackages(flags, BActivityThread.getUserId()));
+            List<PackageInfo> source = BPackageManager.get()
+                    .getInstalledPackages(flags, BActivityThread.getUserId());
+            List<PackageInfo> merged = new ArrayList<>();
+            if (source != null) merged.addAll(source);
+
             Set<String> seen = new HashSet<>();
             for (PackageInfo info : merged) {
                 if (info != null && info.packageName != null) seen.add(info.packageName);
@@ -177,6 +205,22 @@ public final class ISocialPackageManagerProxy extends IPackageManagerProxy {
         }
     }
 
+    /** PackageManager.checkPermission() compatibility for guest self-checks. */
+    private static final class CheckPermission extends MethodHook {
+        @Override
+        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+            String permission = findPermission(args);
+            String targetPackage = findPackageAfterPermission(args, permission);
+            String guestPackage = BActivityThread.getAppPackageName();
+            if (guestPackage != null
+                    && guestPackage.equals(targetPackage)
+                    && SocialPermissionCompat.guestDeclaresNormalNetworkPermission(permission)) {
+                return PackageManager.PERMISSION_GRANTED;
+            }
+            return method.invoke(who, args);
+        }
+    }
+
     /**
      * Never claim unrelated UIDs have matching signatures. Provider verification
      * remains owned by the real Android PackageManager.
@@ -185,6 +229,49 @@ public final class ISocialPackageManagerProxy extends IPackageManagerProxy {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             return method.invoke(who, args);
+        }
+    }
+
+    /**
+     * Android 11+ visibility may filter one broad implicit query even when the
+     * caller is legitimately allowed to interact with a known provider. Re-query
+     * the same intent explicitly scoped to each fixed trusted provider and merge
+     * only real results returned by Android. Nothing is fabricated.
+     */
+    private static void mergeScopedTrustedQueries(
+            Object who,
+            Method method,
+            Object[] originalArgs,
+            Intent originalIntent,
+            List<ResolveInfo> out,
+            boolean activityLike) {
+        if (originalIntent == null
+                || originalIntent.getComponent() != null
+                || originalIntent.getPackage() != null) {
+            return;
+        }
+
+        for (String pkg : AUTH_PROVIDER_PACKAGES) {
+            if (!AppSystemEnv.isOpenPackage(pkg)) continue;
+            try {
+                Intent scoped = new Intent(originalIntent);
+                scoped.setPackage(pkg);
+                Object[] scopedArgs = originalArgs == null ? null : originalArgs.clone();
+                replaceFirstIntent(scopedArgs, scoped);
+                mergeTrustedResolveInfos(
+                        out, unwrapList(method.invoke(who, scopedArgs)), activityLike);
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    private static void replaceFirstIntent(Object[] args, Intent replacement) {
+        if (args == null) return;
+        for (int i = 0; i < args.length; i++) {
+            if (args[i] instanceof Intent) {
+                args[i] = replacement;
+                return;
+            }
         }
     }
 
@@ -283,6 +370,34 @@ public final class ISocialPackageManagerProxy extends IPackageManagerProxy {
             if (arg instanceof Integer) return (Integer) arg;
         }
         return fallback;
+    }
+
+    private static String findPermission(Object[] args) {
+        if (args == null) return null;
+        for (Object arg : args) {
+            if (arg instanceof String
+                    && ((String) arg).startsWith("android.permission.")) {
+                return (String) arg;
+            }
+        }
+        return null;
+    }
+
+    private static String findPackageAfterPermission(Object[] args, String permission) {
+        if (args == null) return null;
+        boolean sawPermission = false;
+        for (Object arg : args) {
+            if (!(arg instanceof String)) continue;
+            String value = (String) arg;
+            if (!sawPermission && value.equals(permission)) {
+                sawPermission = true;
+                continue;
+            }
+            if (sawPermission && !value.startsWith("android.permission.")) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private static boolean containsIntent(Object[] args) {
