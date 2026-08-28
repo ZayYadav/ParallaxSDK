@@ -36,8 +36,20 @@ public class HookManager {
             addInjector(new OsStub());
             addInjector(new IDisplayManagerProxy());
             addInjector(new IJobServiceProxy());
-            addInjector(new ISocialActivityManagerProxy());
-            addInjector(new ISocialPackageManagerProxy());
+
+            // Keep the original ActivityManager implementation. Its @ScanClass
+            // contract installs ActivityManagerCommonProxy exactly as the runtime
+            // was designed. The previous social subclass duplicated that binding
+            // layer and regressed native-provider discovery/lifecycle behavior.
+            addInjector(new IActivityManagerProxy());
+
+            // Preserve the original PackageManager behavior, especially the fact
+            // that unhooked queryIntentActivities/queryIntentServices calls go to
+            // Android's real PM. The final Loader manifest controls package
+            // visibility. IAuthPackageManagerProxy only replaces the legacy blanket
+            // UID-signature match with Android's real signature check.
+            addInjector(new IAuthPackageManagerProxy());
+
             addInjector(new ITelephonyManagerProxy());
             addInjector(new HCallbackStub());
             addInjector(new IWifiManagerProxy());
