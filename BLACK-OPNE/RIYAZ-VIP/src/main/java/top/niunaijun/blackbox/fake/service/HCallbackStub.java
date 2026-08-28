@@ -252,7 +252,7 @@ public class HCallbackStub implements IInjectHook, Handler.Callback {
             Intent targetIntent,
             ActivityInfo activityInfo,
             Object launchingRecord) {
-        if (targetIntent == null || activityInfo == null) {
+        if (launchItem == null || targetIntent == null || activityInfo == null) {
             return;
         }
 
@@ -260,6 +260,12 @@ public class HCallbackStub implements IInjectHook, Handler.Callback {
             LaunchActivityItemContext launchContext = BRLaunchActivityItem.get(launchItem);
             launchContext._set_mIntent(targetIntent);
             launchContext._set_mInfo(activityInfo);
+        } else {
+            // API 24-27 still launch through ActivityClientRecord directly.
+            ActivityThreadActivityClientRecordContext recordContext =
+                    BRActivityThreadActivityClientRecord.get(launchItem);
+            recordContext._set_intent(targetIntent);
+            recordContext._set_activityInfo(activityInfo);
         }
 
         if (launchingRecord != null) {
