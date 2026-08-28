@@ -37,7 +37,7 @@ public class HookManager {
             addInjector(new IDisplayManagerProxy());
             addInjector(new IJobServiceProxy());
             addInjector(new IActivityManagerProxy());
-            addInjector(new IPackageManagerProxy());
+            addInjector(new ISocialPackageManagerProxy());
             addInjector(new ITelephonyManagerProxy());
             addInjector(new HCallbackStub());
             addInjector(new IWifiManagerProxy());
