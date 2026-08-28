@@ -1,13 +1,11 @@
 package top.niunaijun.blackbox.fake.service;
 
 import android.Manifest;
-import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 
 import java.lang.reflect.Method;
 
-import top.niunaijun.blackbox.app.BActivityThread;
-import top.niunaijun.blackbox.fake.frameworks.BPackageManager;
+import top.niunaijun.blackbox.compat.auth.SocialPermissionCompat;
 import top.niunaijun.blackbox.fake.hook.MethodHook;
 import top.niunaijun.blackbox.utils.MethodParameterUtils;
 
@@ -36,7 +34,7 @@ public final class ISocialActivityManagerProxy extends IActivityManagerProxy {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             String permission = findPermission(args);
-            if (isNetworkPermission(permission) && virtualPackageDeclares(permission)) {
+            if (SocialPermissionCompat.guestDeclaresNormalNetworkPermission(permission)) {
                 return PackageManager.PERMISSION_GRANTED;
             }
 
@@ -58,27 +56,5 @@ public final class ISocialActivityManagerProxy extends IActivityManagerProxy {
             }
         }
         return null;
-    }
-
-    private static boolean isNetworkPermission(String permission) {
-        return Manifest.permission.INTERNET.equals(permission)
-                || Manifest.permission.ACCESS_NETWORK_STATE.equals(permission)
-                || Manifest.permission.ACCESS_WIFI_STATE.equals(permission);
-    }
-
-    private static boolean virtualPackageDeclares(String permission) {
-        if (permission == null) return false;
-        try {
-            String pkg = BActivityThread.getAppPackageName();
-            if (pkg == null || pkg.isEmpty()) return false;
-            PackageInfo info = BPackageManager.get().getPackageInfo(
-                    pkg, PackageManager.GET_PERMISSIONS, BActivityThread.getUserId());
-            if (info == null || info.requestedPermissions == null) return false;
-            for (String requested : info.requestedPermissions) {
-                if (permission.equals(requested)) return true;
-            }
-        } catch (Throwable ignored) {
-        }
-        return false;
     }
 }
