@@ -20,6 +20,7 @@ import top.niunaijun.blackbox.entity.UnbindRecord;
 import top.niunaijun.blackbox.entity.am.PendingResultData;
 import top.niunaijun.blackbox.entity.am.RunningAppProcessInfo;
 import top.niunaijun.blackbox.entity.am.RunningServiceInfo;
+
 /**
  * Created by @RIYAZXERO on 3/30/21.
  * * ∧＿∧
@@ -145,7 +146,7 @@ public class BActivityManager extends BlackManager<IBActivityManagerService> {
 
     public int checkPermission(String permission, int pid, int uid, String packageName) {
         try {
-            return getService().checkPermission(permission,pid,uid,packageName);
+            return getService().checkPermission(permission, pid, uid, packageName);
         } catch (RemoteException e) {
             e.printStackTrace();
         }
@@ -161,25 +162,41 @@ public class BActivityManager extends BlackManager<IBActivityManagerService> {
     }
 
     public Activity findActivityByToken(IBinder token) {
-        Object r = BRActivityThread.get(BActivityThread.currentActivityThread()).mActivities().get(token);
-        if (r != null) {
-            return BRActivityThreadActivityClientRecord.get(token).activity();
-//            return BRActivityThread.get().ac.ActivityClientRecord.activity.get(r);
+        if (token == null) {
+            return null;
+        }
+        try {
+            Object r = BRActivityThread.get(BActivityThread.currentActivityThread())
+                    .mActivities().get(token);
+            if (r != null) {
+                // BRActivityThreadActivityClientRecord wraps the ActivityClientRecord,
+                // not the IBinder key used to find it.
+                return BRActivityThreadActivityClientRecord.get(r).activity();
+            }
+        } catch (Throwable ignored) {
         }
         return null;
     }
-
 
     public void sendCancelActivityResult(IBinder resultTo, String resultWho, int requestCode) {
         sendActivityResult(resultTo, resultWho, requestCode, null, 0);
     }
 
     public void sendActivityResult(IBinder resultTo, String resultWho, int requestCode, Intent data, int resultCode) {
-        Activity activity = findActivityByToken(resultTo);
-        if (activity != null) {
+        if (resultTo == null || requestCode < 0) {
+            return;
+        }
+
+        try {
+            // Android 16 ActivityThread.sendActivityResult() schedules an
+            // ActivityResultItem transaction for the supplied token. Do not gate
+            // that scheduling on a brittle local Activity lookup: the target may
+            // be transitioning back from Google/Facebook/X when the result arrives.
             Object mainThread = BActivityThread.currentActivityThread();
-            BRActivityThread.get(mainThread).sendActivityResult(resultTo,resultWho,requestCode,resultCode,data);
-            //BRActivityThread.sendActivityResult.call(mainThread, resultTo, resultWho, requestCode, data, resultCode);
+            BRActivityThread.get(mainThread).sendActivityResult(
+                    resultTo, resultWho, requestCode, resultCode, data);
+        } catch (Throwable ignored) {
+            // Provider result contents are intentionally not logged.
         }
     }
 
