@@ -19,8 +19,8 @@ import org.lsposed.lsparanoid.Obfuscate;
 
 import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.BActivityThread;
+import top.niunaijun.blackbox.compat.oauth.VirtualOAuthBridgeActivity;
 import top.niunaijun.blackbox.compat.oauth.VirtualOAuthRouter;
-import top.niunaijun.blackbox.proxy.ProxyManifest;
 import top.niunaijun.blackbox.utils.compat.IntentRedirectCompat;
 
 /**
@@ -33,6 +33,15 @@ import top.niunaijun.blackbox.utils.compat.IntentRedirectCompat;
  * manager and accepted only when the resolved app is on the trusted allowlist.
  * IntentSenders are accepted only when Android reports an allow-listed creator
  * package, so a cloned app cannot use this bridge for arbitrary external flows.
+ *
+ * Android 16 compatibility note: provider UI is launched from the host-main
+ * bridge rather than from the guest :pN process. Some provider transitions can
+ * tear down an embedded guest task when the real provider is launched directly
+ * by a TransparentProxyActivity. Keeping the trampoline in the stable host
+ * process preserves the virtual app process while the provider is foreground.
+ * The original Activity result is relayed back to the exact :pN process through
+ * its private ProxyContentProvider; no provider identity or result payload is
+ * rewritten.
  */
 @Obfuscate
 public final class ExternalAuthRouter {
@@ -62,6 +71,19 @@ public final class ExternalAuthRouter {
             "top.niunaijun.blackbox.auth.VIRTUAL_PACKAGE";
     public static final String EXTRA_DIRECT_PROVIDER_DISPATCH =
             "top.niunaijun.blackbox.auth.DIRECT_PROVIDER_DISPATCH";
+    public static final String EXTRA_BPID =
+            "top.niunaijun.blackbox.auth.BPID";
+    public static final String EXTRA_USER_ID =
+            "top.niunaijun.blackbox.auth.USER_ID";
+    public static final String EXTRA_RESULT_CODE =
+            "top.niunaijun.blackbox.auth.RESULT_CODE";
+    public static final String EXTRA_RESULT_DATA =
+            "top.niunaijun.blackbox.auth.RESULT_DATA";
+    public static final String EXTRA_RESULT_DELIVERED =
+            "top.niunaijun.blackbox.auth.RESULT_DELIVERED";
+
+    public static final String METHOD_DELIVER_ACTIVITY_RESULT =
+            "_Black_|_auth_activity_result_";
 
     private static final Set<String> TRUSTED_PROVIDER_PACKAGES = new HashSet<>(Arrays.asList(
             "com.google.android.gms",
@@ -93,6 +115,10 @@ public final class ExternalAuthRouter {
 
     public static boolean isTrustedProviderIntent(Intent intent) {
         return trustedProviderPackage(intent) != null;
+    }
+
+    public static String getTrustedProviderPackage(Intent intent) {
+        return trustedProviderPackage(intent);
     }
 
     public static boolean isTrustedProviderIntentSender(IntentSender sender) {
@@ -148,12 +174,6 @@ public final class ExternalAuthRouter {
             return null;
         }
 
-        // Browser-based X/Twitter authorization sometimes originates from
-        // startActivityForResult(). In that case the old host-main-process bridge
-        // could return a valid callback URI but lose the original Activity result
-        // token semantics. Reuse VirtualOAuthRouter only to validate/infer the
-        // provider and callback, then execute the Auth Tab from the same :pN
-        // process as the virtual app so the result can be delivered to resultTo.
         if (isTwitterWebAuthIntent(source)) {
             return createTwitterWebResultBridgeIntent(
                     source, resultTo, resultWho, requestCode, virtualPackage);
@@ -171,9 +191,6 @@ public final class ExternalAuthRouter {
 
         Intent providerIntent = new Intent(source);
         if (providerIntent.getComponent() == null && providerIntent.getPackage() == null) {
-            // Lock an implicitly-resolved sign-in intent to the trusted provider
-            // Android selected. This prevents a second resolution from drifting
-            // to an unrelated application before startActivityForResult().
             providerIntent.setPackage(providerPackage);
         }
         providerIntent.putExtra(EXTRA_DIRECT_PROVIDER_DISPATCH, true);
@@ -240,8 +257,10 @@ public final class ExternalAuthRouter {
         Intent bridge = new Intent();
         bridge.setComponent(new ComponentName(
                 BlackBoxCore.getHostPkg(),
-                ProxyManifest.TransparentProxyActivity(bpid)));
+                VirtualOAuthBridgeActivity.class.getName()));
         bridge.putExtra(EXTRA_EXTERNAL_AUTH, true);
+        bridge.putExtra(EXTRA_BPID, bpid);
+        bridge.putExtra(EXTRA_USER_ID, BActivityThread.getUserId());
         putResultTarget(bridge, resultTo, resultWho, requestCode, virtualPackage);
         return bridge;
     }
@@ -275,8 +294,10 @@ public final class ExternalAuthRouter {
             Intent bridge = new Intent();
             bridge.setComponent(new ComponentName(
                     BlackBoxCore.getHostPkg(),
-                    ProxyManifest.TransparentProxyActivity(bpid)));
+                    VirtualOAuthBridgeActivity.class.getName()));
             bridge.putExtra(EXTRA_BROWSER_AUTH, true);
+            bridge.putExtra(EXTRA_BPID, bpid);
+            bridge.putExtra(EXTRA_USER_ID, userId);
             bridge.putExtra(VirtualOAuthRouter.EXTRA_AUTH_URL, authUrl);
             bridge.putExtra(VirtualOAuthRouter.EXTRA_REDIRECT_URI, redirectUri);
             bridge.putExtra(VirtualOAuthRouter.EXTRA_AUTH_PROVIDER, authProvider);
