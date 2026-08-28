@@ -1,11 +1,13 @@
 package top.niunaijun.blackbox.compat.auth;
 
+import android.app.PendingIntent;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 
@@ -14,6 +16,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.lsposed.lsparanoid.Obfuscate;
 
@@ -31,14 +34,12 @@ import top.niunaijun.blackbox.utils.compat.IntentRedirectCompat;
  * Package/signature identity is never spoofed. Explicit provider intents are
  * accepted directly; implicit intents are resolved with Android's real package
  * manager and accepted only when the resolved app is on the trusted allowlist.
- * IntentSenders are accepted only when Android reports an allow-listed creator
- * package, so a cloned app cannot use this bridge for arbitrary external flows.
  *
- * Android 16 compatibility note: provider UI is launched from the host-main
- * bridge rather than from the guest :pN process. A normal startActivityForResult
- * bridge remains attached to Android's original resultTo token, so the host
- * trampoline returns exactly one system-delivered result. Only detached
- * IntentSender bridges use the private :pN provider relay.
+ * For normal native provider Intents, the guest process seals the already-
+ * validated Intent into a system PendingIntent and passes only its IntentSender
+ * binder to the stable host-main bridge. This is important for Google Sign-In:
+ * Play-services configuration Parcelables stay marshalled by Android instead of
+ * being unpacked/repacked by the Loader host class loader.
  */
 @Obfuscate
 public final class ExternalAuthRouter {
@@ -80,6 +81,10 @@ public final class ExternalAuthRouter {
             "top.niunaijun.blackbox.auth.RESULT_DELIVERED";
     public static final String EXTRA_MANUAL_RESULT_RELAY =
             "top.niunaijun.blackbox.auth.MANUAL_RESULT_RELAY";
+    public static final String EXTRA_INTERNAL_OPAQUE_PROVIDER_SENDER =
+            "top.niunaijun.blackbox.auth.INTERNAL_OPAQUE_PROVIDER_SENDER";
+    public static final String EXTRA_VALIDATED_PROVIDER_PACKAGE =
+            "top.niunaijun.blackbox.auth.VALIDATED_PROVIDER_PACKAGE";
 
     public static final String METHOD_DELIVER_ACTIVITY_RESULT =
             "_Black_|_auth_activity_result_";
@@ -94,6 +99,8 @@ public final class ExternalAuthRouter {
             "com.twitter.android.lite",
             "com.x.android"
     ));
+
+    private static final AtomicInteger NEXT_PENDING_REQUEST = new AtomicInteger(0x4300);
 
     private ExternalAuthRouter() {
     }
@@ -185,11 +192,27 @@ public final class ExternalAuthRouter {
         if (providerIntent.getComponent() == null && providerIntent.getPackage() == null) {
             providerIntent.setPackage(providerPackage);
         }
-        providerIntent.putExtra(EXTRA_DIRECT_PROVIDER_DISPATCH, true);
 
         Intent bridge = createBaseBridge(
                 resultTo, resultWho, requestCode, virtualPackage, bpid);
-        bridge.putExtra(EXTRA_PROVIDER_INTENT, providerIntent);
+
+        // Preferred path: seal the exact provider Intent into Android's PendingIntent
+        // while we are still in the guest process/class-loader boundary. The host
+        // trampoline receives only an IntentSender binder and never unmarshals
+        // Google/Facebook/Twitter SDK-specific nested Parcelables.
+        IntentSender opaqueSender = createOpaqueProviderSender(providerIntent);
+        if (opaqueSender != null) {
+            bridge.putExtra(EXTRA_PROVIDER_INTENT_SENDER, opaqueSender);
+            bridge.putExtra(EXTRA_INTERNAL_OPAQUE_PROVIDER_SENDER, true);
+            bridge.putExtra(EXTRA_VALIDATED_PROVIDER_PACKAGE, providerPackage);
+        } else {
+            // Compatibility fallback for OEMs that reject PendingIntent creation.
+            // Keep the previous bridge behavior, but mark the provider dispatch so
+            // the guest hooks do not recursively wrap it if this fallback is used.
+            providerIntent.putExtra(EXTRA_DIRECT_PROVIDER_DISPATCH, true);
+            bridge.putExtra(EXTRA_PROVIDER_INTENT, providerIntent);
+        }
+
         bridge.addFlags(source.getFlags() & (
                 Intent.FLAG_ACTIVITY_NO_ANIMATION
                         | Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -234,6 +257,28 @@ public final class ExternalAuthRouter {
         }
         bridge.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         return prepareBridgeForLaunch(bridge);
+    }
+
+    private static IntentSender createOpaqueProviderSender(Intent providerIntent) {
+        try {
+            if (providerIntent == null || BlackBoxCore.getContext() == null) {
+                return null;
+            }
+            int request = NEXT_PENDING_REQUEST.getAndIncrement();
+            if (request <= 0) {
+                NEXT_PENDING_REQUEST.set(0x4300);
+                request = NEXT_PENDING_REQUEST.getAndIncrement();
+            }
+            int flags = PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_CANCEL_CURRENT;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                flags |= PendingIntent.FLAG_IMMUTABLE;
+            }
+            PendingIntent pendingIntent = PendingIntent.getActivity(
+                    BlackBoxCore.getContext(), request, providerIntent, flags);
+            return pendingIntent == null ? null : pendingIntent.getIntentSender();
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 
     private static Intent createBaseBridge(
