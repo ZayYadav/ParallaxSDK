@@ -86,8 +86,8 @@ public final class VirtualOAuthRouter {
         }
 
         Uri redirectUri = extractRedirectUri(authUri);
-        if (redirectUri == null && isTwitterHost(authUri)) {
-            redirectUri = inferLegacyTwitterRedirect(virtualPackage, userId);
+        if (redirectUri == null) {
+            redirectUri = inferDeclaredProviderRedirect(authUri, virtualPackage, userId);
         }
         if (!isSupportedCustomRedirect(redirectUri)) {
             return null;
@@ -96,9 +96,9 @@ public final class VirtualOAuthRouter {
             return null;
         }
 
-        // Do not steal the browser flow unless the real phone has a browser that
-        // explicitly advertises AndroidX Auth Tab support. A normal ACTION_VIEW
-        // browser cannot return arbitrary virtual custom schemes to this SDK.
+        // The host bridge must receive the custom-scheme callback itself. AndroidX
+        // Auth Tab provides exactly that result contract; a normal ACTION_VIEW
+        // browser would instead try to resolve the custom scheme in the host OS.
         String authProvider = AuthTabCompat.findProvider(
                 BlackBoxCore.getContext(), authUri);
         if (authProvider == null || authProvider.trim().isEmpty()) {
@@ -155,6 +155,26 @@ public final class VirtualOAuthRouter {
                 || host.endsWith(".x.com");
     }
 
+    private static boolean isFacebookHost(Uri uri) {
+        if (uri == null) {
+            return false;
+        }
+        String host = lower(uri.getHost());
+        return "facebook.com".equals(host) || host.endsWith(".facebook.com");
+    }
+
+    private static boolean isGoogleHost(Uri uri) {
+        if (uri == null) {
+            return false;
+        }
+        String host = lower(uri.getHost());
+        return "google.com".equals(host)
+                || "accounts.google.com".equals(host)
+                || "googleapis.com".equals(host)
+                || host.endsWith(".google.com")
+                || host.endsWith(".googleapis.com");
+    }
+
     private static Uri extractRedirectUri(Uri authUri) {
         for (String key : REDIRECT_QUERY_KEYS) {
             try {
@@ -184,11 +204,54 @@ public final class VirtualOAuthRouter {
     }
 
     /**
+     * Some provider SDKs omit redirect_uri from the final authorize URL because
+     * it was fixed earlier in the provider configuration/request-token exchange.
+     * In that case only use a callback explicitly declared by the virtual APK and
+     * require strong provider-specific evidence before selecting it.
+     */
+    private static Uri inferDeclaredProviderRedirect(
+            Uri authUri, String virtualPackage, int userId) {
+        if (isTwitterHost(authUri)) {
+            return inferLegacyTwitterRedirect(virtualPackage, userId);
+        }
+
+        final int provider;
+        if (isFacebookHost(authUri)) {
+            provider = 1;
+        } else if (isGoogleHost(authUri)) {
+            provider = 2;
+        } else {
+            return null;
+        }
+
+        try {
+            List<Uri> candidates = DeclaredOAuthCallbackResolver.findCandidates(
+                    virtualPackage, userId);
+            Uri best = null;
+            int bestScore = Integer.MIN_VALUE;
+            for (Uri candidate : candidates) {
+                if (!isSupportedCustomRedirect(candidate)
+                        || !redirectBelongsToVirtualPackage(
+                        candidate, virtualPackage, userId)) {
+                    continue;
+                }
+                int score = provider == 1
+                        ? facebookRedirectScore(candidate, virtualPackage)
+                        : googleRedirectScore(candidate, virtualPackage);
+                if (score > bestScore) {
+                    bestScore = score;
+                    best = candidate;
+                }
+            }
+            return bestScore >= 100 ? best : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    /**
      * OAuth 1.0a authorize/authenticate URLs usually contain only oauth_token;
      * oauth_callback was supplied during the earlier request-token exchange.
-     * Discover the callback from the cloned APK's own BROWSABLE intent-filters,
-     * score Twitter/X-looking candidates, and validate the winner through the
-     * virtual PackageManager before using it.
      */
     private static Uri inferLegacyTwitterRedirect(String virtualPackage, int userId) {
         Uri declared = bestDeclaredTwitterRedirect(virtualPackage, userId);
@@ -234,8 +297,6 @@ public final class VirtualOAuthRouter {
                     best = candidate;
                 }
             }
-            // Require positive Twitter/OAuth evidence so a Facebook/Google callback
-            // from the same app can never be accidentally selected.
             return bestScore >= 50 ? best : null;
         } catch (Throwable ignored) {
             return null;
@@ -256,13 +317,40 @@ public final class VirtualOAuthRouter {
         if (full.contains("oauth")) score += 45;
         if (full.contains("callback")) score += 40;
         if (full.contains("authorize")) score += 25;
-        if (virtualPackage != null
-                && scheme.startsWith(lower(virtualPackage))) {
-            score += 25;
-        }
+        if (virtualPackage != null && scheme.startsWith(lower(virtualPackage))) score += 25;
 
         if (scheme.startsWith("fb") || full.contains("facebook")) score -= 250;
         if (full.contains("google") || full.contains("googleusercontent")) score -= 250;
+        return score;
+    }
+
+    private static int facebookRedirectScore(Uri candidate, String virtualPackage) {
+        String full = lower(candidate == null ? null : candidate.toString());
+        String scheme = lower(candidate == null ? null : candidate.getScheme());
+        int score = 0;
+        if (scheme.startsWith("fb")) score += 240;
+        if (full.contains("facebook")) score += 160;
+        if (full.contains("authorize")) score += 60;
+        if (full.contains("oauth")) score += 50;
+        if (full.contains("callback")) score += 40;
+        if (virtualPackage != null && scheme.startsWith(lower(virtualPackage))) score += 20;
+        if (full.contains("twitter") || full.contains("googleusercontent")) score -= 300;
+        return score;
+    }
+
+    private static int googleRedirectScore(Uri candidate, String virtualPackage) {
+        String full = lower(candidate == null ? null : candidate.toString());
+        String scheme = lower(candidate == null ? null : candidate.getScheme());
+        int score = 0;
+        if (scheme.startsWith("com.googleusercontent.apps.")) score += 260;
+        if (full.contains("googleusercontent")) score += 220;
+        if (full.contains("oauth2redirect")) score += 140;
+        if (full.contains("google")) score += 100;
+        if (full.contains("oauth")) score += 45;
+        if (virtualPackage != null && scheme.startsWith(lower(virtualPackage))) score += 20;
+        if (scheme.startsWith("fb") || full.contains("facebook") || full.contains("twitter")) {
+            score -= 300;
+        }
         return score;
     }
 
