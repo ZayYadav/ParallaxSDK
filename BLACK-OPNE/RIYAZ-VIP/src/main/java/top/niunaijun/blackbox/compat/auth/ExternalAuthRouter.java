@@ -12,7 +12,6 @@ import android.os.IBinder;
 import java.lang.reflect.Constructor;
 import java.util.Arrays;
 import java.util.HashSet;
-import java.util.Locale;
 import java.util.Set;
 
 import org.lsposed.lsparanoid.Obfuscate;
@@ -33,6 +32,11 @@ import top.niunaijun.blackbox.utils.compat.IntentRedirectCompat;
  * manager and accepted only when the resolved app is on the trusted allowlist.
  * IntentSenders are accepted only when Android reports an allow-listed creator
  * package, so a cloned app cannot use this bridge for arbitrary external flows.
+ *
+ * Browser OAuth for Google/Facebook/X is also routed through the real device's
+ * Auth Tab provider when the OAuth URL, redirect URI and virtual callback owner
+ * all pass VirtualOAuthRouter validation. The bridge never reads credentials or
+ * tokens; it only preserves Android's normal activity result/callback delivery.
  *
  * Android 16 compatibility note: provider UI is launched from the host-main
  * bridge rather than from the guest :pN process. A normal startActivityForResult
@@ -166,8 +170,12 @@ public final class ExternalAuthRouter {
             return null;
         }
 
-        if (isTwitterWebAuthIntent(source)) {
-            return createTwitterWebResultBridgeIntent(
+        // Browser based Google/Facebook/X SDKs commonly use startActivityForResult
+        // too. Previously only Twitter/X entered this branch, which meant otherwise
+        // valid Google and Facebook Auth Tab results were detached from the guest
+        // activity. Reuse the same strict OAuth validator for every trusted provider.
+        if (isProviderWebAuthIntent(source)) {
+            return createProviderWebResultBridgeIntent(
                     source, resultTo, resultWho, requestCode, virtualPackage);
         }
 
@@ -253,13 +261,16 @@ public final class ExternalAuthRouter {
         return bridge;
     }
 
-    private static Intent createTwitterWebResultBridgeIntent(
+    private static Intent createProviderWebResultBridgeIntent(
             Intent source,
             IBinder resultTo,
             String resultWho,
             int requestCode,
             String virtualPackage) {
         try {
+            // This is the authoritative validation gate: HTTPS provider host,
+            // redirect ownership inside the virtual package and a real-device
+            // browser advertising AndroidX Auth Tab support must all succeed.
             Intent template = VirtualOAuthRouter.createBridgeIntent(
                     source, BActivityThread.getUserId(), virtualPackage);
             if (template == null) {
@@ -321,20 +332,12 @@ public final class ExternalAuthRouter {
         bridge.putExtras(binderBundle);
     }
 
-    private static boolean isTwitterWebAuthIntent(Intent intent) {
+    private static boolean isProviderWebAuthIntent(Intent intent) {
         if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction())) {
             return false;
         }
         Uri uri = intent.getData();
-        if (uri == null || !"https".equalsIgnoreCase(uri.getScheme())) {
-            return false;
-        }
-        String host = uri.getHost();
-        host = host == null ? "" : host.toLowerCase(Locale.US);
-        return "twitter.com".equals(host)
-                || "x.com".equals(host)
-                || host.endsWith(".twitter.com")
-                || host.endsWith(".x.com");
+        return VirtualOAuthRouter.isTrustedAuthUri(uri);
     }
 
     private static String trustedProviderPackage(Intent intent) {
