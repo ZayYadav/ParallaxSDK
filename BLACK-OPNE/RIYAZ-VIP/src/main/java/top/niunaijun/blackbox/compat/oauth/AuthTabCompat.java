@@ -2,7 +2,6 @@ package top.niunaijun.blackbox.compat.oauth;
 
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
@@ -53,20 +52,19 @@ public final class AuthTabCompat {
         String firstSupported = null;
 
         try {
-            Intent serviceIntent = new Intent(ACTION_CUSTOM_TABS_CONNECTION);
-            List<ResolveInfo> services = pm.queryIntentServices(
-                    serviceIntent, PackageManager.GET_RESOLVED_FILTER);
+            // Query the capability category directly. This is both simpler and
+            // more reliable than depending on ResolveInfo.filter being populated
+            // by every Android/OEM PackageManager implementation.
+            Intent serviceIntent = authTabServiceIntent(null);
+            List<ResolveInfo> services = pm.queryIntentServices(serviceIntent, 0);
             if (services == null) {
                 return null;
             }
 
             for (ResolveInfo info : services) {
                 ServiceInfo serviceInfo = info == null ? null : info.serviceInfo;
-                IntentFilter filter = info == null ? null : info.filter;
                 if (serviceInfo == null || serviceInfo.packageName == null
-                        || !seen.add(serviceInfo.packageName)
-                        || filter == null
-                        || !filter.hasCategory(CATEGORY_AUTH_TAB)) {
+                        || !seen.add(serviceInfo.packageName)) {
                     continue;
                 }
 
@@ -100,20 +98,15 @@ public final class AuthTabCompat {
 
         try {
             PackageManager pm = context.getPackageManager();
-            Intent serviceIntent = new Intent(ACTION_CUSTOM_TABS_CONNECTION);
-            serviceIntent.setPackage(provider);
-            List<ResolveInfo> services = pm.queryIntentServices(
-                    serviceIntent, PackageManager.GET_RESOLVED_FILTER);
+            Intent serviceIntent = authTabServiceIntent(provider);
+            List<ResolveInfo> services = pm.queryIntentServices(serviceIntent, 0);
             if (services == null) {
                 return false;
             }
             for (ResolveInfo info : services) {
-                IntentFilter filter = info == null ? null : info.filter;
                 ServiceInfo serviceInfo = info == null ? null : info.serviceInfo;
                 if (serviceInfo != null
                         && provider.equals(serviceInfo.packageName)
-                        && filter != null
-                        && filter.hasCategory(CATEGORY_AUTH_TAB)
                         && canHandleAuthUrl(pm, provider, authUri)) {
                     return true;
                 }
@@ -121,6 +114,15 @@ public final class AuthTabCompat {
         } catch (Throwable ignored) {
         }
         return false;
+    }
+
+    private static Intent authTabServiceIntent(String provider) {
+        Intent intent = new Intent(ACTION_CUSTOM_TABS_CONNECTION);
+        intent.addCategory(CATEGORY_AUTH_TAB);
+        if (provider != null && !provider.trim().isEmpty()) {
+            intent.setPackage(provider);
+        }
+        return intent;
     }
 
     private static String resolveDefaultBrowser(PackageManager pm, Uri authUri) {
