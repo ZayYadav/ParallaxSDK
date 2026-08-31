@@ -61,7 +61,7 @@ public class HookManager {
             addInjector(new IAccessibilityManagerProxy());
             addInjector(new ITelephonyRegistryProxy());
             addInjector(new IDevicePolicyManagerProxy());
-            addInjector(new IAccountManagerProxy());
+            addInjector(new ITwitterAwareAccountManagerProxy());
             addInjector(new IConnectivityManagerProxy());
             addInjector(new IClipboardManagerProxy());
             addInjector(new IPhoneSubInfoProxy());
