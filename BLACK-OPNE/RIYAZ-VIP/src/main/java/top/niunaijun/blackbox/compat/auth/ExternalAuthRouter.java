@@ -34,10 +34,13 @@ import top.niunaijun.blackbox.utils.compat.IntentRedirectCompat;
  * IntentSenders are accepted only when Android reports an allow-listed creator
  * package, so a cloned app cannot use this bridge for arbitrary external flows.
  *
- * Twitter/X OAuth is native-provider-first: when the official app installed on
- * the phone advertises an Activity that can handle the exact OAuth URL, that
- * real provider Activity is used. If Android says the provider cannot handle
- * the URL, the existing Auth Tab bridge remains the compatibility fallback.
+ * Twitter/X OAuth is native-provider-first. This includes the GCloud/IMSDK
+ * `com.itop.twitterwrapper.TwitterWebActivity` observed in stock BGMI: when its
+ * launch extras already contain a Twitter/X OAuth URL, the URL is extracted
+ * without logging it and offered to the real Twitter/X app first. If the exact
+ * URL is not present or Android says the provider cannot handle it, the stock
+ * web flow remains untouched.
+ *
  * No package identity, signatures, cookies, passwords, or tokens are spoofed.
  *
  * Android 16 compatibility note: provider UI is launched from the host-main
@@ -89,6 +92,9 @@ public final class ExternalAuthRouter {
 
     public static final String METHOD_DELIVER_ACTIVITY_RESULT =
             "_Black_|_auth_activity_result_";
+
+    private static final String GCLOUD_TWITTER_WEB_ACTIVITY =
+            "com.itop.twitterwrapper.TwitterWebActivity";
 
     private static final Set<String> TRUSTED_PROVIDER_PACKAGES = new HashSet<>(Arrays.asList(
             "com.google.android.gms",
@@ -176,6 +182,20 @@ public final class ExternalAuthRouter {
         if (source == null || resultTo == null || requestCode < 0
                 || virtualPackage == null || virtualPackage.trim().isEmpty()) {
             return null;
+        }
+
+        // Stock BGMI/GCloud starts TwitterWebActivity explicitly rather than
+        // dispatching the OAuth URL with ACTION_VIEW. If its launch extras already
+        // carry that URL, convert only that one URL to a real-provider ACTION_VIEW.
+        // Failure is intentionally non-destructive: returning null below lets the
+        // original TwitterWebActivity continue exactly as before.
+        Intent embeddedTwitterAuth = extractGCloudTwitterAuthIntent(source);
+        if (embeddedTwitterAuth != null) {
+            Intent nativeBridge = createTwitterNativeResultBridgeIntent(
+                    embeddedTwitterAuth, resultTo, resultWho, requestCode, virtualPackage);
+            if (nativeBridge != null) {
+                return nativeBridge;
+            }
         }
 
         if (isTwitterWebAuthIntent(source)) {
@@ -281,7 +301,7 @@ public final class ExternalAuthRouter {
             String resultWho,
             int requestCode,
             String virtualPackage) {
-        if (!isLikelyTwitterOAuthUri(source.getData())) {
+        if (!isTrustedTwitterOAuthUri(source == null ? null : source.getData())) {
             return null;
         }
 
@@ -332,6 +352,105 @@ public final class ExternalAuthRouter {
             }
         } catch (Throwable ignored) {
         }
+        return null;
+    }
+
+    private static Intent extractGCloudTwitterAuthIntent(Intent source) {
+        if (!isGCloudTwitterWebActivity(source)) {
+            return null;
+        }
+
+        Uri uri = findTwitterOAuthUri(source.getData(), source.getExtras(), 0);
+        if (uri == null) {
+            return null;
+        }
+
+        Intent auth = new Intent(Intent.ACTION_VIEW, uri);
+        auth.addCategory(Intent.CATEGORY_BROWSABLE);
+        auth.addCategory(Intent.CATEGORY_DEFAULT);
+        auth.setFlags(source.getFlags());
+        return auth;
+    }
+
+    private static boolean isGCloudTwitterWebActivity(Intent source) {
+        if (source == null) return false;
+        ComponentName component = source.getComponent();
+        return component != null
+                && GCLOUD_TWITTER_WEB_ACTIVITY.equals(component.getClassName());
+    }
+
+    /**
+     * Search only the GCloud launch payload for an already-created Twitter/X OAuth
+     * URL. The value is never persisted or logged. Recursion is intentionally
+     * shallow to avoid walking arbitrary app object graphs.
+     */
+    private static Uri findTwitterOAuthUri(Uri direct, Bundle extras, int depth) {
+        if (isTrustedTwitterOAuthUri(direct)) {
+            return direct;
+        }
+        if (extras == null || depth > 3) {
+            return null;
+        }
+
+        try {
+            for (String key : extras.keySet()) {
+                Object value;
+                try {
+                    value = extras.get(key);
+                } catch (Throwable ignored) {
+                    continue;
+                }
+
+                Uri found = twitterOAuthUriFromValue(value, depth + 1);
+                if (found != null) {
+                    return found;
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
+    private static Uri twitterOAuthUriFromValue(Object value, int depth) {
+        if (value == null || depth > 4) return null;
+
+        if (value instanceof Uri) {
+            Uri uri = (Uri) value;
+            return isTrustedTwitterOAuthUri(uri) ? uri : null;
+        }
+
+        if (value instanceof CharSequence) {
+            try {
+                Uri uri = Uri.parse(value.toString().trim());
+                return isTrustedTwitterOAuthUri(uri) ? uri : null;
+            } catch (Throwable ignored) {
+                return null;
+            }
+        }
+
+        if (value instanceof Bundle) {
+            return findTwitterOAuthUri(null, (Bundle) value, depth);
+        }
+
+        if (value instanceof Intent) {
+            Intent nested = (Intent) value;
+            return findTwitterOAuthUri(nested.getData(), nested.getExtras(), depth);
+        }
+
+        if (value instanceof String[]) {
+            for (String item : (String[]) value) {
+                Uri found = twitterOAuthUriFromValue(item, depth + 1);
+                if (found != null) return found;
+            }
+        }
+
+        if (value instanceof CharSequence[]) {
+            for (CharSequence item : (CharSequence[]) value) {
+                Uri found = twitterOAuthUriFromValue(item, depth + 1);
+                if (found != null) return found;
+            }
+        }
+
         return null;
     }
 
@@ -408,6 +527,14 @@ public final class ExternalAuthRouter {
             return false;
         }
         Uri uri = intent.getData();
+        return isTwitterHttpsUri(uri);
+    }
+
+    private static boolean isTrustedTwitterOAuthUri(Uri uri) {
+        return isTwitterHttpsUri(uri) && isLikelyTwitterOAuthUri(uri);
+    }
+
+    private static boolean isTwitterHttpsUri(Uri uri) {
         if (uri == null || !"https".equalsIgnoreCase(uri.getScheme())) {
             return false;
         }
