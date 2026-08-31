@@ -34,6 +34,12 @@ import top.niunaijun.blackbox.utils.compat.IntentRedirectCompat;
  * IntentSenders are accepted only when Android reports an allow-listed creator
  * package, so a cloned app cannot use this bridge for arbitrary external flows.
  *
+ * Twitter/X OAuth is native-provider-first: when the official app installed on
+ * the phone advertises an Activity that can handle the exact OAuth URL, that
+ * real provider Activity is used. If Android says the provider cannot handle
+ * the URL, the existing Auth Tab bridge remains the compatibility fallback.
+ * No package identity, signatures, cookies, passwords, or tokens are spoofed.
+ *
  * Android 16 compatibility note: provider UI is launched from the host-main
  * bridge rather than from the guest :pN process. A normal startActivityForResult
  * bridge remains attached to Android's original resultTo token, so the host
@@ -94,6 +100,12 @@ public final class ExternalAuthRouter {
             "com.twitter.android.lite",
             "com.x.android"
     ));
+
+    private static final String[] TWITTER_NATIVE_PROVIDER_PACKAGES = new String[]{
+            "com.twitter.android",
+            "com.x.android",
+            "com.twitter.android.lite"
+    };
 
     private ExternalAuthRouter() {
     }
@@ -167,6 +179,11 @@ public final class ExternalAuthRouter {
         }
 
         if (isTwitterWebAuthIntent(source)) {
+            Intent nativeBridge = createTwitterNativeResultBridgeIntent(
+                    source, resultTo, resultWho, requestCode, virtualPackage);
+            if (nativeBridge != null) {
+                return nativeBridge;
+            }
             return createTwitterWebResultBridgeIntent(
                     source, resultTo, resultWho, requestCode, virtualPackage);
         }
@@ -253,6 +270,71 @@ public final class ExternalAuthRouter {
         return bridge;
     }
 
+    /**
+     * Prefer the real Twitter/X application only when Android's real PackageManager
+     * confirms that the installed provider advertises support for this exact OAuth
+     * URL. This deliberately avoids hard-coding a private provider Activity name.
+     */
+    private static Intent createTwitterNativeResultBridgeIntent(
+            Intent source,
+            IBinder resultTo,
+            String resultWho,
+            int requestCode,
+            String virtualPackage) {
+        if (!isLikelyTwitterOAuthUri(source.getData())) {
+            return null;
+        }
+
+        String providerPackage = resolveNativeTwitterProvider(source);
+        if (providerPackage == null) {
+            return null;
+        }
+
+        int bpid = BActivityThread.getAppPid();
+        if (bpid < 0 || bpid > 24) {
+            return null;
+        }
+
+        Intent providerIntent = new Intent(source);
+        // The source may have been explicitly aimed at a browser. Resolve again
+        // against the official provider without retaining that browser component.
+        providerIntent.setComponent(null);
+        providerIntent.setPackage(providerPackage);
+        providerIntent.putExtra(EXTRA_DIRECT_PROVIDER_DISPATCH, true);
+
+        Intent bridge = createBaseBridge(
+                resultTo, resultWho, requestCode, virtualPackage, bpid);
+        bridge.putExtra(EXTRA_PROVIDER_INTENT, providerIntent);
+        bridge.addFlags(source.getFlags() & (
+                Intent.FLAG_ACTIVITY_NO_ANIMATION
+                        | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+        return prepareBridgeForLaunch(bridge);
+    }
+
+    private static String resolveNativeTwitterProvider(Intent source) {
+        if (source == null) return null;
+        try {
+            PackageManager packageManager = BlackBoxCore.getContext().getPackageManager();
+            for (String packageName : TWITTER_NATIVE_PROVIDER_PACKAGES) {
+                Intent candidate = new Intent(source);
+                candidate.setComponent(null);
+                candidate.setPackage(packageName);
+                ResolveInfo resolved = packageManager.resolveActivity(
+                        candidate, PackageManager.MATCH_DEFAULT_ONLY);
+                if (resolved == null || resolved.activityInfo == null) {
+                    continue;
+                }
+                if (packageName.equals(resolved.activityInfo.packageName)
+                        && isTrustedProviderPackage(packageName)) {
+                    return packageName;
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
     private static Intent createTwitterWebResultBridgeIntent(
             Intent source,
             IBinder resultTo,
@@ -335,6 +417,19 @@ public final class ExternalAuthRouter {
                 || "x.com".equals(host)
                 || host.endsWith(".twitter.com")
                 || host.endsWith(".x.com");
+    }
+
+    private static boolean isLikelyTwitterOAuthUri(Uri uri) {
+        if (uri == null) return false;
+        String path = uri.getPath();
+        String query = uri.getQuery();
+        path = path == null ? "" : path.toLowerCase(Locale.US);
+        query = query == null ? "" : query.toLowerCase(Locale.US);
+        return path.contains("oauth")
+                || path.contains("authorize")
+                || path.contains("authenticate")
+                || query.contains("oauth_token=")
+                || query.contains("client_id=");
     }
 
     private static String trustedProviderPackage(Intent intent) {
