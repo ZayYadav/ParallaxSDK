@@ -10,6 +10,7 @@ import android.net.Uri;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -20,6 +21,11 @@ import java.util.Set;
  * exposes the browser-facing protocol/category strings publicly; this helper
  * only selects a real browser that advertises Auth Tab support and can handle
  * the requested HTTPS URL.
+ *
+ * Facebook web login is intentionally Chrome-first. When stable Chrome is
+ * installed and advertises Auth Tab support for the exact Facebook URL, the
+ * bridge launches Chrome so the user can reuse the Facebook session already
+ * owned by Chrome. The SDK never reads or copies Chrome/Facebook cookies.
  */
 public final class AuthTabCompat {
     public static final String EXTRA_LAUNCH_AUTH_TAB =
@@ -33,6 +39,7 @@ public final class AuthTabCompat {
             "android.support.customtabs.action.CustomTabsService";
     private static final String CATEGORY_AUTH_TAB =
             "androidx.browser.auth.category.AuthTab";
+    private static final String CHROME_STABLE_PACKAGE = "com.android.chrome";
 
     private AuthTabCompat() {
     }
@@ -46,6 +53,14 @@ public final class AuthTabCompat {
         PackageManager pm = context.getPackageManager();
         if (pm == null) {
             return null;
+        }
+
+        // Facebook must use the real Chrome profile when possible so an existing
+        // Chrome Facebook login is naturally reused by the browser itself.
+        // This branch is Facebook-only; Twitter/X provider selection is unchanged.
+        if (isFacebookAuthUri(authUri)
+                && supportsAuthTabProvider(pm, CHROME_STABLE_PACKAGE, authUri)) {
+            return CHROME_STABLE_PACKAGE;
         }
 
         String defaultBrowser = resolveDefaultBrowser(pm, authUri);
@@ -99,7 +114,21 @@ public final class AuthTabCompat {
         }
 
         try {
-            PackageManager pm = context.getPackageManager();
+            return supportsAuthTabProvider(
+                    context.getPackageManager(), provider, authUri);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static boolean supportsAuthTabProvider(
+            PackageManager pm, String provider, Uri authUri) {
+        if (pm == null || provider == null || provider.trim().isEmpty()
+                || authUri == null || !"https".equalsIgnoreCase(authUri.getScheme())) {
+            return false;
+        }
+
+        try {
             Intent serviceIntent = new Intent(ACTION_CUSTOM_TABS_CONNECTION);
             serviceIntent.setPackage(provider);
             List<ResolveInfo> services = pm.queryIntentServices(
@@ -121,6 +150,19 @@ public final class AuthTabCompat {
         } catch (Throwable ignored) {
         }
         return false;
+    }
+
+    private static boolean isFacebookAuthUri(Uri uri) {
+        if (uri == null) {
+            return false;
+        }
+        String host = uri.getHost();
+        host = host == null ? "" : host.toLowerCase(Locale.US);
+        return "facebook.com".equals(host)
+                || "www.facebook.com".equals(host)
+                || "m.facebook.com".equals(host)
+                || "web.facebook.com".equals(host)
+                || host.endsWith(".facebook.com");
     }
 
     private static String resolveDefaultBrowser(PackageManager pm, Uri authUri) {
