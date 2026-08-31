@@ -235,13 +235,19 @@ public class ActivityStack {
             }
         }
 
+        // A reused Activity must receive onNewIntent before finishing the records
+        // above it. Calling finish first can synchronously resume the reused Activity
+        // and make lifecycle-sensitive flows (for example OAuth Custom Tabs) treat
+        // the navigation as a cancellation before the redirect Intent arrives.
+        if (newIntentRecord != null && !(clearTask && newTask)) {
+            deliverNewIntentLocked(newIntentRecord, intent);
+            finishAllActivity(userId);
+            return 0;
+        }
+
         finishAllActivity(userId);
 
-        if (newIntentRecord != null) {
-            // 通知onNewIntent
-            deliverNewIntentLocked(newIntentRecord, intent);
-            return 0;
-        } else if (ignore) {
+        if (ignore) {
             return 0;
         }
 
