@@ -40,6 +40,13 @@ public final class VirtualOAuthBridgeActivity extends Activity {
     private static final int REQUEST_AUTH_TAB = 0x5041;
     private static final int REQUEST_EXTERNAL_AUTH = 0x5042;
 
+    private static final String FACEBOOK_CUSTOM_TAB_MAIN_ACTIVITY =
+            "com.facebook.CustomTabMainActivity";
+    private static final String FACEBOOK_CUSTOM_TAB_REDIRECT_ACTION =
+            "CustomTabActivity.action_customTabRedirect";
+    private static final String FACEBOOK_CUSTOM_TAB_EXTRA_URL =
+            "CustomTabMainActivity.extra_url";
+
     private String virtualPackage;
     private Uri expectedRedirectUri;
     private Uri authUri;
@@ -377,6 +384,10 @@ public final class VirtualOAuthBridgeActivity extends Activity {
     }
 
     private boolean dispatchToVirtualPackage(Uri callbackUri) {
+        if (isFacebookHost(authUri) && dispatchFacebookCustomTabResult(callbackUri)) {
+            return true;
+        }
+
         try {
             Intent callback = new Intent(Intent.ACTION_VIEW, callbackUri);
             callback.addCategory(Intent.CATEGORY_DEFAULT);
@@ -402,6 +413,58 @@ public final class VirtualOAuthBridgeActivity extends Activity {
             BActivityManager.get().startActivity(callback, userId);
             return true;
         } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    /**
+     * Meta's Facebook SDK does not consume the browser callback directly in
+     * FacebookActivity. Its expected Custom Tab chain is:
+     *
+     *   redirect URI -> CustomTabActivity -> existing CustomTabMainActivity
+     *   -> protocol result -> FacebookActivity
+     *
+     * The generic virtual redirect adds NEW_TASK and inserts an extra proxy
+     * activity, which can resume CustomTabMainActivity without delivering the
+     * redirect Intent. In that case Meta treats the tab as closed/cancelled.
+     *
+     * Reproduce the exact SDK contract here: deliver the callback URL to the
+     * existing CustomTabMainActivity with its stable redirect action/extra and
+     * CLEAR_TOP|SINGLE_TOP. If a different/older Facebook SDK does not expose
+     * that activity, return false so the generic callback route remains a safe
+     * fallback.
+     */
+    private boolean dispatchFacebookCustomTabResult(Uri callbackUri) {
+        if (callbackUri == null || virtualPackage == null || userId < 0) {
+            return false;
+        }
+
+        try {
+            Intent callback = new Intent();
+            callback.setComponent(new ComponentName(
+                    virtualPackage, FACEBOOK_CUSTOM_TAB_MAIN_ACTIVITY));
+            callback.setAction(FACEBOOK_CUSTOM_TAB_REDIRECT_ACTION);
+            callback.putExtra(FACEBOOK_CUSTOM_TAB_EXTRA_URL, callbackUri.toString());
+            callback.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+
+            ResolveInfo resolved = BPackageManager.get().resolveActivity(
+                    callback,
+                    FileUtils.FileMode.MODE_IWUSR,
+                    null,
+                    userId);
+            if (resolved == null || resolved.activityInfo == null
+                    || !virtualPackage.equals(resolved.activityInfo.packageName)
+                    || !FACEBOOK_CUSTOM_TAB_MAIN_ACTIVITY.equals(resolved.activityInfo.name)) {
+                Log.i(TAG, "facebook stage=custom_tab_main_unavailable delivered=false");
+                return false;
+            }
+
+            BActivityManager.get().startActivity(callback, userId);
+            Log.i(TAG, "facebook stage=custom_tab_main_handoff delivered=true");
+            return true;
+        } catch (Throwable ignored) {
+            Log.i(TAG, "facebook stage=custom_tab_main_handoff delivered=false");
             return false;
         }
     }
@@ -461,6 +524,17 @@ public final class VirtualOAuthBridgeActivity extends Activity {
         } catch (Throwable ignored) {
             return false;
         }
+    }
+
+    private static boolean isFacebookHost(Uri uri) {
+        if (uri == null) {
+            return false;
+        }
+        String host = lower(uri.getHost());
+        return "facebook.com".equals(host)
+                || "fb.com".equals(host)
+                || host.endsWith(".facebook.com")
+                || host.endsWith(".fb.com");
     }
 
     private static boolean isTwitterHost(Uri uri) {
