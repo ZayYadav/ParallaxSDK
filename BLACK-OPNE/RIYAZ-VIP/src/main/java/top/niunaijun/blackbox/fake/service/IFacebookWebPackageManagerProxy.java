@@ -15,25 +15,29 @@ import top.niunaijun.blackbox.fake.hook.ScanClass;
 
 /**
  * Facebook-login compatibility layer that keeps the existing package-manager
- * virtualization intact while making Facebook app-switch login unavailable to
- * the guest. Facebook SDKs treat an unresolved native login Activity as "not
- * tried" and continue to their Custom Tab/web handler, which is then routed by
- * AuthTabCompat to Chrome when supported.
+ * virtualization intact while making Facebook native login shortcuts unavailable
+ * to the guest. Facebook SDKs treat these unavailable native handlers as "not
+ * tried" and continue to their Custom Tab/web handler, which AuthTabCompat then
+ * routes to stable Chrome when supported.
  *
- * This intentionally targets Facebook login Activities only. Facebook package
- * metadata/services remain visible, and Twitter/X package-manager behavior is
- * not changed.
+ * Scope is intentionally narrow: only Facebook's platform token service and
+ * Facebook login Activities are hidden. Other Facebook features/package metadata
+ * stay available, and Twitter/X package-manager behavior is untouched.
  */
 @ScanClass({IPackageManagerProxy.class})
 public final class IFacebookWebPackageManagerProxy extends IPackageManagerProxy {
 
+    private static final String FACEBOOK_PLATFORM_SERVICE_ACTION =
+            "com.facebook.platform.PLATFORM_SERVICE";
+
     @Override
     public void injectHook() {
-        // Let IPackageManagerProxy install every one of its normal hooks first.
+        // Install all original package-manager hooks first. @ScanClass also scans
+        // the base class, so overwrite only the two Facebook-login discovery hooks
+        // after the base registrations are complete.
         super.injectHook();
-        // @ScanClass installs the base resolveIntent hook after our declared
-        // classes are scanned, so overwrite only resolveIntent at the very end.
         addMethodHook("resolveIntent", new ResolveIntentFacebookWebFirst());
+        addMethodHook("resolveService", new ResolveServiceFacebookWebFirst());
     }
 
     @ProxyMethod("resolveIntent")
@@ -44,25 +48,77 @@ public final class IFacebookWebPackageManagerProxy extends IPackageManagerProxy 
                     ? (Intent) args[0] : null;
 
             if (isFacebookNativeLoginIntent(intent)) {
-                // Returning null matches PackageManager.resolveActivity() when the
-                // Facebook native login Activity is unavailable. The Facebook SDK
-                // can then continue naturally to CustomTabLoginMethodHandler.
+                // PackageManager.resolveActivity() returning null makes Facebook's
+                // Katana/SSO handler report "not tried", allowing Custom Tab next.
                 return null;
             }
 
-            // Preserve IPackageManagerProxy.ResolveIntent behavior exactly for
-            // every non-Facebook-login request.
-            String resolvedType = args != null && args.length > 1 && args[1] instanceof String
-                    ? (String) args[1] : null;
-            int flags = args != null && args.length > 2
-                    ? Integer.parseInt(args[2] + "") : 0;
-            ResolveInfo resolveInfo = BlackBoxCore.getBPackageManager().resolveIntent(
-                    intent, resolvedType, flags, BActivityThread.getUserId());
-            if (resolveInfo != null) {
-                return resolveInfo;
-            }
-            return method.invoke(who, args);
+            return resolveIntentLikeBase(who, method, args, intent);
         }
+    }
+
+    @ProxyMethod("resolveService")
+    public static final class ResolveServiceFacebookWebFirst extends MethodHook {
+        @Override
+        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+            Intent intent = args != null && args.length > 0 && args[0] instanceof Intent
+                    ? (Intent) args[0] : null;
+
+            if (isFacebookPlatformTokenService(intent)) {
+                // Meta's GetTokenLoginMethodHandler calls PlatformServiceClient.start().
+                // If this PLATFORM_SERVICE cannot resolve, start() returns false and
+                // LoginClient advances to its next handler instead of consuming a
+                // Facebook-app token behind the web flow.
+                return null;
+            }
+
+            return resolveServiceLikeBase(who, method, args, intent);
+        }
+    }
+
+    private static Object resolveIntentLikeBase(
+            Object who, Method method, Object[] args, Intent intent) throws Throwable {
+        String resolvedType = args != null && args.length > 1 && args[1] instanceof String
+                ? (String) args[1] : null;
+        int flags = args != null && args.length > 2
+                ? Integer.parseInt(args[2] + "") : 0;
+        ResolveInfo resolveInfo = BlackBoxCore.getBPackageManager().resolveIntent(
+                intent, resolvedType, flags, BActivityThread.getUserId());
+        if (resolveInfo != null) {
+            return resolveInfo;
+        }
+        return method.invoke(who, args);
+    }
+
+    private static Object resolveServiceLikeBase(
+            Object who, Method method, Object[] args, Intent intent) throws Throwable {
+        String resolvedType = args != null && args.length > 1 && args[1] instanceof String
+                ? (String) args[1] : null;
+        int flags = args != null && args.length > 2
+                ? Integer.parseInt(args[2] + "") : 0;
+        ResolveInfo resolveInfo = BlackBoxCore.getBPackageManager().resolveService(
+                intent, flags, resolvedType, BActivityThread.getUserId());
+        if (resolveInfo != null) {
+            return resolveInfo;
+        }
+        return method.invoke(who, args);
+    }
+
+    private static boolean isFacebookPlatformTokenService(Intent intent) {
+        if (intent == null
+                || !FACEBOOK_PLATFORM_SERVICE_ACTION.equals(intent.getAction())) {
+            return false;
+        }
+
+        ComponentName component = intent.getComponent();
+        String packageName = component != null
+                ? component.getPackageName() : intent.getPackage();
+        String value = lower(packageName);
+
+        // NativeProtocol.createPlatformServiceIntent() currently probes Katana
+        // and Wakizashi. Restrict the block to those official login providers.
+        return "com.facebook.katana".equals(value)
+                || "com.facebook.wakizashi".equals(value);
     }
 
     private static boolean isFacebookNativeLoginIntent(Intent intent) {
