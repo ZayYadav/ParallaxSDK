@@ -35,7 +35,7 @@ public final class OAuthCallbackValidator {
         try {
             String expectedState = authUri.getQueryParameter("state");
             if (expectedState != null && !expectedState.isEmpty()
-                    && !expectedState.equals(callback.getQueryParameter("state"))) {
+                    && !expectedState.equals(getOAuthParameter(callback, "state"))) {
                 return false;
             }
             for (String name : expectedRedirect.getQueryParameterNames()) {
@@ -48,6 +48,64 @@ public final class OAuthCallbackValidator {
             return false;
         }
         return true;
+    }
+
+    /**
+     * OAuth authorization-code callbacks usually put state in the query string,
+     * while implicit/token flows (including Meta/Facebook Custom Tab login) may
+     * return provider result parameters in the URI fragment. Read only the named
+     * validation parameter; token/result values are never inspected or logged.
+     */
+    private static String getOAuthParameter(Uri uri, String name) {
+        if (uri == null || name == null || name.isEmpty()) {
+            return null;
+        }
+
+        try {
+            String value = uri.getQueryParameter(name);
+            if (value != null) {
+                return value;
+            }
+        } catch (Throwable ignored) {
+        }
+
+        String fragment;
+        try {
+            fragment = uri.getEncodedFragment();
+        } catch (Throwable ignored) {
+            return null;
+        }
+        if (fragment == null || fragment.isEmpty()) {
+            return null;
+        }
+
+        String[] pairs = fragment.split("&");
+        for (String pair : pairs) {
+            if (pair == null || pair.isEmpty()) {
+                continue;
+            }
+            int separator = pair.indexOf('=');
+            String encodedKey = separator >= 0 ? pair.substring(0, separator) : pair;
+            String key;
+            try {
+                key = Uri.decode(encodedKey);
+            } catch (Throwable ignored) {
+                continue;
+            }
+            if (!name.equals(key)) {
+                continue;
+            }
+
+            if (separator < 0 || separator + 1 >= pair.length()) {
+                return "";
+            }
+            try {
+                return Uri.decode(pair.substring(separator + 1));
+            } catch (Throwable ignored) {
+                return null;
+            }
+        }
+        return null;
     }
 
     private static String lower(String value) {
