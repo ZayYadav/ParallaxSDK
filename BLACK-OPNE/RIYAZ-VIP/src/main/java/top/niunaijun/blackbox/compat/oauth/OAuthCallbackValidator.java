@@ -34,10 +34,25 @@ public final class OAuthCallbackValidator {
 
         try {
             String expectedState = authUri.getQueryParameter("state");
-            if (expectedState != null && !expectedState.isEmpty()
-                    && !expectedState.equals(getOAuthParameter(callback, "state"))) {
-                return false;
+            if (expectedState != null && !expectedState.isEmpty()) {
+                String callbackState = callback.getQueryParameter("state");
+
+                // Meta/Facebook token and hybrid Custom Tab flows may return
+                // provider result parameters in the fragment. Meta's own Android
+                // SDK merges query + fragment before validating state. Permit
+                // that fallback only for a trusted Facebook auth host so the
+                // existing Twitter/X and other-provider validation semantics stay
+                // exactly query-only.
+                if ((callbackState == null || callbackState.isEmpty())
+                        && isFacebookAuthHost(authUri)) {
+                    callbackState = getFragmentParameter(callback, "state");
+                }
+
+                if (!expectedState.equals(callbackState)) {
+                    return false;
+                }
             }
+
             for (String name : expectedRedirect.getQueryParameterNames()) {
                 if (!expectedRedirect.getQueryParameters(name)
                         .equals(callback.getQueryParameters(name))) {
@@ -50,23 +65,25 @@ public final class OAuthCallbackValidator {
         return true;
     }
 
+    private static boolean isFacebookAuthHost(Uri authUri) {
+        if (authUri == null) {
+            return false;
+        }
+        String host = lower(authUri.getHost());
+        return "facebook.com".equals(host)
+                || "www.facebook.com".equals(host)
+                || "m.facebook.com".equals(host)
+                || "web.facebook.com".equals(host)
+                || host.endsWith(".facebook.com");
+    }
+
     /**
-     * OAuth authorization-code callbacks usually put state in the query string,
-     * while implicit/token flows (including Meta/Facebook Custom Tab login) may
-     * return provider result parameters in the URI fragment. Read only the named
-     * validation parameter; token/result values are never inspected or logged.
+     * Reads only the named validation field from the fragment. OAuth result
+     * values are not logged or persisted.
      */
-    private static String getOAuthParameter(Uri uri, String name) {
+    private static String getFragmentParameter(Uri uri, String name) {
         if (uri == null || name == null || name.isEmpty()) {
             return null;
-        }
-
-        try {
-            String value = uri.getQueryParameter(name);
-            if (value != null) {
-                return value;
-            }
-        } catch (Throwable ignored) {
         }
 
         String fragment;
