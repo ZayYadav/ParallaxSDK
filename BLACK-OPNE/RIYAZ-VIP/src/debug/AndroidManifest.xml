@@ -30,20 +30,5 @@
             android:excludeFromRecents="true"
             android:exported="false"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
-
-        <activity
-            android:name="top.niunaijun.blackbox.compat.oauth.FacebookOAuthCallbackActivity"
-            android:excludeFromRecents="true"
-            android:exported="true"
-            android:launchMode="singleTop"
-            android:noHistory="true"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="fbconnect" />
-            </intent-filter>
-        </activity>
     </application>
 </manifest>
