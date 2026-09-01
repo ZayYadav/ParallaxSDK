@@ -30,6 +30,11 @@
             android:excludeFromRecents="true"
             android:exported="false"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+        <activity
+            android:name="top.niunaijun.blackbox.compat.auth.NativeAuthBridgeActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
 
         <!--
              Meta's Custom Tab redirect uses fbconnect://cct.<package>. The host

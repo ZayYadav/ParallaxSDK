@@ -1,7 +1,6 @@
 package top.niunaijun.blackbox.compat.auth;
 
 import android.content.Context;
-import android.os.Bundle;
 import android.os.IBinder;
 import android.os.IInterface;
 import android.os.Parcel;
@@ -422,8 +421,6 @@ public final class GmsBrokerCompat {
                     Object value = field.get(request);
                     if (value instanceof String && virtualPackage.equals(value)) {
                         field.set(request, hostPackage);
-                    } else if (value instanceof Bundle) {
-                        normalizeBundle((Bundle) value, virtualPackage, hostPackage);
                     } else if (value != null
                             && "android.content.AttributionSource".equals(
                             value.getClass().getName())) {
@@ -436,27 +433,6 @@ public final class GmsBrokerCompat {
                 }
             }
             type = type.getSuperclass();
-        }
-    }
-
-    private static void normalizeBundle(
-            Bundle bundle, String virtualPackage, String hostPackage) {
-        if (bundle == null) {
-            return;
-        }
-        try {
-            for (String key : bundle.keySet()) {
-                Object value = bundle.get(key);
-                if (value instanceof String && virtualPackage.equals(value)) {
-                    bundle.putString(key, hostPackage);
-                } else if (value != null
-                        && "android.content.AttributionSource".equals(
-                        value.getClass().getName())) {
-                    ContextCompat.fixAttributionSourceState(
-                            value, BlackBoxCore.getHostUid());
-                }
-            }
-        } catch (Throwable ignored) {
         }
     }
 
