@@ -10,7 +10,6 @@ import android.net.Uri;
 
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -58,7 +57,7 @@ public final class AuthTabCompat {
         // Facebook must use the real Chrome profile when possible so an existing
         // Chrome Facebook login is naturally reused by the browser itself.
         // This branch is Facebook-only; Twitter/X provider selection is unchanged.
-        if (isFacebookAuthUri(authUri)
+        if (FacebookAuthHost.matches(authUri)
                 && supportsAuthTabProvider(pm, CHROME_STABLE_PACKAGE, authUri)) {
             return CHROME_STABLE_PACKAGE;
         }
@@ -150,15 +149,6 @@ public final class AuthTabCompat {
         } catch (Throwable ignored) {
         }
         return false;
-    }
-
-    private static boolean isFacebookAuthUri(Uri uri) {
-        if (uri == null) {
-            return false;
-        }
-        String host = uri.getHost();
-        host = host == null ? "" : host.toLowerCase(Locale.US);
-        return "facebook.com".equals(host) || host.endsWith(".facebook.com");
     }
 
     private static String resolveDefaultBrowser(PackageManager pm, Uri authUri) {
