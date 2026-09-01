@@ -3,8 +3,10 @@ package top.niunaijun.blackbox.fake.service;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
+import android.net.Uri;
 
 import java.lang.reflect.Method;
+import java.util.List;
 import java.util.Locale;
 
 import top.niunaijun.blackbox.BlackBoxCore;
@@ -12,6 +14,7 @@ import top.niunaijun.blackbox.app.BActivityThread;
 import top.niunaijun.blackbox.fake.hook.MethodHook;
 import top.niunaijun.blackbox.fake.hook.ProxyMethod;
 import top.niunaijun.blackbox.fake.hook.ScanClass;
+import top.niunaijun.blackbox.utils.compat.ParceledListSliceCompat;
 
 /**
  * Facebook-login compatibility layer that keeps the existing package-manager
@@ -33,11 +36,12 @@ public final class IFacebookWebPackageManagerProxy extends IPackageManagerProxy 
     @Override
     public void injectHook() {
         // Install all original package-manager hooks first. @ScanClass also scans
-        // the base class, so overwrite only the two Facebook-login discovery hooks
+        // the base class, so overwrite only Facebook-login discovery hooks
         // after the base registrations are complete.
         super.injectHook();
         addMethodHook("resolveIntent", new ResolveIntentFacebookWebFirst());
         addMethodHook("resolveService", new ResolveServiceFacebookWebFirst());
+        addMethodHook("queryIntentActivities", new QueryFacebookCallbackActivities());
     }
 
     @ProxyMethod("resolveIntent")
@@ -73,6 +77,34 @@ public final class IFacebookWebPackageManagerProxy extends IPackageManagerProxy 
             }
 
             return resolveServiceLikeBase(who, method, args, intent);
+        }
+    }
+
+    /**
+     * Meta refuses Custom Tab login if Android reports any callback handler other
+     * than the app's own CustomTabActivity. The real host-side fbconnect fallback
+     * must therefore stay invisible to the guest query while the virtual
+     * CustomTabActivity remains visible.
+     */
+    @ProxyMethod("queryIntentActivities")
+    public static final class QueryFacebookCallbackActivities extends MethodHook {
+        @Override
+        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+            Intent intent = args != null && args.length > 0 && args[0] instanceof Intent
+                    ? (Intent) args[0] : null;
+            if (!isFacebookCustomTabCallbackIntent(intent)) {
+                return method.invoke(who, args);
+            }
+
+            String resolvedType = findFirstStringAfterIntent(args);
+            int flags = findQueryFlags(args);
+            List<ResolveInfo> resolves = BlackBoxCore.getBPackageManager()
+                    .queryIntentActivities(
+                            intent, flags, resolvedType, BActivityThread.getUserId());
+            if (ParceledListSliceCompat.isReturnParceledListSlice(method)) {
+                return ParceledListSliceCompat.create(resolves);
+            }
+            return resolves;
         }
     }
 
@@ -119,6 +151,45 @@ public final class IFacebookWebPackageManagerProxy extends IPackageManagerProxy 
         // and Wakizashi. Restrict the block to those official login providers.
         return "com.facebook.katana".equals(value)
                 || "com.facebook.wakizashi".equals(value);
+    }
+
+    private static boolean isFacebookCustomTabCallbackIntent(Intent intent) {
+        if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction())) {
+            return false;
+        }
+        Uri uri = intent.getData();
+        String virtualPackage = BActivityThread.getAppPackageName();
+        if (uri == null || virtualPackage == null || virtualPackage.trim().isEmpty()) {
+            return false;
+        }
+        return "fbconnect".equals(lower(uri.getScheme()))
+                && ("cct." + lower(virtualPackage)).equals(lower(uri.getHost()));
+    }
+
+    private static String findFirstStringAfterIntent(Object[] args) {
+        if (args == null) return null;
+        boolean sawIntent = false;
+        for (Object arg : args) {
+            if (arg instanceof Intent) {
+                sawIntent = true;
+            } else if (sawIntent && arg instanceof String) {
+                return (String) arg;
+            }
+        }
+        return null;
+    }
+
+    private static int findQueryFlags(Object[] args) {
+        if (args == null) return 0;
+        for (Object arg : args) {
+            if (arg instanceof Long) {
+                return ((Long) arg).intValue();
+            }
+            if (arg instanceof Integer) {
+                return (Integer) arg;
+            }
+        }
+        return 0;
     }
 
     private static boolean isFacebookNativeLoginIntent(Intent intent) {

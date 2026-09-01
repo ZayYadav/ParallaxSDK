@@ -44,15 +44,25 @@ public class IPermissionManagerProxy extends BinderInvocationStub {
     @Override
     protected void inject(Object baseInvocation, Object proxyInvocation) {
         replaceSystemService("permissionmgr");
-        BRActivityThread.getWithException()._set_sPermissionManager(proxyInvocation);
-        Object systemContext = BRActivityThread.get(BlackBoxCore.mainThread()).getSystemContext();
-        PackageManager packageManager = BRContextImpl.get(systemContext).mPackageManager();
-        if (packageManager != null) {
-            try {
+
+        // ActivityThread.sPermissionManager was removed/reshaped on Android 16
+        // builds. Failure to set this optional cache used to abort injectHook()
+        // before checkPermission was registered at all.
+        try {
+            BRActivityThread.getWithException()._set_sPermissionManager(proxyInvocation);
+        } catch (Throwable ignored) {
+        }
+
+        try {
+            Object systemContext = BRActivityThread.get(
+                    BlackBoxCore.mainThread()).getSystemContext();
+            PackageManager packageManager = BRContextImpl.get(systemContext).mPackageManager();
+            if (packageManager != null) {
                 Reflector.on("android.app.ApplicationPackageManager").field("mPermissionManager").set(packageManager, proxyInvocation);
-            } catch (Exception e) {
-                e.printStackTrace();
             }
+        } catch (Throwable ignored) {
+            // OEM frameworks may not expose this cache. The ServiceManager proxy
+            // installed above and the package/ActivityManager fallbacks remain active.
         }
     }
 

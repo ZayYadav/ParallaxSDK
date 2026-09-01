@@ -41,6 +41,7 @@ import top.niunaijun.blackbox.utils.Reflector;
 import top.niunaijun.blackbox.utils.Slog;
 import top.niunaijun.blackbox.utils.compat.BuildCompat;
 import top.niunaijun.blackbox.utils.compat.ParceledListSliceCompat;
+import top.niunaijun.blackbox.utils.compat.VirtualPermissionCompat;
 
 /**
  * Created by Milk on 3/30/21.
@@ -104,6 +105,23 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             ResolveInfo resolveInfo = BlackBoxCore.getBPackageManager().resolveIntent(intent, resolvedType, flags, BActivityThread.getUserId());
             if (resolveInfo != null) {
                 return resolveInfo;
+            }
+            return method.invoke(who, args);
+        }
+    }
+
+    @ProxyMethod("checkPermission")
+    public static class CheckPermission extends MethodHook {
+        @Override
+        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+            String permission = args != null && args.length > 0 && args[0] instanceof String
+                    ? (String) args[0] : null;
+            String requestedPackage = args != null && args.length > 1
+                    && args[1] instanceof String ? (String) args[1] : null;
+            if (requestedPackage != null
+                    && VirtualPermissionCompat.shouldGrantDeclaredNetworkPermission(
+                    permission, requestedPackage)) {
+                return PackageManager.PERMISSION_GRANTED;
             }
             return method.invoke(who, args);
         }

@@ -319,13 +319,10 @@ public final class VirtualOAuthBridgeActivity extends Activity {
         }
 
         Uri callbackUri = data == null ? null : data.getData();
-        if (resultCode == RESULT_OK && callbackUri != null) {
-            if (!matchesExpectedCallback(callbackUri)) {
-                facebookDiagnostic("callback_mismatch", resultCode, data, callbackUri, false);
-                failFacebookResult();
-                return;
-            }
-
+        // Some Chrome/Auth Tab builds return a valid redirect URI together with
+        // RESULT_CANCELED. The validated URI/state/target is authoritative for
+        // Facebook only, so accept that shape without weakening other providers.
+        if (callbackUri != null && matchesExpectedCallback(callbackUri)) {
             FacebookOAuthSessionStore.Claim claim =
                     FacebookOAuthSessionStore.claim(callbackUri);
             boolean alreadyDelivered = FacebookOAuthSessionStore.isCompleted(
@@ -355,6 +352,12 @@ public final class VirtualOAuthBridgeActivity extends Activity {
             } else {
                 failFacebookResult();
             }
+            return;
+        }
+
+        if (callbackUri != null) {
+            facebookDiagnostic("callback_mismatch", resultCode, data, callbackUri, false);
+            failFacebookResult();
             return;
         }
 

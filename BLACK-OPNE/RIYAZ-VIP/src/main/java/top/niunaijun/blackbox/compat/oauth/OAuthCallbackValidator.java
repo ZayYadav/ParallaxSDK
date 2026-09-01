@@ -44,7 +44,7 @@ public final class OAuthCallbackValidator {
                 // existing Twitter/X and other-provider validation semantics stay
                 // exactly query-only.
                 if ((callbackState == null || callbackState.isEmpty())
-                        && isFacebookAuthHost(authUri)) {
+                        && FacebookAuthHost.matches(authUri)) {
                     callbackState = getFragmentParameter(callback, "state");
                 }
 
@@ -63,14 +63,6 @@ public final class OAuthCallbackValidator {
             return false;
         }
         return true;
-    }
-
-    private static boolean isFacebookAuthHost(Uri authUri) {
-        if (authUri == null) {
-            return false;
-        }
-        String host = lower(authUri.getHost());
-        return "facebook.com".equals(host) || host.endsWith(".facebook.com");
     }
 
     /**
