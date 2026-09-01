@@ -158,11 +158,7 @@ public final class AuthTabCompat {
         }
         String host = uri.getHost();
         host = host == null ? "" : host.toLowerCase(Locale.US);
-        return "facebook.com".equals(host)
-                || "www.facebook.com".equals(host)
-                || "m.facebook.com".equals(host)
-                || "web.facebook.com".equals(host)
-                || host.endsWith(".facebook.com");
+        return "facebook.com".equals(host) || host.endsWith(".facebook.com");
     }
 
     private static String resolveDefaultBrowser(PackageManager pm, Uri authUri) {
