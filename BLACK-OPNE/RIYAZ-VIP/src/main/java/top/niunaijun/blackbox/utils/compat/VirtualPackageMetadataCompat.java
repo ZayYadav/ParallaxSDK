@@ -88,6 +88,18 @@ public final class VirtualPackageMetadataCompat {
 
         @Override
         public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+            if (method != null && "checkPermission".equals(method.getName())) {
+                String permission = args != null && args.length > 0
+                        && args[0] instanceof String ? (String) args[0] : null;
+                String requestedPackage = args != null && args.length > 1
+                        && args[1] instanceof String ? (String) args[1] : null;
+                if (requestedPackage != null
+                        && VirtualPermissionCompat.shouldGrantDeclaredNetworkPermission(
+                        permission, requestedPackage)) {
+                    return PackageManager.PERMISSION_GRANTED;
+                }
+            }
+
             final Object result;
             try {
                 result = method.invoke(delegate, args);

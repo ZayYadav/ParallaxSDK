@@ -65,6 +65,7 @@ import top.niunaijun.blackbox.utils.compat.ActivityManagerCompat;
 import top.niunaijun.blackbox.utils.compat.BuildCompat;
 import top.niunaijun.blackbox.utils.compat.ParceledListSliceCompat;
 import top.niunaijun.blackbox.utils.compat.TaskDescriptionCompat;
+import top.niunaijun.blackbox.utils.compat.VirtualPermissionCompat;
 
 import static android.content.Context.RECEIVER_EXPORTED;
 import static android.content.Context.RECEIVER_NOT_EXPORTED;
@@ -625,8 +626,11 @@ public class IActivityManagerProxy extends ClassInvocationStub {
     public static class checkPermission extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            MethodParameterUtils.replaceLastUid(args);
             String permission = (String) args[0];
+            if (VirtualPermissionCompat.shouldGrantDeclaredNetworkPermission(permission)) {
+                return PackageManager.PERMISSION_GRANTED;
+            }
+            MethodParameterUtils.replaceLastUid(args);
             if (permission.equals(Manifest.permission.ACCOUNT_MANAGER) || permission.equals(Manifest.permission.SEND_SMS)) {
                 return PackageManager.PERMISSION_GRANTED;
             }
