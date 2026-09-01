@@ -30,5 +30,26 @@
             android:excludeFromRecents="true"
             android:exported="false"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+
+        <!--
+             Meta's Custom Tab redirect uses fbconnect://cct.<package>. The host
+             receiver is deliberately broad at manifest level because the virtual
+             package is dynamic; FacebookOAuthCallbackActivity accepts a URI only
+             when it matches an active, state-validated Facebook OAuth session.
+        -->
+        <activity
+            android:name="top.niunaijun.blackbox.compat.oauth.FacebookOAuthCallbackActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="fbconnect" />
+            </intent-filter>
+        </activity>
     </application>
 </manifest>

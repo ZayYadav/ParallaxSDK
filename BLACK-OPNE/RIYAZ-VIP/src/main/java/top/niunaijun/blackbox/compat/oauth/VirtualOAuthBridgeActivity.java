@@ -4,10 +4,13 @@ import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.IntentSender;
+import android.content.pm.ActivityInfo;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.util.Log;
 
 import java.util.Locale;
@@ -39,7 +42,11 @@ public final class VirtualOAuthBridgeActivity extends Activity {
     private static final String AUTH_TAG = "ParallaxAuth";
     private static final int REQUEST_AUTH_TAB = 0x5041;
     private static final int REQUEST_EXTERNAL_AUTH = 0x5042;
+    private static final long FACEBOOK_FALLBACK_WAIT_MS = 1_500L;
+    private static final long FACEBOOK_HANDOFF_SETTLE_MS = 750L;
 
+    private static final String FACEBOOK_CUSTOM_TAB_ACTIVITY =
+            "com.facebook.CustomTabActivity";
     private static final String FACEBOOK_CUSTOM_TAB_MAIN_ACTIVITY =
             "com.facebook.CustomTabMainActivity";
     private static final String FACEBOOK_CUSTOM_TAB_REDIRECT_ACTION =
@@ -47,17 +54,21 @@ public final class VirtualOAuthBridgeActivity extends Activity {
     private static final String FACEBOOK_CUSTOM_TAB_EXTRA_URL =
             "CustomTabMainActivity.extra_url";
 
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
     private String virtualPackage;
     private Uri expectedRedirectUri;
     private Uri authUri;
     private String authProvider;
     private int userId = -1;
     private int resultBpid = -1;
+    private boolean facebookFlow;
     private boolean twitterFlow;
     private boolean legacyTwitterFlow;
     private boolean resultBridgeMode;
     private boolean externalAuthMode;
     private boolean manualResultRelay;
+    private boolean facebookResultPending;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -114,11 +125,13 @@ public final class VirtualOAuthBridgeActivity extends Activity {
         }
 
         expectedRedirectUri = redirectUri;
+        facebookFlow = isFacebookHost(authUri);
         twitterFlow = isTwitterHost(authUri);
         legacyTwitterFlow = twitterFlow && hasQueryParameter(authUri, "oauth_token");
         if (!redirectResolvesToVirtualPackage(redirectUri)
                 || !AuthTabCompat.isSupportedProvider(this, authProvider, authUri)) {
             diagnostic("setup_rejected", false, false, false, false, false);
+            facebookDiagnostic("setup_rejected", RESULT_CANCELED, null, null, false);
             if (resultBridgeMode) {
                 completeBridgeResult(RESULT_CANCELED, null);
             } else {
@@ -129,11 +142,18 @@ public final class VirtualOAuthBridgeActivity extends Activity {
 
         if (resultBridgeMode && !validResultTarget(launchIntent)) {
             diagnostic("result_bridge_target_rejected", false, false, false, false, false);
+            facebookDiagnostic(
+                    "result_bridge_target_rejected", RESULT_CANCELED, null, null, false);
             finish();
             return;
         }
 
         if (savedInstanceState == null) {
+            if (facebookFlow) {
+                FacebookOAuthSessionStore.begin(
+                        authUri, expectedRedirectUri, virtualPackage, userId);
+                facebookDiagnostic("session_started", RESULT_CANCELED, null, null, false);
+            }
             launchAuthTab(authUri, lower(expectedRedirectUri.getScheme()), authProvider);
         }
     }
@@ -190,6 +210,10 @@ public final class VirtualOAuthBridgeActivity extends Activity {
 
     private void launchAuthTab(Uri authUri, String redirectScheme, String provider) {
         try {
+            // This is the wire contract produced by AuthTabIntent.Builder().build()
+            // followed by launch(..., redirectScheme). Keeping it dependency-free
+            // avoids changing the SDK's AndroidX surface while remaining compatible
+            // with browsers implementing AndroidX Browser Auth Tab 1.9+.
             Intent authIntent = new Intent(Intent.ACTION_VIEW, authUri);
             authIntent.addCategory(Intent.CATEGORY_BROWSABLE);
             authIntent.setPackage(provider);
@@ -203,6 +227,10 @@ public final class VirtualOAuthBridgeActivity extends Activity {
             startActivityForResult(authIntent, REQUEST_AUTH_TAB);
         } catch (Throwable ignored) {
             diagnostic("launch_failed", false, false, false, false, false);
+            facebookDiagnostic("launch_failed", RESULT_CANCELED, null, null, false);
+            if (facebookFlow) {
+                FacebookOAuthSessionStore.clear(virtualPackage, userId);
+            }
             if (resultBridgeMode) {
                 completeBridgeResult(RESULT_CANCELED, null);
             } else {
@@ -224,6 +252,16 @@ public final class VirtualOAuthBridgeActivity extends Activity {
         if (requestCode != REQUEST_AUTH_TAB) {
             return;
         }
+
+        // Facebook has an additional exported fbconnect receiver fallback. Handle
+        // its result before the generic browser path so a browser-side RESULT_CANCELED
+        // cannot race and overwrite a callback already delivered by that receiver.
+        if (facebookFlow) {
+            handleFacebookAuthResult(resultCode, data);
+            return;
+        }
+
+        // Keep the established Twitter/X and other-provider result path unchanged.
         if (resultCode != RESULT_OK || data == null || data.getData() == null) {
             diagnostic("auth_not_completed", false, false, false, false, false);
             if (resultBridgeMode) {
@@ -273,6 +311,99 @@ public final class VirtualOAuthBridgeActivity extends Activity {
         diagnostic(dispatched ? "callback_dispatched" : "callback_unresolved",
                 hasToken, hasVerifier, hasCode, denied, dispatched);
         finish();
+    }
+
+    private void handleFacebookAuthResult(int resultCode, Intent data) {
+        if (facebookResultPending || isFinishing()) {
+            return;
+        }
+
+        Uri callbackUri = data == null ? null : data.getData();
+        if (resultCode == RESULT_OK && callbackUri != null) {
+            if (!matchesExpectedCallback(callbackUri)) {
+                facebookDiagnostic("callback_mismatch", resultCode, data, callbackUri, false);
+                failFacebookResult();
+                return;
+            }
+
+            FacebookOAuthSessionStore.Claim claim =
+                    FacebookOAuthSessionStore.claim(callbackUri);
+            boolean alreadyDelivered = FacebookOAuthSessionStore.isCompleted(
+                    virtualPackage, userId);
+            boolean delivered = alreadyDelivered;
+
+            if (!delivered && claim != null
+                    && virtualPackage.equals(claim.virtualPackage)
+                    && userId == claim.userId) {
+                delivered = dispatchFacebookCallback(
+                        claim.virtualPackage, claim.userId, callbackUri);
+                if (delivered) {
+                    FacebookOAuthSessionStore.complete(claim.generation);
+                } else {
+                    FacebookOAuthSessionStore.release(claim.generation);
+                }
+            }
+
+            facebookDiagnostic(
+                    delivered ? "callback_dispatched" : "callback_delivery_failed",
+                    resultCode,
+                    data,
+                    callbackUri,
+                    delivered);
+            if (delivered) {
+                settleFacebookSuccess();
+            } else {
+                failFacebookResult();
+            }
+            return;
+        }
+
+        // AndroidX Auth Tab reports RESULT_CANCELED when the expected redirect was
+        // not captured by the browser. Give the host fbconnect receiver a short,
+        // bounded window to validate and relay that callback before propagating a
+        // cancellation to the virtual Facebook SDK.
+        facebookDiagnostic("auth_not_completed", resultCode, data, callbackUri, false);
+        facebookResultPending = true;
+        mainHandler.postDelayed(() -> {
+            facebookResultPending = false;
+            if (isFinishing() || isDestroyed()) {
+                return;
+            }
+            boolean delivered = FacebookOAuthSessionStore.isCompleted(
+                    virtualPackage, userId);
+            facebookDiagnostic(
+                    delivered ? "fallback_completed" : "fallback_timeout",
+                    resultCode,
+                    data,
+                    callbackUri,
+                    delivered);
+            if (delivered) {
+                settleFacebookSuccess();
+            } else {
+                failFacebookResult();
+            }
+        }, FACEBOOK_FALLBACK_WAIT_MS);
+    }
+
+    private void settleFacebookSuccess() {
+        facebookResultPending = true;
+        mainHandler.postDelayed(() -> {
+            facebookResultPending = false;
+            FacebookOAuthSessionStore.clear(virtualPackage, userId);
+            if (!isFinishing() && !isDestroyed()) {
+                finish();
+            }
+        }, FACEBOOK_HANDOFF_SETTLE_MS);
+    }
+
+    private void failFacebookResult() {
+        facebookResultPending = false;
+        FacebookOAuthSessionStore.clear(virtualPackage, userId);
+        if (resultBridgeMode) {
+            completeBridgeResult(RESULT_CANCELED, null);
+        } else {
+            finish();
+        }
     }
 
     /**
@@ -384,7 +515,8 @@ public final class VirtualOAuthBridgeActivity extends Activity {
     }
 
     private boolean dispatchToVirtualPackage(Uri callbackUri) {
-        if (isFacebookHost(authUri) && dispatchFacebookCustomTabResult(callbackUri)) {
+        if (isFacebookHost(authUri)
+                && dispatchFacebookCallback(virtualPackage, userId, callbackUri)) {
             return true;
         }
 
@@ -418,53 +550,70 @@ public final class VirtualOAuthBridgeActivity extends Activity {
     }
 
     /**
-     * Meta's Facebook SDK does not consume the browser callback directly in
-     * FacebookActivity. Its expected Custom Tab chain is:
-     *
-     *   redirect URI -> CustomTabActivity -> existing CustomTabMainActivity
-     *   -> protocol result -> FacebookActivity
-     *
-     * The generic virtual redirect adds NEW_TASK and inserts an extra proxy
-     * activity, which can resume CustomTabMainActivity without delivering the
-     * redirect Intent. In that case Meta treats the tab as closed/cancelled.
-     *
-     * Reproduce the exact SDK contract here: deliver the callback URL to the
-     * existing CustomTabMainActivity with its stable redirect action/extra and
-     * CLEAR_TOP|SINGLE_TOP. If a different/older Facebook SDK does not expose
-     * that activity, return false so the generic callback route remains a safe
-     * fallback.
+     * Re-enters Meta's own callback chain. Prefer CustomTabActivity because its
+     * implementation is responsible for converting the browser redirect into the
+     * CustomTabMainActivity redirect action. If that component is unavailable in
+     * an older SDK, reproduce the same stable action/extra directly.
      */
-    private boolean dispatchFacebookCustomTabResult(Uri callbackUri) {
-        if (callbackUri == null || virtualPackage == null || userId < 0) {
+    static boolean dispatchFacebookCallback(
+            String targetPackage, int targetUserId, Uri callbackUri) {
+        if (callbackUri == null || targetPackage == null
+                || targetPackage.trim().isEmpty() || targetUserId < 0) {
+            return false;
+        }
+
+        if (virtualActivityExists(
+                targetPackage, FACEBOOK_CUSTOM_TAB_ACTIVITY, targetUserId)) {
+            try {
+                Intent callback = new Intent(Intent.ACTION_VIEW, callbackUri);
+                callback.setComponent(new ComponentName(
+                        targetPackage, FACEBOOK_CUSTOM_TAB_ACTIVITY));
+                callback.addCategory(Intent.CATEGORY_DEFAULT);
+                callback.addCategory(Intent.CATEGORY_BROWSABLE);
+                callback.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                BActivityManager.get().startActivity(callback, targetUserId);
+                Log.i(TAG, "facebook stage=custom_tab_activity_handoff delivered=true");
+                return true;
+            } catch (Throwable ignored) {
+                Log.i(TAG, "facebook stage=custom_tab_activity_handoff delivered=false");
+            }
+        } else {
+            Log.i(TAG, "facebook stage=custom_tab_activity_unavailable delivered=false");
+        }
+
+        if (!virtualActivityExists(
+                targetPackage, FACEBOOK_CUSTOM_TAB_MAIN_ACTIVITY, targetUserId)) {
+            Log.i(TAG, "facebook stage=custom_tab_main_unavailable delivered=false");
             return false;
         }
 
         try {
             Intent callback = new Intent();
             callback.setComponent(new ComponentName(
-                    virtualPackage, FACEBOOK_CUSTOM_TAB_MAIN_ACTIVITY));
+                    targetPackage, FACEBOOK_CUSTOM_TAB_MAIN_ACTIVITY));
             callback.setAction(FACEBOOK_CUSTOM_TAB_REDIRECT_ACTION);
             callback.putExtra(FACEBOOK_CUSTOM_TAB_EXTRA_URL, callbackUri.toString());
             callback.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP
                     | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-
-            ResolveInfo resolved = BPackageManager.get().resolveActivity(
-                    callback,
-                    FileUtils.FileMode.MODE_IWUSR,
-                    null,
-                    userId);
-            if (resolved == null || resolved.activityInfo == null
-                    || !virtualPackage.equals(resolved.activityInfo.packageName)
-                    || !FACEBOOK_CUSTOM_TAB_MAIN_ACTIVITY.equals(resolved.activityInfo.name)) {
-                Log.i(TAG, "facebook stage=custom_tab_main_unavailable delivered=false");
-                return false;
-            }
-
-            BActivityManager.get().startActivity(callback, userId);
+            BActivityManager.get().startActivity(callback, targetUserId);
             Log.i(TAG, "facebook stage=custom_tab_main_handoff delivered=true");
             return true;
         } catch (Throwable ignored) {
             Log.i(TAG, "facebook stage=custom_tab_main_handoff delivered=false");
+            return false;
+        }
+    }
+
+    private static boolean virtualActivityExists(
+            String packageName, String className, int targetUserId) {
+        try {
+            ActivityInfo info = BPackageManager.get().getActivityInfo(
+                    new ComponentName(packageName, className), 0, targetUserId);
+            return info != null
+                    && packageName.equals(info.packageName)
+                    && className.equals(info.name);
+        } catch (Throwable ignored) {
             return false;
         }
     }
@@ -504,6 +653,40 @@ public final class VirtualOAuthBridgeActivity extends Activity {
                 + " code=" + hasCode
                 + " denied=" + denied
                 + " dispatched=" + dispatched);
+    }
+
+    /** Logs Facebook lifecycle/result shape only; never URL, state, code or token values. */
+    private void facebookDiagnostic(String stage,
+                                    int resultCode,
+                                    Intent data,
+                                    Uri callbackUri,
+                                    boolean delivered) {
+        if (!facebookFlow) {
+            return;
+        }
+        boolean uriPresent = callbackUri != null;
+        boolean schemeMatch = uriPresent && expectedRedirectUri != null
+                && lower(expectedRedirectUri.getScheme())
+                .equals(lower(callbackUri.getScheme()));
+        boolean authorityMatch = uriPresent && expectedRedirectUri != null
+                && lower(expectedRedirectUri.getEncodedAuthority())
+                .equals(lower(callbackUri.getEncodedAuthority()));
+        boolean validated = uriPresent
+                && OAuthCallbackValidator.matches(authUri, expectedRedirectUri, callbackUri);
+        boolean virtualTarget = validated && redirectResolvesToVirtualPackage(callbackUri);
+        boolean fallbackCompleted = FacebookOAuthSessionStore.isCompleted(
+                virtualPackage, userId);
+
+        Log.i(TAG, "facebook stage=" + stage
+                + " result=" + resultCode
+                + " data=" + (data != null)
+                + " uri=" + uriPresent
+                + " scheme_match=" + schemeMatch
+                + " authority_match=" + authorityMatch
+                + " validated=" + validated
+                + " virtual_target=" + virtualTarget
+                + " fallback_completed=" + fallbackCompleted
+                + " delivered=" + delivered);
     }
 
     private static void authDiagnostic(String stage, String provider, boolean delivered) {

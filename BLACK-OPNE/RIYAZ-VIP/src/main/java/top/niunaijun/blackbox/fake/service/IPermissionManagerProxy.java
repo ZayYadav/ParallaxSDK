@@ -88,7 +88,8 @@ public class IPermissionManagerProxy extends BinderInvocationStub {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             String permission = findPermission(args);
-            if (isNetworkPermission(permission) && virtualPackageDeclares(permission)) {
+            if (isNetworkPermission(permission)
+                    && virtualPackageDeclares(permission, args)) {
                 return PackageManager.PERMISSION_GRANTED;
             }
             return method.invoke(who, args);
@@ -113,13 +114,55 @@ public class IPermissionManagerProxy extends BinderInvocationStub {
                 || Manifest.permission.ACCESS_WIFI_STATE.equals(permission);
     }
 
-    private static boolean virtualPackageDeclares(String permission) {
+    private static boolean virtualPackageDeclares(String permission, Object[] args) {
         if (permission == null) return false;
+
+        // Normal path once the guest ActivityThread is bound.
+        String currentPackage = null;
         try {
-            String pkg = BActivityThread.getAppPackageName();
-            if (pkg == null || pkg.length() == 0) return false;
+            currentPackage = BActivityThread.getAppPackageName();
+        } catch (Throwable ignored) {
+        }
+        if (packageDeclares(currentPackage, permission)) {
+            return true;
+        }
+
+        // Android 16 can issue an early PermissionManager check before
+        // getAppPackageName() is fully available. In that case use only a String
+        // argument that resolves to an installed virtual package and declares the
+        // exact requested normal permission. No package/permission is fabricated.
+        if (args != null) {
+            for (Object arg : args) {
+                if (!(arg instanceof String)) continue;
+                String candidate = (String) arg;
+                if (candidate.equals(permission)
+                        || candidate.startsWith("android.permission.")) {
+                    continue;
+                }
+                if (packageDeclares(candidate, permission)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean packageDeclares(String packageName, String permission) {
+        if (packageName == null || packageName.trim().isEmpty() || permission == null) {
+            return false;
+        }
+        int userId = 0;
+        try {
+            int currentUserId = BActivityThread.getUserId();
+            if (currentUserId >= 0) {
+                userId = currentUserId;
+            }
+        } catch (Throwable ignored) {
+            // Early process bootstrap: virtual user 0 is the established default.
+        }
+        try {
             PackageInfo info = BPackageManager.get().getPackageInfo(
-                    pkg, PackageManager.GET_PERMISSIONS, BActivityThread.getUserId());
+                    packageName, PackageManager.GET_PERMISSIONS, userId);
             if (info == null || info.requestedPermissions == null) return false;
             for (String requested : info.requestedPermissions) {
                 if (permission.equals(requested)) {
