@@ -48,6 +48,7 @@ import top.niunaijun.blackbox.fake.frameworks.BPackageManager;
 import top.niunaijun.blackbox.fake.hook.ClassInvocationStub;
 import top.niunaijun.blackbox.fake.hook.MethodHook;
 import top.niunaijun.blackbox.fake.hook.ProxyMethod;
+import top.niunaijun.blackbox.fake.hook.ProxyMethods;
 import top.niunaijun.blackbox.fake.hook.ScanClass;
 import top.niunaijun.blackbox.fake.service.base.PkgMethodProxy;
 import top.niunaijun.blackbox.fake.service.context.providers.ContentProviderStub;
@@ -622,19 +623,39 @@ public class IActivityManagerProxy extends ClassInvocationStub {
         }
     }
 
-    @ProxyMethod("checkPermission")
+    /**
+     * Android 16 routes Context permission checks through
+     * IActivityManager.checkPermissionForDevice instead of checkPermission.
+     * Hook both names so install-time network permissions declared by the guest
+     * remain visible to SDKs without granting any dangerous/runtime permission.
+     */
+    @ProxyMethods({"checkPermission", "checkPermissionForDevice"})
     public static class checkPermission extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            String permission = (String) args[0];
+            String permission = args != null && args.length > 0 && args[0] instanceof String
+                    ? (String) args[0] : null;
             if (VirtualPermissionCompat.shouldGrantDeclaredNetworkPermission(permission)) {
                 return PackageManager.PERMISSION_GRANTED;
             }
-            MethodParameterUtils.replaceLastUid(args);
-            if (permission.equals(Manifest.permission.ACCOUNT_MANAGER) || permission.equals(Manifest.permission.SEND_SMS)) {
+            replacePermissionCheckUid(args);
+            if (Manifest.permission.ACCOUNT_MANAGER.equals(permission)
+                    || Manifest.permission.SEND_SMS.equals(permission)) {
                 return PackageManager.PERMISSION_GRANTED;
             }
             return method.invoke(who, args);
+        }
+
+        private static void replacePermissionCheckUid(Object[] args) {
+            // Both signatures place uid at index 2. On Android 16 the last int is
+            // deviceId, so replaceLastUid() would target the wrong argument.
+            if (args == null || args.length <= 2 || !(args[2] instanceof Integer)) {
+                return;
+            }
+            int uid = (Integer) args[2];
+            if (uid == BActivityThread.getBUid()) {
+                args[2] = BlackBoxCore.getHostUid();
+            }
         }
     }
 
