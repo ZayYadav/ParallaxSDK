@@ -150,14 +150,16 @@ public class ActivityStack {
         if (taskRecord == null || taskRecord.needNewTask()) {
             return startActivityInNewTaskLocked(userId, intent, activityInfo, resultTo, launchModeFlags);
         }
-        // 移至前台
-        mAms.moveTaskToFront(taskRecord.id, 0);
+
         boolean notStartToFront = false;
         if (clearTop || singleTop || clearTask) {
             notStartToFront = true;
         }
         boolean startTaskToFront = !notStartToFront && ComponentUtils.intentFilterEquals(taskRecord.rootIntent, intent) && taskRecord.rootIntent.getFlags() == intent.getFlags();
-        if (startTaskToFront) return 0;
+        if (startTaskToFront) {
+            mAms.moveTaskToFront(taskRecord.id, 0);
+            return 0;
+        }
         ActivityRecord topActivityRecord = taskRecord.getTopActivityRecord();
         ActivityRecord targetActivityRecord = findActivityRecordByComponentName(userId, ComponentUtils.toComponentName(activityInfo));
         ActivityRecord newIntentRecord = null;
@@ -235,19 +237,21 @@ public class ActivityStack {
             }
         }
 
-        // A reused Activity must receive onNewIntent before finishing the records
-        // above it. Calling finish first can synchronously resume the reused Activity
-        // and make lifecycle-sensitive flows (for example OAuth Custom Tabs) treat
-        // the navigation as a cancellation before the redirect Intent arrives.
+        // Queue onNewIntent before any operation that can resume the reused
+        // Activity. BActivityThread posts the actual delivery to the guest main
+        // looper, so moving the task to front first lets lifecycle-sensitive
+        // activities observe onResume() before the redirect intent is queued.
         if (newIntentRecord != null && !(clearTask && newTask)) {
             deliverNewIntentLocked(newIntentRecord, intent);
             finishAllActivity(userId);
+            mAms.moveTaskToFront(taskRecord.id, 0);
             return 0;
         }
 
         finishAllActivity(userId);
 
         if (ignore) {
+            mAms.moveTaskToFront(taskRecord.id, 0);
             return 0;
         }
 
@@ -262,6 +266,7 @@ public class ActivityStack {
                 resultTo = top.token;
             }
         }
+        mAms.moveTaskToFront(taskRecord.id, 0);
         return startActivityInSourceTask(intent,resolvedType, resultTo, resultWho, requestCode, flags, options, userId, topActivityRecord, activityInfo, launchModeFlags);
     }
 
