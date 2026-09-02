@@ -51,6 +51,7 @@ public class RNative {
             long serverTime);
     public static native boolean isSdkSessionValid(long currentTime);
     public static native void clearSdkSession();
+    public static native String getSdkPanelEndpoint();
 
     @Keep
     private static boolean verifyServerSignature(String canonical, String signatureBase64) {

@@ -45,8 +45,10 @@ Security decisions no longer depend on `strlen` or another hookable C helper.
 
 4. Put the printed `PANEL_DATA_KEY` and `API_V3_KEYS` entries in the private
    `sdk-panel-config.php`. Never commit or upload private keys to a public path.
-5. Confirm the public values printed by the tool match the four `SDK_PANEL_*`
-   BuildConfig values in `BLACK-OPNE/RIYAZ-VIP/build.gradle`.
+5. Confirm the public key id and public keys printed by the tool match the three
+   `SDK_PANEL_*` BuildConfig trust anchors in `BLACK-OPNE/RIYAZ-VIP/build.gradle`.
+   The exact HTTPS endpoint is masked in native code and independently
+   integrity-checked by the Java/Kotlin activation client.
 6. Upload the panel code, then run `php tools/check-schema.php`.
 7. Sign in, open Settings, and enable MFA. Save the recovery codes offline.
 8. Open `security_dashboard.php` and confirm API v3 and signing keys are ready.
