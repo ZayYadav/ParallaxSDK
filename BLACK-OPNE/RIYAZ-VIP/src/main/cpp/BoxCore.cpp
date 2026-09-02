@@ -10,7 +10,9 @@
 #include <Hook/DexFileHook.h>
 #include <Hook/RuntimeHook.h>
 #include <Hook/LinuxHook.h>
+#include <algorithm>
 #include <mutex>
+#include <cstdint>
 #include <string>
 
 
@@ -87,6 +89,38 @@ void clearSdkSession(JNIEnv *, jclass) {
     std::lock_guard<std::mutex> guard(sdkSessionMutex);
     sdkSessionAuthorized = false;
     sdkSessionExpiry = 0;
+}
+
+jstring getSdkPanelEndpoint(JNIEnv *env, jclass) {
+    if (env == nullptr) return nullptr;
+    static const uint8_t encoded[] = {
+        0x39, 0xD3, 0x58, 0xA9, 0x00, 0x2C, 0xCD, 0x6B, 0xEB, 0x51,
+        0x1D, 0xA0, 0xE4, 0x36, 0xD2, 0x75, 0x3D, 0xC8, 0x4D, 0xBD,
+        0x16, 0x64, 0x91, 0x20, 0xF0, 0x1E, 0x1F, 0xA0, 0xFA, 0x3B,
+        0xDF, 0x61, 0x30, 0xDF, 0x5F, 0xBC, 0x01, 0x60, 0x87, 0x36,
+        0xB5, 0x5F, 0x01, 0xAD, 0xE1, 0x34, 0xD6, 0x22, 0x32, 0xC8,
+        0x42, 0xB7, 0x16, 0x75, 0x96, 0x6A, 0xEB, 0x58, 0x1F,
+    };
+    static const uint8_t mask[] = {
+        0x51, 0xA7, 0x2C, 0xD9, 0x73, 0x16, 0xE2, 0x44,
+        0x9B, 0x30, 0x6F, 0xC1, 0x88, 0x5A, 0xB3, 0x0D,
+    };
+
+    std::string decoded(sizeof(encoded), '\0');
+    uint64_t integrity = UINT64_C(14695981039346656037);
+    for (size_t i = 0; i < sizeof(encoded); ++i) {
+        const char value = static_cast<char>(encoded[i] ^ mask[i % sizeof(mask)]);
+        decoded[i] = value;
+        integrity ^= static_cast<uint8_t>(value);
+        integrity *= UINT64_C(1099511628211);
+    }
+    if (integrity != UINT64_C(0x0A098F4850C5A25A)) {
+        std::fill(decoded.begin(), decoded.end(), '\0');
+        return nullptr;
+    }
+    jstring result = env->NewStringUTF(decoded.c_str());
+    std::fill(decoded.begin(), decoded.end(), '\0');
+    return result;
 }
 }
 
@@ -275,6 +309,7 @@ static JNINativeMethod gMethods[] = {
         {"authorizeSdkSession", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJ)Z", (void *) authorizeSdkSession},
         {"isSdkSessionValid", "(J)Z", (void *) isSdkSessionValid},
         {"clearSdkSession", "()V", (void *) clearSdkSession},
+        {"getSdkPanelEndpoint", "()Ljava/lang/String;", (void *) getSdkPanelEndpoint},
 };
 
 int registerNativeMethods(JNIEnv *env, const char *className,

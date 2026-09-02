@@ -22,8 +22,6 @@ class nk {
         var Msg: String = "Ready"
 
         const val PREFERENCE_NAME: String = "license_cache"
-        private const val ActivationUrl: String = "https://parallaxloadersdk.parallaxserver.online/connect.php"
-
         @JvmStatic
         fun getActivatedSdk(): Boolean {
             val context = BlackBoxCore.getContext() ?: return false
@@ -131,7 +129,7 @@ class nk {
 
         @JvmStatic
         fun 获取接口地址(): String {
-            return "https://parallaxloadersdk.parallaxserver.online/connect.php"
+            return RNative.getSdkPanelEndpoint()
         }
         
         @JvmStatic

@@ -9,6 +9,7 @@ import android.util.Base64
 import org.json.JSONObject
 import org.lsposed.lsparanoid.Obfuscate
 import top.niunaijun.blackbox.BuildConfig
+import top.niunaijun.blackbox.core.RNative
 import java.io.ByteArrayOutputStream
 import java.net.URL
 import java.nio.charset.StandardCharsets
@@ -42,8 +43,13 @@ internal class SecureSdkApiClient(private val context: Context) {
     fun activate(userKey: String, packageName: String, appName: String, deviceId: String): JSONObject {
         require(userKey.isNotBlank()) { "Activation key is required" }
         require(packageName.matches(Regex("^[A-Za-z][A-Za-z0-9_.]{2,190}$"))) { "Invalid package name" }
-        val endpoint = URL(BuildConfig.SDK_PANEL_ENDPOINT)
-        require(endpoint.protocol == "https" && endpoint.host == PANEL_HOST && endpoint.path == "/connect.php") {
+        val endpointText = RNative.getSdkPanelEndpoint()
+        val endpointDigest = sha256(endpointText.toByteArray(StandardCharsets.UTF_8))
+        require(MessageDigest.isEqual(endpointDigest, ENDPOINT_SHA256)) {
+            "SDK panel configuration integrity failed"
+        }
+        val endpoint = URL(endpointText)
+        require(endpoint.protocol == "https" && endpoint.port == -1 && endpoint.query == null && endpoint.ref == null) {
             "Untrusted SDK panel endpoint"
         }
 
@@ -285,7 +291,12 @@ internal class SecureSdkApiClient(private val context: Context) {
 
     private companion object {
         const val SDK_VERSION = 3
-        const val PANEL_HOST = "parallaxloadersdk.parallaxserver.online"
+        val ENDPOINT_SHA256 = byteArrayOf(
+            0x55, 0xB2.toByte(), 0xFB.toByte(), 0xC9.toByte(), 0x01, 0x80.toByte(), 0x02, 0x7D,
+            0xF8.toByte(), 0x0F, 0x3A, 0x31, 0xE7.toByte(), 0xBA.toByte(), 0xD4.toByte(), 0x1C,
+            0x2A, 0xBC.toByte(), 0x63, 0xA8.toByte(), 0xB4.toByte(), 0x99.toByte(), 0x8E.toByte(), 0x41,
+            0x6A, 0xF1.toByte(), 0x1C, 0x02, 0xB7.toByte(), 0x29, 0x45, 0x6A,
+        )
         const val DEVICE_KEY_ALIAS = "parallax_sdk_device_proof_v3"
         const val CONNECT_TIMEOUT_MS = 15_000
         const val READ_TIMEOUT_MS = 20_000
