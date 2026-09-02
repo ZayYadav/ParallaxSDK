@@ -1,56 +1,36 @@
 package android.MetaCore
 
 import android.MetaCore.IRemoteManager
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
-import android.content.SharedPreferences
-import android.content.pm.ApplicationInfo
-import android.content.pm.PackageManager
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.os.Build
-import android.os.RemoteException
 import androidx.core.app.NotificationCompat
-import android.util.Log
-import top.niunaijun.blackbox.BlackBoxCore
-import java.io.File
-import top.niunaijun.blackbox.core.env.BEnvironment
 import org.json.JSONObject
+import org.lsposed.lsparanoid.Obfuscate
+import top.niunaijun.blackbox.BlackBoxCore
 import top.niunaijun.blackbox.core.RNative
-import java.io.BufferedReader
-import java.io.InputStream
-import java.io.InputStreamReader
-import java.io.OutputStream
-import java.net.HttpURLConnection
-import java.net.SocketTimeoutException
+import top.niunaijun.blackbox.core.env.BEnvironment
+import java.io.File
 import java.net.URL
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
-import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
-import org.lsposed.lsparanoid.Obfuscate
 
 @Obfuscate
 class RemoteManager private constructor() : IRemoteManager.Stub() {
 
     companion object {
-    
-         @JvmField
-         val JUNIT_JAR = File(BEnvironment.getCacheDir(), "junit.apk")
-         
-         @JvmField
-         val EMPTY_JAR = File(BEnvironment.getCacheDir(), "empty.apk")
-        
-        private const val TAG = "MetaActivationManager"
-        private const val CT = 45000
-        private const val RT = 60000
+        @JvmField
+        val JUNIT_JAR = File(BEnvironment.getCacheDir(), "junit.apk")
+
+        @JvmField
+        val EMPTY_JAR = File(BEnvironment.getCacheDir(), "empty.apk")
+
         private const val MAX_RETRIES = 3
         private val exe: ExecutorService = Executors.newSingleThreadExecutor()
         private val renewalExecutor = Executors.newSingleThreadScheduledExecutor()
@@ -79,10 +59,6 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
         }
     }
 
-    private fun iv(u: String?): Boolean {
-        return u != null && u.startsWith("https://") && !u.contains(" ") && !u.contains("\"")
-    }
-
     override fun activateSdk(userkey: String?) {
         renewalTask?.cancel(false)
         val normalizedKey = userkey?.trim().orEmpty()
@@ -90,6 +66,7 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
             nk.clearActivation("Activation key is required")
             return
         }
+
         exe.execute {
             val context = BlackBoxCore.getContext()
             val packageName = BlackBoxCore.getHostPkg().orEmpty()
@@ -97,6 +74,7 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
                 nk.clearActivation("Host package is unavailable")
                 return@execute
             }
+
             val client = SecureSdkApiClient(context)
             var lastFailure = "Secure activation failed"
             for (attempt in 0..MAX_RETRIES) {
@@ -125,7 +103,8 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
                     }
                 }
             }
-            showNotificationSafe("SDK ACTIVATE FAILED", lastFailure.take(96))
+            // Do not expose panel/security failure details in notifications.
+            showNotificationSafe("SDK ACTIVATE FAILED", "SDK NOT ACTIVATED")
         }
     }
 
@@ -138,7 +117,7 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
             sHideRoot = false
             sHideXposed = false
             if (serverMode == "maintenance" || serverMode == "offline") {
-                showServerNotification("SERVER ${serverMode.uppercase(Locale.ROOT)}", message, "warning")
+                showServerNotification("PARALLAX SDK", "SDK NOT ACTIVATED", "warning")
             }
             return
         }
@@ -149,15 +128,22 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
             nk.clearActivation("Invalid activation lease")
             return
         }
+
         val packageName = context.packageName
         val signingSha256 = SecureSdkApiClient(context).appSigningCertificateSha256(packageName)
+        val authorizedPackage = data.optString("authorized_package", "")
+        val authorizedSigning = data.optString("authorized_signing_sha256", "")
+
         val nativeAuthorized = RNative.authorizeSdkSession(
+            context,
             packageName,
             signingSha256,
-            data.optString("authorized_package", ""),
-            data.optString("authorized_signing_sha256", ""),
+            authorizedPackage,
+            authorizedSigning,
             data.optString("_server_response_canonical", ""),
             data.optString("_server_response_signature", ""),
+            data.optString("_server_identity_canonical", ""),
+            data.optString("_server_identity_signature", ""),
             leaseExpiresAt,
             serverTime,
         )
@@ -165,6 +151,14 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
             nk.clearActivation("Native authorization cross-check failed")
             return
         }
+        // Native session validation is used by nk.getActivatedSdk() even when a
+        // legacy license has java_native_auth disabled, so never persist a
+        // successful lease unless the native identity/session state is valid.
+        if (!RNative.isSdkSessionValid(serverTime)) {
+            nk.clearActivation("Native activation session was not established")
+            return
+        }
+
         val expiry = data.optString("expiry", "")
         context.getSharedPreferences(nk.PREFERENCE_NAME, Context.MODE_PRIVATE).edit()
             .putBoolean("activated", true)
@@ -172,17 +166,25 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
             .putLong("lease_expires_at", leaseExpiresAt)
             .putLong("verified_server_time", serverTime)
             .putLong("verified_elapsed_realtime", android.os.SystemClock.elapsedRealtime())
+            .putString("authorized_package", authorizedPackage)
+            .putString("authorized_signing_sha256", authorizedSigning)
+            .putString("package_policy", data.optString("package_policy", ""))
+            .putString("signing_policy", data.optString("signing_policy", ""))
+            .putString("device_policy", data.optString("device_policy", ""))
             .putInt("toggle_expiry", data.optInt("toggle_expiry", 0))
             .putInt("toggle_feature1", data.optInt("feature1", 0))
             .putInt("toggle_feature2", data.optInt("feature2", 0))
             .apply()
+
         nk.setHidden("online")
         nk.Msg = "SDK activated - secure lease verified"
         renewalTask?.cancel(false)
         val renewAfter = maxOf(60L, leaseExpiresAt - serverTime - 60L)
         renewalTask = renewalExecutor.schedule({ activateSdk(licenseKey) }, renewAfter, TimeUnit.SECONDS)
+
         isDaemon(data.optInt("feature1", 0) == 1)
         ishideRoot(data.optInt("feature2", 0) == 1)
+
         if (data.has("server_notification")) {
             val notification = data.optJSONObject("server_notification")
             if (notification?.optInt("enabled", 0) == 1) {
@@ -203,423 +205,12 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
             || throwable is javax.net.ssl.SSLException
     }
 
-    /* Legacy v1 plaintext activation is intentionally excluded from bytecode.
-        val bc: String
-        try {
-            val nc = Class.forName("android.MetaCore.nk")
-            val m = nc.getMethod("getUrlHidden")
-            bc = m.invoke(null) as String
-        } catch (e: Exception) {
-            e.printStackTrace()
-            nk.Msg = "Error: Failed to get API URL - ${e.message}"
-            return
-        }
-
-        if (!iv(bc)) {
-            nk.Msg = "Error: Invalid API URL format"
-            return
-        }
-
-        if (userkey == null || userkey.trim().isEmpty()) {
-            nk.Msg = "Error: User key cannot be empty"
-            return
-        }
-
-        exe.execute {
-            var retryCount = 0
-            var success = false
-            var lastError: String? = null
-            
-            while (retryCount <= MAX_RETRIES && !success) {
-                var conn: HttpURLConnection? = null
-                try {
-                    val ctx = BlackBoxCore.getContext()
-                    val pkg = BlackBoxCore.getHostPkg() ?: ""
-
-                    if (pkg.isEmpty()) {
-                        nk.Msg = "Error: Package name not found"
-                        success = true
-                        return@execute
-                    }
-
-                    val appName = getAppName(ctx, pkg)
-                    val deviceId = deviceId()
-                    
-                    // Create POST data
-                    val pd = ("user_key=" + URLEncoder.encode(userkey, "UTF-8") + 
-                    "&package_name=" + URLEncoder.encode(pkg, "UTF-8") + 
-                    "&app_name=" + URLEncoder.encode(appName, "UTF-8") + 
-                    "&device_id=" + URLEncoder.encode(deviceId, "UTF-8"))
-                    
-                    val pdb = pd.toByteArray(StandardCharsets.UTF_8)
-                    
-                    // Create URL connection
-                    conn = URL(bc).openConnection() as HttpURLConnection
-                    
-                    // Apply timeout settings
-                    conn.connectTimeout = CT
-                    conn.readTimeout = RT
-                    
-                    // Optimize connection settings
-                    conn.instanceFollowRedirects = false
-                    conn.useCaches = false
-                    conn.setRequestProperty("Connection", "close")
-                    conn.setRequestProperty("Accept-Encoding", "identity")
-                    conn.setRequestProperty("User-Agent", "MetaSDK/1.0")
-                    
-                    conn.requestMethod = "POST"
-                    conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
-                    conn.setRequestProperty("Content-Length", pdb.size.toString())
-                    conn.doOutput = true
-
-                    // Write data
-                    conn.outputStream.use { os -> 
-                        os.write(pdb)
-                        os.flush()
-                    }
-
-                    val rc = conn.responseCode
-                    
-                    if (rc != HttpURLConnection.HTTP_OK) {
-                        lastError = "Server Error: Http $rc - ${conn.responseMessage}"
-                        nk.setHidden("Offline")
-                        nk.Msg = lastError
-                        
-                        // Don't retry on specific errors
-                        if (rc == 404 || rc == 403 || rc == 400) {
-                            showNotificationSafe("SDK ACTIVATE FAILED", "SERVER ERROR: $rc")
-                            success = true
-                            return@execute
-                        }
-                        
-                        // For server errors, retry
-                        if (retryCount < MAX_RETRIES) {
-                            retryCount++
-                            nk.Msg = "Server Error: Retrying... ($retryCount/${MAX_RETRIES})"
-                            Thread.sleep(3000)
-                            continue
-                        } else {
-                            showNotificationSafe("SDK ACTIVATE FAILED", "SERVER ERROR: $rc")
-                            success = true
-                            return@execute
-                        }
-                    }
-
-                    // Read response
-                    val res = StringBuilder()
-                    
-                    try {
-                        val inputStream = conn.inputStream
-                        BufferedReader(InputStreamReader(inputStream, StandardCharsets.UTF_8), 8192).use { br ->
-                            var line: String?
-                            while (br.readLine().also { line = it } != null) {
-                                res.append(line)
-                            }
-                        }
-                    } catch (ste: SocketTimeoutException) {
-                        if (retryCount < MAX_RETRIES) {
-                            retryCount++
-                            nk.Msg = "Read Timeout: Retrying... ($retryCount/${MAX_RETRIES})"
-                            Thread.sleep(3000)
-                            continue
-                        } else {
-                            throw ste
-                        }
-                    }
-
-                    if (res.isEmpty()) {
-                        lastError = "Empty response from server"
-                        if (retryCount < MAX_RETRIES) {
-                            retryCount++
-                            nk.Msg = "Empty Response: Retrying... ($retryCount/${MAX_RETRIES})"
-                            Thread.sleep(3000)
-                            continue
-                        } else {
-                            nk.setHidden("Offline")
-                            nk.Msg = "Error: Empty response from server"
-                            showNotificationSafe("SDK ACTIVATE FAILED", "EMPTY RESPONSE")
-                            success = true
-                            return@execute
-                        }
-                    }
-
-                    val data = JSONObject(res.toString())
-
-                    // ===== CHECK SERVER MODE FIRST =====
-                    val serverMode = data.optString("server_mode", "online")
-                    val serverMessage = data.optString("message", data.optString("reason", ""))
-                    
-                    if (serverMode.equals("maintenance", true)) {
-                        // MAINTENANCE MODE
-                        nk.setHidden("Offline")
-                        nk.Msg = "SERVER MAINTENANCE: ${if (serverMessage.isNotEmpty()) serverMessage else "Server under maintenance"}"
-                        
-                        // Save maintenance state
-                        val sp = ctx.getSharedPreferences("server_status", Context.MODE_PRIVATE)
-                        sp.edit().apply {
-                            putString("server_mode", "maintenance")
-                            putString("message", serverMessage)
-                            apply()
-                        }
-                        
-                        // Show maintenance notification
-                        showServerNotification("🛠️ MAINTENANCE MODE", if (serverMessage.isNotEmpty()) serverMessage else "Server under maintenance", "warning")
-                        
-                        // Disable all features during maintenance
-                        sEnableDaemonService = false
-                        sHideRoot = false
-                        sHideXposed = false
-                        success = true
-                        return@execute
-                    }
-                    
-                    if (serverMode.equals("offline", true)) {
-                        // OFFLINE MODE
-                        nk.setHidden("Offline")
-                        nk.Msg = "SERVER OFFLINE: ${if (serverMessage.isNotEmpty()) serverMessage else "Server is offline"}"
-                        
-                        // Save offline state
-                        val sp = ctx.getSharedPreferences("server_status", Context.MODE_PRIVATE)
-                        sp.edit().apply {
-                            putString("server_mode", "offline")
-                            putString("message", serverMessage)
-                            apply()
-                        }
-                        
-                        // Show offline notification
-                        showServerNotification("🔴 OFFLINE MODE", if (serverMessage.isNotEmpty()) serverMessage else "Server is offline", "error")
-                        
-                        // Disable all features when offline
-                        sEnableDaemonService = false
-                        sHideRoot = false
-                        sHideXposed = false
-                        success = true
-                        return@execute
-                    }
-
-                    // ===== PROCEED WITH NORMAL LICENSE CHECK =====
-                    if (data.getString("status") == "success") {
-                        nk.setHidden("online")
-                        nk.Msg = "✅ Sdk Activated Successfully"
-
-                        val exp = data.optString("expiry", "")
-                        val toggleExpiryValue = data.optInt("toggle_expiry", 0)
-                        val feature1 = data.optInt("feature1", 0)
-                        val feature2 = data.optInt("feature2", 0)
-
-                        val sp = BlackBoxCore.getContext().getSharedPreferences(nk.PREFERENCE_NAME, Context.MODE_PRIVATE)
-                        
-                        // ✅ IMPORTANT: EXPIRY CHECK AND SAVE
-                        if (exp.isNotEmpty()) {
-                            try {
-                                val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                                val expiryDate = sdf.parse(exp)
-                                
-                                if (expiryDate != null) {
-                                    val currentTime = System.currentTimeMillis()
-                                    val expiryTime = expiryDate.time
-                                    
-                                    if (currentTime < expiryTime) {
-                                        // ✅ Licence valid - save karo
-                                        sp.edit().apply {
-                                            putBoolean("activated", true)
-                                            putString("expiry", exp)
-                                            putInt("toggle_expiry", toggleExpiryValue)
-                                            putInt("toggle_feature1", feature1)
-                                            putInt("toggle_feature2", feature2)
-                                            apply()
-                                        }
-                                        
-                                        val remainingDays = (expiryTime - currentTime) / (1000 * 60 * 60 * 24)
-                                        nk.Msg = "✅ Licence Valid (${remainingDays} days remaining)"
-                                        
-                                    } else {
-                                        // ❌ Licence already expired
-                                        nk.Msg = "❌ Licence Expired on $exp"
-                                        sp.edit().putBoolean("activated", false).apply()
-                                        success = true
-                                        return@execute
-                                    }
-                                } else {
-                                    // Invalid date format
-                                    sp.edit().apply {
-                                        putBoolean("activated", true)
-                                        putString("expiry", exp)
-                                        apply()
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                // Date parse error
-                                sp.edit().apply {
-                                    putBoolean("activated", true)
-                                    putString("expiry", exp)
-                                    apply()
-                                }
-                                nk.Msg = "Licence saved (date parse error)"
-                            }
-                        } else {
-                            // No expiry date
-                            sp.edit().apply {
-                                putBoolean("activated", true)
-                                putString("expiry", "")
-                                putInt("toggle_expiry", toggleExpiryValue)
-                                putInt("toggle_feature1", feature1)
-                                putInt("toggle_feature2", feature2)
-                                apply()
-                            }
-                            nk.Msg = "✅ Licence Activated (No expiry)"
-                        }
-
-                        if (toggleExpiryValue == 1 && exp.isNotEmpty()) {
-                            showNotificationSafe("✅ SDK ACTIVATED", "Expiry: $exp")
-                        }
-
-                        if (feature1 == 1) isDaemon(true) else isDaemon(false)
-                        if (feature2 == 1) ishideRoot(true) else ishideRoot(false)
-
-                        // Server notification
-                        if (data.has("server_notification")) {
-                            val sn = data.getJSONObject("server_notification")
-                            if (sn.optInt("enabled", 0) == 1) {
-                                showServerNotification(
-                                    sn.optString("title", "Event"),
-                                    sn.optString("message", ""),
-                                    sn.optString("iconType", "event")
-                                )
-                            }
-                        }
-
-                        // Extra image notification
-                        if (data.has("extra_notification")) {
-                            val ex = data.getJSONObject("extra_notification")
-                            if (ex.optInt("enabled", 0) == 1) {
-                                showImageNotification(
-                                    ex.optString("title", ""),
-                                    ex.optString("message", ""),
-                                    ex.optString("image", ""),
-                                    ex.optString("notfiy_base_url")
-                                )
-                            }
-                        }
-
-                    } else {
-                        nk.setHidden("Offline")
-                        val reason = data.optString("reason", "Unknown error")
-                        nk.Msg = "❌ ACTIVATE Failed: $reason"
-
-                        val toggleExpiryValue = data.optInt("toggle_expiry", 0)
-                        val feature1 = data.optInt("feature1", 0)
-                        val feature2 = data.optInt("feature2", 0)
-
-                        if (toggleExpiryValue == 1) {
-                            showNotificationSafe("SDK ACTIVATE", "FAILED")
-                        }
-
-                        if (feature1 == 1) isDaemon(true) else isDaemon(false)
-                        if (feature2 == 1) ishideRoot(true) else ishideRoot(false)
-
-                        if (data.has("server_notification")) {
-                            val sn = data.getJSONObject("server_notification")
-                            if (sn.optInt("enabled", 0) == 1) {
-                                showServerNotification(
-                                    sn.optString("title", "Event"),
-                                    sn.optString("message", ""),
-                                    sn.optString("iconType", "event")
-                                )
-                            }
-                        }
-
-                        if (data.has("extra_notification")) {
-                            val ex = data.getJSONObject("extra_notification")
-                            if (ex.optInt("enabled", 0) == 1) {
-                                showImageNotification(
-                                    ex.optString("title", ""),
-                                    ex.optString("message", ""),
-                                    ex.optString("image", ""),
-                                    ex.optString("base_url")
-                                )
-                            }
-                        }
-                    }
-                    
-                    success = true
-
-                } catch (ste: SocketTimeoutException) {
-                    lastError = "Connection timeout"
-                    if (retryCount < MAX_RETRIES) {
-                        retryCount++
-                        nk.Msg = "Timeout: Retrying... ($retryCount/${MAX_RETRIES})"
-                        Thread.sleep(3000)
-                        continue
-                    } else {
-                        nk.setHidden("Offline")
-                        nk.Msg = "Error: Connection timeout"
-                        showNotificationSafe("SDK ACTIVATE FAILED", "CONNECTION TIMEOUT")
-                        success = true
-                        return@execute
-                    }
-                } catch (e: java.net.ConnectException) {
-                    lastError = "Cannot connect to server"
-                    if (retryCount < MAX_RETRIES) {
-                        retryCount++
-                        nk.Msg = "Connect Error: Retrying... ($retryCount/${MAX_RETRIES})"
-                        Thread.sleep(3000)
-                        continue
-                    } else {
-                        nk.setHidden("Offline")
-                        nk.Msg = "Error: Cannot connect to server"
-                        showNotificationSafe("SDK ACTIVATE FAILED", "NO CONNECTION")
-                        success = true
-                        return@execute
-                    }
-                } catch (e: java.net.UnknownHostException) {
-                    lastError = "Invalid server URL"
-                    nk.setHidden("Offline")
-                    nk.Msg = "Error: Invalid server URL"
-                    showNotificationSafe("SDK ACTIVATE FAILED", "INVALID URL")
-                    success = true
-                    return@execute
-                } catch (e: Exception) {
-                    lastError = e.message ?: "Unknown error"
-                    if (retryCount < MAX_RETRIES) {
-                        retryCount++
-                        nk.Msg = "Error: Retrying... ($retryCount/${MAX_RETRIES})"
-                        Thread.sleep(3000)
-                        continue
-                    } else {
-                        nk.setHidden("Offline")
-                        nk.Msg = "Unexpected Error: ${e.message}"
-                        showNotificationSafe("SDK ACTIVATE FAILED", "ERROR")
-                        success = true
-                        return@execute
-                    }
-                } finally {
-                    try {
-                        conn?.disconnect()
-                    } catch (e: Exception) {
-                        // Ignore disconnect errors
-                    }
-                }
-            }
-            
-            // If we exit loop without success
-            if (!success) {
-                nk.setHidden("Offline")
-                val finalError = lastError ?: "Unknown error"
-                nk.Msg = "Failed after $MAX_RETRIES attempts: $finalError"
-                showNotificationSafe("SDK ACTIVATE FAILED", "MAX RETRIES EXCEEDED")
-            }
-        }
-    }
-
-    */
-
     override fun getActivatedSdk(): Boolean {
         return try {
             val result = nk.getActivatedSdk()
             nk.Msg = if (result) "✅ SDK IS ACTIVATED" else "❌ SDK IS NOT ACTIVATED"
             result
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             nk.Msg = "ERROR: FAILED TO GET ACTIVATE STATUS"
             false
         }
@@ -628,8 +219,8 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
     override fun getServerMessage(): String {
         return try {
             val msg = nk.getServerMessage()
-            if (msg.isNullOrEmpty()) "No server message" else msg
-        } catch (e: Exception) {
+            if (msg.isEmpty()) "No server message" else msg
+        } catch (_: Exception) {
             "Error: Failed to get server message"
         }
     }
@@ -639,7 +230,7 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
             val net = nk.isSystemApp()
             nk.Msg = if (net) "✅ Network: Connected" else "❌ Network: Disconnected"
             net
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             nk.Msg = "Error: Failed to check network status"
             false
         }
@@ -648,8 +239,11 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
     private fun deviceId(): String {
         return try {
             val ctx = BlackBoxCore.getContext()
-            android.provider.Settings.Secure.getString(ctx.contentResolver,android.provider.Settings.Secure.ANDROID_ID) ?: "unknown"
-        } catch (e: Exception) {
+            android.provider.Settings.Secure.getString(
+                ctx.contentResolver,
+                android.provider.Settings.Secure.ANDROID_ID,
+            ) ?: "unknown"
+        } catch (_: Exception) {
             "unknown"
         }
     }
@@ -659,37 +253,26 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
             val pm = ctx.packageManager
             val info = pm.getApplicationInfo(pkg, 0)
             pm.getApplicationLabel(info).toString()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             pkg
         }
     }
 
-    private fun isDaemon(d: Boolean) {
-        if (d) {
-            nk.Msg = "Daemon: ENABLED"
-            sEnableDaemonService = true
-        } else {
-            nk.Msg = "Daemon: DISABLED"
-            sEnableDaemonService = false
-        }
+    private fun isDaemon(enabled: Boolean) {
+        sEnableDaemonService = enabled
+        nk.Msg = if (enabled) "Daemon: ENABLED" else "Daemon: DISABLED"
     }
 
-    private fun ishideRoot(h: Boolean) {
-        if (h) {
-            nk.Msg = "Root Hide: ENABLED"
-            sHideRoot = true
-        } else {
-            nk.Msg = "Root Hide: DISABLED"
-            sHideRoot = false
-        }
+    private fun ishideRoot(enabled: Boolean) {
+        sHideRoot = enabled
+        nk.Msg = if (enabled) "Root Hide: ENABLED" else "Root Hide: DISABLED"
     }
 
-    // ---------------- Notification Helpers ----------------
     private fun showNotificationSafe(title: String, message: String) {
         try {
-            val ctx = BlackBoxCore.getContext()
-            showNotification(ctx, title, message)
-        } catch (_: Throwable) { }
+            showNotification(BlackBoxCore.getContext(), title, message)
+        } catch (_: Throwable) {
+        }
     }
 
     private val CHANNEL_ID = "meta_sdk_updates"
@@ -698,63 +281,77 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
     private fun showNotification(ctx: Context, title: String, msg: String) {
         val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val ch = NotificationChannel(CHANNEL_ID,CHANNEL_NAME,NotificationManager.IMPORTANCE_HIGH)
-            ch.description = "SDK ACTIVATE OR UPDATE NOTIFICATIONS"
-            ch.enableLights(true)
-            ch.lightColor = Color.BLUE
-            ch.enableVibration(true)
-            nm.createNotificationChannel(ch)
+            val channel = NotificationChannel(CHANNEL_ID, CHANNEL_NAME, NotificationManager.IMPORTANCE_HIGH)
+            channel.description = "SDK ACTIVATE OR UPDATE NOTIFICATIONS"
+            channel.enableLights(true)
+            channel.lightColor = Color.BLUE
+            channel.enableVibration(true)
+            nm.createNotificationChannel(channel)
         }
-        val nb = NotificationCompat.Builder(ctx, CHANNEL_ID)
+        val notification = NotificationCompat.Builder(ctx, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_more)
             .setContentTitle(title)
             .setContentText(msg)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
-        nm.notify((System.currentTimeMillis() and 0x7fffffff).toInt(), nb.build())
+        nm.notify((System.currentTimeMillis() and 0x7fffffff).toInt(), notification.build())
     }
 
-    // ================= NOTIFICATIONS =================
-    private fun showServerNotification(title:String,msg:String,type:String){
-        val ctx=BlackBoxCore.getContext()
-        val nm=ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val ch="meta_server"
-        if(Build.VERSION.SDK_INT>=26) nm.createNotificationChannel(NotificationChannel(ch,"SERVER",NotificationManager.IMPORTANCE_HIGH))
-
-        val t=type.lowercase()
-        val icon=when{
-            t.contains("warn")||t.contains("alert")->android.R.drawable.stat_sys_warning
-            t.contains("event")->android.R.drawable.star_big_on
-            t.contains("update")->android.R.drawable.stat_sys_download_done
-            else->android.R.drawable.ic_dialog_info
+    private fun showServerNotification(title: String, msg: String, type: String) {
+        val ctx = BlackBoxCore.getContext()
+        val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val channelId = "meta_server"
+        if (Build.VERSION.SDK_INT >= 26) {
+            nm.createNotificationChannel(
+                NotificationChannel(channelId, "SERVER", NotificationManager.IMPORTANCE_HIGH),
+            )
         }
-        nm.notify(System.currentTimeMillis().toInt(),NotificationCompat.Builder(ctx,ch)
-            .setSmallIcon(icon)
-            .setContentTitle(title)
-            .setContentText(msg)
-            .setColor(Color.CYAN)
-            .setAutoCancel(true)
-            .build())
+
+        val lowerType = type.lowercase()
+        val icon = when {
+            lowerType.contains("warn") || lowerType.contains("alert") -> android.R.drawable.stat_sys_warning
+            lowerType.contains("event") -> android.R.drawable.star_big_on
+            lowerType.contains("update") -> android.R.drawable.stat_sys_download_done
+            else -> android.R.drawable.ic_dialog_info
+        }
+        nm.notify(
+            System.currentTimeMillis().toInt(),
+            NotificationCompat.Builder(ctx, channelId)
+                .setSmallIcon(icon)
+                .setContentTitle(title)
+                .setContentText(msg)
+                .setColor(Color.CYAN)
+                .setAutoCancel(true)
+                .build(),
+        )
     }
 
-    private fun showImageNotification(title:String,msg:String,img:String,base:String){
-        exe.execute{
-            try{
-                if(img.isEmpty()) return@execute
-                val url= if(base.isNotEmpty()) "$base/$img" else img
-                val bmp=BitmapFactory.decodeStream(URL(url).openStream())
-                val ctx=BlackBoxCore.getContext()
-                val nm=ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                val ch="meta_img"
-                if(Build.VERSION.SDK_INT>=26) nm.createNotificationChannel(NotificationChannel(ch,"IMG",NotificationManager.IMPORTANCE_HIGH))
-                nm.notify(System.currentTimeMillis().toInt(),NotificationCompat.Builder(ctx,ch)
-                    .setSmallIcon(android.R.drawable.sym_def_app_icon)
-                    .setContentTitle(title)
-                    .setContentText(msg)
-                    .setStyle(NotificationCompat.BigPictureStyle().bigPicture(bmp))
-                    .setAutoCancel(true)
-                    .build())
-            }catch(_:Exception){}
+    private fun showImageNotification(title: String, msg: String, img: String, base: String) {
+        exe.execute {
+            try {
+                if (img.isEmpty()) return@execute
+                val url = if (base.isNotEmpty()) "$base/$img" else img
+                val bitmap = BitmapFactory.decodeStream(URL(url).openStream())
+                val ctx = BlackBoxCore.getContext()
+                val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                val channelId = "meta_img"
+                if (Build.VERSION.SDK_INT >= 26) {
+                    nm.createNotificationChannel(
+                        NotificationChannel(channelId, "IMG", NotificationManager.IMPORTANCE_HIGH),
+                    )
+                }
+                nm.notify(
+                    System.currentTimeMillis().toInt(),
+                    NotificationCompat.Builder(ctx, channelId)
+                        .setSmallIcon(android.R.drawable.sym_def_app_icon)
+                        .setContentTitle(title)
+                        .setContentText(msg)
+                        .setStyle(NotificationCompat.BigPictureStyle().bigPicture(bitmap))
+                        .setAutoCancel(true)
+                        .build(),
+                )
+            } catch (_: Exception) {
+            }
         }
     }
 }

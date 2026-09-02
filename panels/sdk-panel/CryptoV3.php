@@ -11,6 +11,7 @@ final class CryptoV3
 {
     private const REQUEST_AAD_PREFIX = 'sdk-panel-v3';
     private const RESPONSE_AAD_PREFIX = 'sdk-panel-v3-response';
+    private const IDENTITY_PREFIX = 'sdk-panel-v3-identity';
 
     /** @var array<string,array{ecdh_private_key_file:string,signing_private_key_file:string}> */
     private array $keys;
@@ -109,6 +110,11 @@ final class CryptoV3
         if (!isset($this->keys[$keyId])) {
             throw new RuntimeException('Unknown response key id.');
         }
+
+        if (($payload['status'] ?? '') === 'success') {
+            $payload['identity_signature'] = $this->signIdentityBinding($payload, $keyId);
+        }
+
         $requestId = $context['request_id'];
         $iv = random_bytes(12);
         $tag = '';
@@ -150,6 +156,46 @@ final class CryptoV3
             'tag' => $tagB64,
             'signature' => base64_encode($signature),
         ];
+    }
+
+    /**
+     * Signs the security-critical plaintext identity fields separately from the
+     * encrypted envelope. Native code can therefore bind the running APK to the
+     * exact package/signing/lease values accepted by the panel instead of
+     * trusting Java-passed plaintext alone.
+     */
+    public function signIdentityBinding(array $payload, string $keyId): string
+    {
+        if (!isset($this->keys[$keyId])) {
+            throw new RuntimeException('Unknown identity-signing key id.');
+        }
+        $canonical = self::identityCanonical($payload, $keyId);
+        $signingKey = $this->loadPrivateKey($this->keys[$keyId]['signing_private_key_file'] ?? '');
+        $signature = '';
+        if (!openssl_sign($canonical, $signature, $signingKey, OPENSSL_ALGO_SHA256)) {
+            throw new RuntimeException('V3 identity signing failed.');
+        }
+        return base64_encode($signature);
+    }
+
+    public static function identityCanonical(array $payload, string $keyId): string
+    {
+        return implode("\n", [
+            self::IDENTITY_PREFIX,
+            $keyId,
+            (string) ($payload['app_signature_sha256'] ?? ''),
+            (string) ($payload['authorized_package'] ?? ''),
+            (string) ($payload['authorized_signing_sha256'] ?? ''),
+            (string) ($payload['device_key_fingerprint'] ?? ''),
+            (string) ($payload['session_id'] ?? ''),
+            (string) ($payload['request_id'] ?? ''),
+            (string) ($payload['lease_expires_at'] ?? ''),
+            (string) ($payload['server_time'] ?? ''),
+            (string) ($payload['package_policy'] ?? ''),
+            (string) ($payload['signing_policy'] ?? ''),
+            (string) ($payload['device_policy'] ?? ''),
+            (string) ($payload['sdk_version'] ?? ''),
+        ]);
     }
 
     /**

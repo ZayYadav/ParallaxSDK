@@ -124,7 +124,55 @@ try {
     check($opened['payload']['user_key'] === 'SDK-TEST', 'V3 request round trip failed.');
     check(hash_equals($opened['aes_key'], $aesKey), 'V3 derived keys differ.');
 
-    $sealed = $crypto->sealResponse(['status' => 'success', 'server_time' => time()], [
+    $serverTime = time();
+    $responsePayload = [
+        'status' => 'success',
+        'server_time' => $serverTime,
+        'app_signature_sha256' => str_repeat('A', 64),
+        'authorized_package' => 'com.example.test',
+        'authorized_signing_sha256' => str_repeat('A', 64),
+        'device_key_fingerprint' => $proof['fingerprint'],
+        'session_id' => bin2hex(random_bytes(16)),
+        'request_id' => $clientRequestId,
+        'lease_expires_at' => $serverTime + 600,
+        'package_policy' => 'SPECIFIC',
+        'signing_policy' => 'AUTO',
+        'device_policy' => 'SINGLE',
+        'sdk_version' => 3,
+    ];
+
+    $signingPublic = openssl_pkey_get_public(
+        "-----BEGIN PUBLIC KEY-----\n"
+        . chunk_split(base64_encode($serverSigning['public_der']), 64, "\n")
+        . "-----END PUBLIC KEY-----\n"
+    );
+    check($signingPublic !== false, 'Could not load signing test public key.');
+
+    $identityCanonical = CryptoV3::identityCanonical($responsePayload, $keyId);
+    $identitySignature = $crypto->signIdentityBinding($responsePayload, $keyId);
+    check(
+        openssl_verify(
+            $identityCanonical,
+            base64_decode($identitySignature, true),
+            $signingPublic,
+            OPENSSL_ALGO_SHA256
+        ) === 1,
+        'V3 identity binding signature failed.'
+    );
+
+    $tamperedIdentity = $responsePayload;
+    $tamperedIdentity['authorized_package'] = 'com.attacker.repacked';
+    check(
+        openssl_verify(
+            CryptoV3::identityCanonical($tamperedIdentity, $keyId),
+            base64_decode($identitySignature, true),
+            $signingPublic,
+            OPENSSL_ALGO_SHA256
+        ) !== 1,
+        'Tampered V3 identity binding was accepted.'
+    );
+
+    $sealed = $crypto->sealResponse($responsePayload, [
         'aes_key' => $opened['aes_key'],
         'key_id' => $opened['key_id'],
         'request_id' => $opened['request_id'],
@@ -137,11 +185,7 @@ try {
         openssl_verify(
             $responseCanonical,
             base64_decode((string) $sealed['signature'], true),
-            openssl_pkey_get_public(
-                "-----BEGIN PUBLIC KEY-----\n"
-                . chunk_split(base64_encode($serverSigning['public_der']), 64, "\n")
-                . "-----END PUBLIC KEY-----\n"
-            ),
+            $signingPublic,
             OPENSSL_ALGO_SHA256
         ) === 1,
         'V3 response signature failed.'

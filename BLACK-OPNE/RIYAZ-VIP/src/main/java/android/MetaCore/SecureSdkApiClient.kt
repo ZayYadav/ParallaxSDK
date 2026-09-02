@@ -1,8 +1,6 @@
 package android.MetaCore
 
 import android.content.Context
-import android.content.pm.PackageManager
-import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
@@ -193,12 +191,50 @@ internal class SecureSdkApiClient(private val context: Context) {
                 "Invalid client request binding"
             }
             require(data.optString("request_id") == clientRequestId) { "Mismatched client request" }
+            require(data.optString("package_policy") in setOf("SPECIFIC", "ANY")) { "Invalid package policy" }
+            require(data.optString("signing_policy") in setOf("SPECIFIC", "AUTO", "ANY")) { "Invalid signing policy" }
+            require(data.optString("device_policy") in setOf("DISABLED", "SINGLE", "LIMITED", "UNLIMITED")) {
+                "Invalid device policy"
+            }
+            require(data.optInt("sdk_version", 0) == SDK_VERSION) { "Mismatched SDK version" }
             val leaseExpiry = data.optLong("lease_expires_at", 0L)
             require(leaseExpiry > serverTime && leaseExpiry <= serverTime + 1800L) { "Invalid activation lease" }
+
+            val identityCanonical = buildIdentityCanonical(data, keyId)
+            val identitySignatureText = data.getString("identity_signature")
+            val identitySignature = Base64.decode(identitySignatureText, Base64.DEFAULT)
+            val identityVerified = Signature.getInstance("SHA256withECDSA").run {
+                initVerify(signingKey)
+                update(identityCanonical.toByteArray(StandardCharsets.UTF_8))
+                verify(identitySignature)
+            }
+            require(identityVerified) { "Panel identity binding verification failed" }
+
+            data.put("_server_identity_canonical", identityCanonical)
+            data.put("_server_identity_signature", identitySignatureText)
         }
         data.put("_server_response_canonical", canonical)
         data.put("_server_response_signature", envelope.getString("signature"))
         return data
+    }
+
+    private fun buildIdentityCanonical(data: JSONObject, keyId: String): String {
+        return listOf(
+            "sdk-panel-v3-identity",
+            keyId,
+            data.optString("app_signature_sha256", ""),
+            data.optString("authorized_package", ""),
+            data.optString("authorized_signing_sha256", ""),
+            data.optString("device_key_fingerprint", ""),
+            data.optString("session_id", ""),
+            data.optString("request_id", ""),
+            data.optLong("lease_expires_at", 0L).toString(),
+            data.optLong("server_time", 0L).toString(),
+            data.optString("package_policy", ""),
+            data.optString("signing_policy", ""),
+            data.optString("device_policy", ""),
+            data.optInt("sdk_version", 0).toString(),
+        ).joinToString("\n")
     }
 
     private fun getOrCreateDeviceKey(): java.security.KeyPair {
@@ -224,18 +260,12 @@ internal class SecureSdkApiClient(private val context: Context) {
         return java.security.KeyPair(publicKey, privateKey)
     }
 
-    @Suppress("DEPRECATION")
     internal fun appSigningCertificateSha256(packageName: String): String {
-        val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            val info = context.packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
-            val signingInfo = info.signingInfo ?: throw SecurityException("App signing info is unavailable")
-            if (signingInfo.hasMultipleSigners()) signingInfo.apkContentsSigners else signingInfo.signingCertificateHistory
-        } else {
-            context.packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNATURES).signatures
+        val identity = SdkIdentityGuard.verifyJava(context, packageName)
+        require(RNative.verifyInstalledIdentity(context, identity.packageName, identity.signingSha256)) {
+            "Native installed APK identity verification failed"
         }
-        val certificate = signatures?.firstOrNull()?.toByteArray()
-            ?: throw SecurityException("App signing certificate is unavailable")
-        return hex(sha256(certificate)).uppercase()
+        return identity.signingSha256
     }
 
     private fun encryptEnvelope(plaintext: ByteArray, aesKey: ByteArray, aad: ByteArray): JSONObject {

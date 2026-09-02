@@ -14,6 +14,8 @@ LOCAL_CFLAGS := \
 	-fvisibility=hidden \
 	-ffunction-sections \
 	-fdata-sections \
+	-fstack-protector-strong \
+	-D_FORTIFY_SOURCE=2 \
 	-fcommon
 
 # -------- CPP FLAGS (NO CODE REMOVED) --------
@@ -22,8 +24,11 @@ LOCAL_CPPFLAGS := \
 	-Wno-error=format-security \
 	-Wno-error=c++11-narrowing \
 	-fvisibility=hidden \
+	-fvisibility-inlines-hidden \
 	-ffunction-sections \
 	-fdata-sections \
+	-fstack-protector-strong \
+	-D_FORTIFY_SOURCE=2 \
 	-fexceptions \
 	-fno-rtti \
 	-fno-unwind-tables \
@@ -33,7 +38,10 @@ LOCAL_CPPFLAGS := \
 # -------- LINKER FLAGS --------
 LOCAL_LDFLAGS := \
 	-Wl,--gc-sections \
-	-Wl,--strip-all
+	-Wl,--strip-all \
+	-Wl,-z,relro \
+	-Wl,-z,now \
+	-Wl,-z,noexecstack
 
 LOCAL_LDLIBS := -llog -landroid -lz
 LOCAL_ARM_MODE := arm
