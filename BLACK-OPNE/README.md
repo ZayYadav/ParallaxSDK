@@ -97,6 +97,20 @@ checked again against an independent Java SHA-256 trust value before use. This
 prevents casual static string extraction, while HTTPS plus signed responses—not
 endpoint secrecy—remains the actual panel-swap security boundary.
 
+### Rotate the panel endpoint
+
+Open `tools/panel-endpoint-generator.html` locally, enter the complete HTTPS API
+endpoint, and select **Generate secure config**. The offline tool creates both
+required replacements: the masked byte/mask/FNV block for `BoxCore.cpp` and the
+independent SHA-256 byte array for `SecureSdkApiClient.kt`. Replace both blocks,
+then rebuild and test the SDK. Updating only the native URL intentionally causes
+Java trust verification to fail closed.
+
+The downloaded rotation record contains the endpoint in plain text for the
+operator's private audit trail. Do not commit that record or package it in an
+AAR/APK. The generator performs no network requests and includes no server
+private key, signing key, license key, or reusable AAR encryption key.
+
 This protects high-value constants at rest and raises reverse-engineering cost;
 it does not make client-side code or Android resources impossible to inspect.
 Provider secrets and authorization decisions must remain on the server.
