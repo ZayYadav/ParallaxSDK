@@ -1,7 +1,6 @@
 <?php
-session_start();
-if (!isset($_SESSION['user_id'])) { header("Location: login.php"); exit(); }
 include 'conn.php';
+if (!isset($_SESSION['user_id'])) { header("Location: login.php"); exit(); }
 include 'panel_helper.php';
 
 $uid  = intval($_SESSION['user_id']);

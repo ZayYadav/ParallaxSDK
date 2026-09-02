@@ -1,10 +1,9 @@
 <?php
-session_start();
+include 'conn.php';
 if (!isset($_SESSION['username'])) {
     header("Location: login.php");
     exit();
 }
-include 'conn.php';
 include 'panel_helper.php';
 
 $P = get_panel_settings($conn);

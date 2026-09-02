@@ -75,24 +75,20 @@ Memory_Status KittyMemory::memRead(void *buffer, const void *addr, size_t len) {
 
 
 std::string KittyMemory::read2HexStr(const void *addr, size_t len) {
-    char temp[len];
-    memset(temp, 0, len);
-	
-    const size_t bufferLen = len * 2 + 1;
-    char buffer[bufferLen];
-    memset(buffer, 0, bufferLen);
+    if (addr == nullptr || len == 0 || len > INT_MAX / 2)
+        return {};
 
-    std::string ret;
+    std::vector<unsigned char> bytes(len, 0);
+    if (memRead(bytes.data(), addr, len) != SUCCESS)
+        return {};
 
-    if (memRead(temp, addr, len) != SUCCESS)
-        return ret;
-
-    for (int i = 0; i < len; i++) {
-        sprintf(&buffer[i * 2], "%02X", (unsigned char) temp[i]);
+    static constexpr char HEX[] = "0123456789ABCDEF";
+    std::string result(len * 2, '0');
+    for (size_t i = 0; i < len; ++i) {
+        result[i * 2] = HEX[bytes[i] >> 4];
+        result[i * 2 + 1] = HEX[bytes[i] & 0x0F];
     }
-
-    ret += buffer;
-    return ret;
+    return result;
 }
 
 ProcMap KittyMemory::getLibraryMap(const char *libraryName) {

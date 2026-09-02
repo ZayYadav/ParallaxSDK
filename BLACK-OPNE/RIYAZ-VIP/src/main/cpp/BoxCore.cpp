@@ -10,6 +10,8 @@
 #include <Hook/DexFileHook.h>
 #include <Hook/RuntimeHook.h>
 #include <Hook/LinuxHook.h>
+#include <mutex>
+#include <string>
 
 
 struct {
@@ -21,6 +23,72 @@ struct {
     int api_level;
     bool initialized;  // flag to check if class and methods are ready
 } VMEnv = {nullptr, nullptr, nullptr, nullptr, nullptr, 0, false};
+
+namespace {
+std::mutex sdkSessionMutex;
+bool sdkSessionAuthorized = false;
+jlong sdkSessionExpiry = 0;
+
+std::string toUtf8(JNIEnv *env, jstring value) {
+    if (env == nullptr || value == nullptr) return {};
+    const char *chars = env->GetStringUTFChars(value, nullptr);
+    if (chars == nullptr) return {};
+    std::string result(chars);
+    env->ReleaseStringUTFChars(value, chars);
+    return result;
+}
+
+jboolean authorizeSdkSession(JNIEnv *env, jclass nativeClass,
+                             jstring currentPackage,
+                             jstring currentSigning,
+                             jstring authorizedPackage,
+                             jstring authorizedSigning,
+                             jstring responseCanonical,
+                             jstring responseSignature,
+                             jlong leaseExpiresAt,
+                             jlong serverTime) {
+    const std::string package = toUtf8(env, currentPackage);
+    const std::string signing = toUtf8(env, currentSigning);
+    const std::string expectedPackage = toUtf8(env, authorizedPackage);
+    const std::string expectedSigning = toUtf8(env, authorizedSigning);
+    bool serverSignatureValid = false;
+    if (nativeClass != nullptr) {
+        jmethodID verifyMethod = env->GetStaticMethodID(
+            nativeClass,
+            "verifyServerSignature",
+            "(Ljava/lang/String;Ljava/lang/String;)Z");
+        if (verifyMethod != nullptr) {
+            serverSignatureValid = env->CallStaticBooleanMethod(
+                nativeClass, verifyMethod, responseCanonical, responseSignature) == JNI_TRUE;
+        }
+        if (env->ExceptionCheck()) env->ExceptionClear();
+    }
+    const bool valid = serverSignatureValid
+        && !package.empty()
+        && package == expectedPackage
+        && signing.size() == 64
+        && signing == expectedSigning
+        && serverTime > 0
+        && leaseExpiresAt > serverTime
+        && leaseExpiresAt <= serverTime + 1800;
+    std::lock_guard<std::mutex> guard(sdkSessionMutex);
+    sdkSessionAuthorized = valid;
+    sdkSessionExpiry = valid ? leaseExpiresAt : 0;
+    return valid ? JNI_TRUE : JNI_FALSE;
+}
+
+jboolean isSdkSessionValid(JNIEnv *, jclass, jlong currentTime) {
+    std::lock_guard<std::mutex> guard(sdkSessionMutex);
+    return sdkSessionAuthorized && currentTime > 0 && currentTime < sdkSessionExpiry
+        ? JNI_TRUE : JNI_FALSE;
+}
+
+void clearSdkSession(JNIEnv *, jclass) {
+    std::lock_guard<std::mutex> guard(sdkSessionMutex);
+    sdkSessionAuthorized = false;
+    sdkSessionExpiry = 0;
+}
+}
 
 
 JNIEnv *getEnv() {
@@ -204,6 +272,9 @@ static JNINativeMethod gMethods[] = {
         {"addIORule",  "(Ljava/lang/String;Ljava/lang/String;)V", (void *) addIORule},
         {"enableIO",   "()V",                                   (void *) enableIO},
         {"init",       "(I)V",                                  (void *) init},
+        {"authorizeSdkSession", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJ)Z", (void *) authorizeSdkSession},
+        {"isSdkSessionValid", "(J)Z", (void *) isSdkSessionValid},
+        {"clearSdkSession", "()V", (void *) clearSdkSession},
 };
 
 int registerNativeMethods(JNIEnv *env, const char *className,

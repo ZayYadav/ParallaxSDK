@@ -9,6 +9,9 @@ CREATE TABLE IF NOT EXISTS users (
     role ENUM('owner','admin','user') NOT NULL DEFAULT 'user',
     status TINYINT(1) NOT NULL DEFAULT 1,
     is_online TINYINT(1) NOT NULL DEFAULT 0,
+    mfa_enabled TINYINT(1) NOT NULL DEFAULT 0,
+    mfa_secret_enc TEXT NULL,
+    mfa_confirmed_at DATETIME NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
@@ -20,11 +23,25 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS licenses (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     license_key VARCHAR(96) NOT NULL,
+    client_name VARCHAR(120) NOT NULL DEFAULT '',
     expiry_date DATETIME NOT NULL,
     status TINYINT UNSIGNED NOT NULL DEFAULT 1,
     package_name VARCHAR(191) NULL,
     package_lock TINYINT(1) NOT NULL DEFAULT 1,
+    package_mode ENUM('SPECIFIC','ANY') NOT NULL DEFAULT 'SPECIFIC',
+    signing_lock TINYINT(1) NOT NULL DEFAULT 1,
+    signing_mode ENUM('SPECIFIC','AUTO','ANY') NOT NULL DEFAULT 'AUTO',
+    signing_cert_sha256 CHAR(64) NULL,
+    device_mode ENUM('DISABLED','SINGLE','LIMITED','UNLIMITED') NOT NULL DEFAULT 'SINGLE',
     max_devices INT UNSIGNED NOT NULL DEFAULT 1,
+    java_native_auth TINYINT(1) NOT NULL DEFAULT 1,
+    feature_policy JSON NULL,
+    minimum_sdk_version INT UNSIGNED NOT NULL DEFAULT 3,
+    latest_sdk_version INT UNSIGNED NOT NULL DEFAULT 3,
+    force_update TINYINT(1) NOT NULL DEFAULT 0,
+    blocked_versions JSON NULL,
+    session_lifetime_seconds INT UNSIGNED NOT NULL DEFAULT 600,
+    kill_switch TINYINT(1) NOT NULL DEFAULT 0,
     daemon TINYINT(1) NOT NULL DEFAULT 0,
     hide_root TINYINT(1) NOT NULL DEFAULT 0,
     toggle_expiry TINYINT(1) NOT NULL DEFAULT 0,
@@ -50,14 +67,28 @@ CREATE TABLE IF NOT EXISTS devices (
     ip_address VARCHAR(45) NOT NULL,
     status ENUM('connected','disconnected','blocked') NOT NULL DEFAULT 'connected',
     blocked TINYINT(1) NOT NULL DEFAULT 0,
+    client_public_key TEXT NULL,
+    client_key_fingerprint CHAR(64) NULL,
     connected_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_devices_device_id (device_id),
+    UNIQUE KEY uq_devices_license_device (license_key,device_id),
     KEY idx_devices_license_status (license_key,status),
     KEY idx_devices_last_seen (last_seen),
     CONSTRAINT fk_devices_license_key FOREIGN KEY (license_key)
         REFERENCES licenses (license_key) ON UPDATE CASCADE ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS user_recovery_codes (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id BIGINT UNSIGNED NOT NULL,
+    code_hash VARCHAR(255) NOT NULL,
+    used_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_recovery_user_unused (user_id,used_at),
+    CONSTRAINT fk_recovery_user FOREIGN KEY (user_id)
+        REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS activated_packages (
@@ -187,6 +218,39 @@ CREATE TABLE IF NOT EXISTS api_nonces (
     KEY idx_api_nonces_device (device_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS api_request_ids (
+    request_id_hash CHAR(64) NOT NULL,
+    device_id VARCHAR(128) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (request_id_hash),
+    KEY idx_api_request_ids_expiry (expires_at),
+    KEY idx_api_request_ids_device (device_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS api_sessions (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    session_id CHAR(32) NOT NULL,
+    token_hash CHAR(64) NOT NULL,
+    license_id BIGINT UNSIGNED NOT NULL,
+    device_id VARCHAR(128) NOT NULL,
+    package_name VARCHAR(191) NOT NULL,
+    signing_sha256 CHAR(64) NOT NULL,
+    device_key_fingerprint CHAR(64) NOT NULL,
+    sdk_version INT UNSIGNED NOT NULL,
+    expires_at DATETIME NOT NULL,
+    last_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    revoked TINYINT(1) NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_api_sessions_session_id (session_id),
+    UNIQUE KEY uq_api_sessions_token_hash (token_hash),
+    KEY idx_api_sessions_license_expiry (license_id,expires_at),
+    KEY idx_api_sessions_device (device_id),
+    CONSTRAINT fk_api_sessions_license FOREIGN KEY (license_id)
+        REFERENCES licenses (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS api_rate_limits (
     bucket_hash CHAR(64) NOT NULL,
     window_start DATETIME NOT NULL,
@@ -202,6 +266,12 @@ CREATE TABLE IF NOT EXISTS api_audit_logs (
     device_id VARCHAR(128) NOT NULL DEFAULT '',
     ip_address VARCHAR(45) NOT NULL,
     details JSON NULL,
+    license_id BIGINT UNSIGNED NULL,
+    client_name VARCHAR(120) NOT NULL DEFAULT '',
+    package_name VARCHAR(191) NOT NULL DEFAULT '',
+    signing_sha256 CHAR(64) NOT NULL DEFAULT '',
+    sdk_version INT UNSIGNED NULL,
+    request_id VARCHAR(96) NOT NULL DEFAULT '',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     KEY idx_api_audit_created (created_at),

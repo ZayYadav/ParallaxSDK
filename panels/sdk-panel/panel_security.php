@@ -25,12 +25,15 @@ function panel_security_bootstrap(array $config): void
     header('X-Frame-Options: DENY');
     header('Referrer-Policy: no-referrer');
     header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
-    header("Content-Security-Policy: frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+    header("Content-Security-Policy: frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests");
 
     $https = panel_is_https($config);
     if (($config['REQUIRE_HTTPS'] ?? true) && !$https) {
         http_response_code(400);
         exit('HTTPS_REQUIRED');
+    }
+    if ($https) {
+        header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
     }
 
     if (session_status() !== PHP_SESSION_ACTIVE) {
@@ -60,6 +63,20 @@ function panel_security_bootstrap(array $config): void
     }
     $_SESSION['last_activity'] = time();
 
+    $absoluteLimit = max($idleLimit, (int) ($config['SESSION_ABSOLUTE_SECONDS'] ?? 28800));
+    if (!isset($_SESSION['session_started_at'])) {
+        $_SESSION['session_started_at'] = time();
+    } elseif (time() - (int) $_SESSION['session_started_at'] > $absoluteLimit) {
+        panel_destroy_session();
+        session_start();
+        $_SESSION['session_started_at'] = time();
+    }
+    if (!isset($_SESSION['last_regenerated_at'])
+        || time() - (int) $_SESSION['last_regenerated_at'] > 900) {
+        session_regenerate_id(true);
+        $_SESSION['last_regenerated_at'] = time();
+    }
+
     $agentHash = hash('sha256', (string) ($_SERVER['HTTP_USER_AGENT'] ?? 'unknown'));
     if (isset($_SESSION['agent_hash']) && !hash_equals((string) $_SESSION['agent_hash'], $agentHash)) {
         panel_destroy_session();
@@ -73,6 +90,12 @@ function panel_security_bootstrap(array $config): void
 
     $script = strtolower(basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')));
     $csrfExempt = in_array($script, ['connect.php', 'telegram_bot.php'], true);
+    $authUpgradeExempt = in_array($script, ['login.php', 'logout.php', 'register.php', 'connect.php', 'telegram_bot.php'], true);
+    if (!$authUpgradeExempt && !empty($_SESSION['user_id']) && empty($_SESSION['auth_v3'])) {
+        panel_destroy_session();
+        header('Location: login.php');
+        exit;
+    }
     if (!$csrfExempt && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $provided = (string) ($_POST['_csrf'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''));
         if ($provided === '' || !hash_equals((string) $_SESSION['csrf_token'], $provided)) {
@@ -101,7 +124,19 @@ function panel_destroy_session(): void
 {
     $_SESSION = [];
     if (session_status() === PHP_SESSION_ACTIVE) {
+        if (ini_get('session.use_cookies')) {
+            $params = session_get_cookie_params();
+            setcookie(session_name(), '', [
+                'expires' => time() - 42000,
+                'path' => $params['path'] ?: '/',
+                'domain' => $params['domain'] ?: '',
+                'secure' => (bool) $params['secure'],
+                'httponly' => true,
+                'samesite' => 'Strict',
+            ]);
+        }
         session_destroy();
+        session_id('');
     }
 }
 
@@ -142,7 +177,7 @@ function panel_client_ip(): string
 
 function panel_require_auth(): void
 {
-    if (empty($_SESSION['user_id']) || empty($_SESSION['username'])) {
+    if (empty($_SESSION['user_id']) || empty($_SESSION['username']) || empty($_SESSION['auth_v3'])) {
         header('Location: login.php');
         exit;
     }
@@ -208,16 +243,57 @@ function panel_consume_nonce(mysqli $conn, string $nonce, string $deviceId): boo
     return $inserted;
 }
 
+function panel_consume_request_id(mysqli $conn, string $requestId, string $deviceId): bool
+{
+    $requestHash = hash('sha256', $requestId);
+    $stmt = $conn->prepare(
+        'INSERT IGNORE INTO api_request_ids (request_id_hash, device_id, expires_at)
+         VALUES (?, ?, UTC_TIMESTAMP() + INTERVAL 5 MINUTE)'
+    );
+    if (!$stmt) {
+        return false;
+    }
+    $stmt->bind_param('ss', $requestHash, $deviceId);
+    $stmt->execute();
+    $inserted = $stmt->affected_rows === 1;
+    $stmt->close();
+    if (random_int(1, 100) === 1) {
+        $conn->query('DELETE FROM api_request_ids WHERE expires_at < UTC_TIMESTAMP()');
+    }
+    return $inserted;
+}
+
 function panel_audit(mysqli $conn, string $event, string $result, string $deviceId = '', array $details = []): void
 {
     $ip = panel_client_ip();
     $json = json_encode($details, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    $licenseId = isset($details['license_id']) ? (int) $details['license_id'] : null;
+    $clientName = mb_substr((string) ($details['client_name'] ?? ''), 0, 120);
+    $packageName = mb_substr((string) ($details['package'] ?? ''), 0, 191);
+    $signing = strtoupper(substr((string) ($details['signing_sha256'] ?? ''), 0, 64));
+    $sdkVersion = isset($details['sdk_version']) ? (int) $details['sdk_version'] : null;
+    $requestId = mb_substr((string) ($details['request_id'] ?? ''), 0, 96);
     $stmt = $conn->prepare(
-        'INSERT INTO api_audit_logs (event_type, result, device_id, ip_address, details)
-         VALUES (?, ?, ?, ?, ?)'
+        'INSERT INTO api_audit_logs
+            (event_type, result, device_id, ip_address, license_id, client_name,
+             package_name, signing_sha256, sdk_version, request_id, details)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
     if ($stmt) {
-        $stmt->bind_param('sssss', $event, $result, $deviceId, $ip, $json);
+        $stmt->bind_param(
+            'ssssisssiss',
+            $event,
+            $result,
+            $deviceId,
+            $ip,
+            $licenseId,
+            $clientName,
+            $packageName,
+            $signing,
+            $sdkVersion,
+            $requestId,
+            $json
+        );
         $stmt->execute();
         $stmt->close();
     }
