@@ -1,5 +1,4 @@
 <?php
-session_start();
 include("conn.php");
 include 'desktop_only.php';
 include("panel_helper.php");

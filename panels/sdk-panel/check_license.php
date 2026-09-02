@@ -1,6 +1,4 @@
 <?php
-session_start();
-
 // Include database and helper functions (matching your dashboard logic)
 include("conn.php");
 include("panel_helper.php");

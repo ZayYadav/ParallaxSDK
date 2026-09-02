@@ -29,6 +29,13 @@ android {
         versionName rootProject.ext.versionName
         consumerProguardFiles 'proguard.txt'
 
+        // These are public trust anchors, not secrets. The matching private
+        // keys exist only in the panel's private server configuration.
+        buildConfigField 'String', 'SDK_PANEL_ENDPOINT', '"https://parallaxloadersdk.parallaxserver.online/connect.php"'
+        buildConfigField 'String', 'SDK_PANEL_KEY_ID', '"parallax-2026-09"'
+        buildConfigField 'String', 'SDK_PANEL_ECDH_PUBLIC_KEY', '"MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAElrvz2zaAUxXd1l5uKxTHRp1hIJpnhRjM+Pb0obVyC2VTh2K0VnTdme107RV4q+u2Dnt868k5hQzeum6pD4oAuw=="'
+        buildConfigField 'String', 'SDK_PANEL_SIGNING_PUBLIC_KEY', '"MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAErC1NBisuPTumG0YqsRPMHIbC8YkOwg1Nk6a5GVDqN52sxFknJKl5aT/gx6IbOUIEpX29xL2ODE9gBWisLbIeMQ=="'
+
         ndk {
             // Ship every ABI supported by current Android devices and emulators.
             abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"

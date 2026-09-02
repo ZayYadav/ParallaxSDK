@@ -1,7 +1,6 @@
 <?php
 declare(strict_types=1);
 
-session_start();
 require_once __DIR__ . '/conn.php';
 header('Content-Type: application/json; charset=UTF-8');
 header('Cache-Control: no-store');

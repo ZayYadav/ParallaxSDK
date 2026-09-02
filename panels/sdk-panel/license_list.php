@@ -1,5 +1,4 @@
 <?php
-session_start();
 include("conn.php");
 include("panel_helper.php");
 
@@ -43,6 +42,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['delete_id'])) {
 if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['edit_id'])) {
     panel_require_roles($conn, ['owner', 'admin']);
     $pkg_lock  = isset($_POST['package_lock']) ? 1 : 0;
+    $package_mode = $pkg_lock ? 'SPECIFIC' : 'ANY';
     $pkg_name  = $pkg_lock ? trim($_POST['package_name'] ?? '') : null;
     $max_devices = max(1, min(100, (int) ($_POST['max_devices'] ?? 1)));
     $edit_id = (int) ($_POST['edit_id'] ?? 0);
@@ -57,16 +57,17 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['edit_id'])) {
     }
     $stmt = $conn->prepare(
         'UPDATE licenses
-         SET license_key=?, package_name=?, expiry_date=?, status=?, package_lock=?, max_devices=?
+         SET license_key=?, package_name=?, expiry_date=?, status=?, package_lock=?, package_mode=?, max_devices=?
          WHERE id=?'
     );
     $stmt->bind_param(
-        'sssiiii',
+        'sssiisii',
         $license_key,
         $pkg_name,
         $expiry_date,
         $status,
         $pkg_lock,
+        $package_mode,
         $max_devices,
         $edit_id
     );
@@ -743,6 +744,17 @@ header {
             <span>Devices <?=$devices_count?> / <?=max(1, (int)($r['max_devices'] ?? 1))?></span>
         </div>
 
+        <div class="expiry-rgb">
+            <i class="fas fa-certificate"></i>
+            <?php if ((int)($r['signing_lock'] ?? 1) !== 1): ?>
+                <span style="color:#fca5a5">APK signature lock disabled</span>
+            <?php elseif (!empty($r['signing_cert_sha256'])): ?>
+                <span title="<?= htmlspecialchars($r['signing_cert_sha256']) ?>">APK signature bound: <?= htmlspecialchars(substr($r['signing_cert_sha256'], 0, 12)) ?>…</span>
+            <?php else: ?>
+                <span style="color:#fde68a">APK signature will bind on first v3 activation</span>
+            <?php endif; ?>
+        </div>
+
         <div class="license-key-rgb" id="k<?=$r['id']?>">
             <i class="fas fa-key"></i>
             <span class="license-key-text blurred" id="keyText<?=$r['id']?>"><?=htmlspecialchars($r['license_key'])?></span>
@@ -764,6 +776,10 @@ header {
                 <button class="glass-btn btn-edit-glass" data-bs-toggle="modal" data-bs-target="#edit<?=$r['id']?>">
                     <i class="fas fa-edit"></i> Edit
                 </button>
+
+                <a class="glass-btn btn-edit-glass" href="keyEdit.php?id=<?=(int)$r['id']?>">
+                    <i class="fas fa-shield-halved"></i> Security
+                </a>
 
                 <button class="glass-btn btn-delete-glass" onclick="openDeleteModal(<?=$r['id']?>)">
                     <i class="fas fa-trash-alt"></i> Delete

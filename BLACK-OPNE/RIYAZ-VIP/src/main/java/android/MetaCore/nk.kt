@@ -7,7 +7,10 @@ import top.niunaijun.blackbox.BlackBoxCore
 import java.text.SimpleDateFormat
 import java.util.*
 import android.widget.Toast
+import org.lsposed.lsparanoid.Obfuscate
+import top.niunaijun.blackbox.core.RNative
 
+@Obfuscate
 class nk {
 
     companion object {
@@ -19,57 +22,53 @@ class nk {
         var Msg: String = "Ready"
 
         const val PREFERENCE_NAME: String = "license_cache"
-        var ActivationUrl: String = "https://parallaxloadersdk.parallaxserver.online/connect.php"
+        private const val ActivationUrl: String = "https://parallaxloadersdk.parallaxserver.online/connect.php"
 
         @JvmStatic
         fun getActivatedSdk(): Boolean {
-            // ✅ 1. Pehle server status check (GAH())
-            val serverOnline = GAH()
-            if (!serverOnline) {
-                Msg = "Server Offline"
-                return false
-            }
-            
-            // ✅ 2. Activation status check
             val context = BlackBoxCore.getContext() ?: return false
             val sp = context.getSharedPreferences(PREFERENCE_NAME, Context.MODE_PRIVATE)
-            val isActivated = sp.getBoolean("activated", false)
-            if (!isActivated) {
-                Msg = "SDK Not Activated"
+            if (!GAH() || !sp.getBoolean("activated", false)) {
+                Msg = "SDK not activated"
                 return false
             }
-            // ✅ 3. EXPIRY CHECK (MAIN FIX)
-            val expiryStr = sp.getString("expiry", null)
-            if (expiryStr == null || expiryStr.isEmpty()) {
-                Msg = "No Expiry Date"
-                return true  // No expiry = always valid
+            val leaseExpiry = sp.getLong("lease_expires_at", 0L)
+            val verifiedServerTime = sp.getLong("verified_server_time", 0L)
+            val verifiedElapsed = sp.getLong("verified_elapsed_realtime", 0L)
+            val elapsedNow = android.os.SystemClock.elapsedRealtime()
+            if (leaseExpiry <= 0L || verifiedServerTime <= 0L || verifiedElapsed <= 0L || elapsedNow < verifiedElapsed) {
+                clearActivation("Activation lease is invalid")
+                return false
             }
-            
-            return try {
-                val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                val expiryDate = sdf.parse(expiryStr)
-                if (expiryDate == null) {
-                    Msg = "Invalid Expiry Format"
-                    return true
-                }
-                val currentTime = System.currentTimeMillis()
-                val expiryTime = expiryDate.time
-                if (currentTime < expiryTime) {
-                    // ✅ Licence valid
-                    val remainingDays = (expiryTime - currentTime) / (1000 * 60 * 60 * 24)
-                    Msg = "Licence Valid (${remainingDays} days remaining)"
-                    true
-                } else {
-                    // ❌ LICENCE EXPIRED
-                    // Auto-deactivate
-                    sp.edit().putBoolean("activated", false).apply()
-                    Msg = "⚠️ LICENCE EXPIRED on $expiryStr"
-                    false
-                }
-            } catch (e: Exception) {
-                Msg = "Expiry Check Error"
-                true  // Error case mein allow
+            val monotonicServerNow = verifiedServerTime + (elapsedNow - verifiedElapsed) / 1000L
+            val effectiveNow = maxOf(System.currentTimeMillis() / 1000L, monotonicServerNow)
+            if (effectiveNow >= leaseExpiry || !RNative.isSdkSessionValid(effectiveNow)) {
+                clearActivation("Activation lease expired; reconnect to the panel")
+                return false
             }
+            Msg = "Secure activation lease valid"
+            return true
+        }
+
+        @JvmStatic
+        fun clearActivation(reason: String = "SDK not activated") {
+            is_False = false
+            try {
+                RNative.clearSdkSession()
+            } catch (_: Throwable) {
+            }
+            try {
+                BlackBoxCore.getContext()?.getSharedPreferences(PREFERENCE_NAME, Context.MODE_PRIVATE)
+                    ?.edit()
+                    ?.putBoolean("activated", false)
+                    ?.remove("lease_expires_at")
+                    ?.remove("verified_server_time")
+                    ?.remove("verified_elapsed_realtime")
+                    ?.putString("server_status", "offline")
+                    ?.apply()
+            } catch (_: Throwable) {
+            }
+            Msg = reason
         }
 
         @JvmStatic
@@ -93,10 +92,7 @@ class nk {
             if (status == null) return
             try {
                 val value = status.equals("online", ignoreCase = true)
-                val clazz = Class.forName("android.MetaCore.nk")
-                val field = clazz.getDeclaredField("is_False")
-                field.isAccessible = true
-                field.setBoolean(null, value)
+                is_False = value
                 // ✅ SharedPreferences mein bhi save karo
                 val ctx = BlackBoxCore.getContext()
                 if (ctx != null) {
@@ -125,26 +121,12 @@ class nk {
 
         @JvmStatic
         fun GAH(): Boolean {
-            return try {
-                val clazz = Class.forName("android.MetaCore.nk")
-                val field = clazz.getDeclaredField("is_False")
-                field.isAccessible = true
-                field.get(null) as? Boolean ?: false
-            } catch (_: Exception) {
-                false
-            }
+            return is_False
         }
 
         @JvmStatic
         fun getUrlHidden(): String {
-            return try {
-                val clazz = Class.forName("android.MetaCore.nk")
-                val field = clazz.getDeclaredField("ActivationUrl")
-                field.isAccessible = true
-                field.get(null) as? String ?: 获取接口地址()
-            } catch (_: Exception) {
-                获取接口地址()
-            }
+            return 获取接口地址()
         }
 
         @JvmStatic
@@ -206,15 +188,10 @@ class nk {
         @JvmStatic
         fun loadSavedStatus() {
             try {
-                val ctx = BlackBoxCore.getContext() ?: return
-                val sp = ctx.getSharedPreferences(PREFERENCE_NAME, Context.MODE_PRIVATE)
-                // Server status load
-                val savedStatus = sp.getString("server_status", "online")
-                if (savedStatus != null) {
-                    setHidden(savedStatus)
+                is_False = true
+                if (!getActivatedSdk()) {
+                    is_False = false
                 }
-                // Expiry check on app start
-                getActivatedSdk()
             } catch (_: Exception) {}
         }
     }

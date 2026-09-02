@@ -7,9 +7,15 @@ import android.util.Log;
 import androidx.annotation.Keep;
 import android.content.Context;
 import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.security.KeyFactory;
+import java.security.Signature;
+import java.security.spec.X509EncodedKeySpec;
 import java.util.List;
+import android.util.Base64;
 import dalvik.system.DexFile;
 import top.niunaijun.blackbox.BlackBoxCore;
+import top.niunaijun.blackbox.BuildConfig;
 import top.niunaijun.blackbox.app.BActivityThread;
 import top.niunaijun.blackbox.utils.compat.DexFileCompat;
 
@@ -34,6 +40,31 @@ public class RNative {
     public static native void enableIO();
     public static native void addIORule(String targetPath, String relocatePath);
     public static native void hideXposed();
+    public static native boolean authorizeSdkSession(
+            String currentPackage,
+            String currentSigningSha256,
+            String authorizedPackage,
+            String authorizedSigningSha256,
+            String responseCanonical,
+            String responseSignature,
+            long leaseExpiresAt,
+            long serverTime);
+    public static native boolean isSdkSessionValid(long currentTime);
+    public static native void clearSdkSession();
+
+    @Keep
+    private static boolean verifyServerSignature(String canonical, String signatureBase64) {
+        try {
+            byte[] publicDer = Base64.decode(BuildConfig.SDK_PANEL_SIGNING_PUBLIC_KEY, Base64.DEFAULT);
+            byte[] signatureBytes = Base64.decode(signatureBase64, Base64.DEFAULT);
+            Signature verifier = Signature.getInstance("SHA256withECDSA");
+            verifier.initVerify(KeyFactory.getInstance("EC").generatePublic(new X509EncodedKeySpec(publicDer)));
+            verifier.update(canonical.getBytes(StandardCharsets.UTF_8));
+            return verifier.verify(signatureBytes);
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
     
     @Keep
     public static int getCallingUid(int origCallingUid) {
