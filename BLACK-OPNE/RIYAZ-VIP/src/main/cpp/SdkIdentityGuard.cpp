@@ -90,9 +90,9 @@ int sdkInt(JNIEnv *env) {
 
 bool sha256Hex(JNIEnv *env, jbyteArray bytes, std::string *out) {
     if (env == nullptr || bytes == nullptr || out == nullptr) return false;
+
     jclass digestClass = env->FindClass("java/security/MessageDigest");
     if (digestClass == nullptr || !clearException(env)) return false;
-
     jmethodID getInstance = env->GetStaticMethodID(
         digestClass, "getInstance", "(Ljava/lang/String;)Ljava/security/MessageDigest;");
     if (getInstance == nullptr || !clearException(env)) {
@@ -133,8 +133,7 @@ bool sha256Hex(JNIEnv *env, jbyteArray bytes, std::string *out) {
     }
 
     static const char HEX[] = "0123456789ABCDEF";
-    std::string hex;
-    hex.resize(64);
+    std::string hex(64, '0');
     for (size_t i = 0; i < 32; ++i) {
         const unsigned int b = static_cast<unsigned char>(raw[i]);
         hex[i * 2] = HEX[(b >> 4) & 0x0F];
@@ -149,7 +148,7 @@ bool sha256Hex(JNIEnv *env, jbyteArray bytes, std::string *out) {
 }
 
 bool packageInfoName(JNIEnv *env, jobject packageInfo, std::string *out) {
-    if (packageInfo == nullptr || out == nullptr) return false;
+    if (env == nullptr || packageInfo == nullptr || out == nullptr) return false;
     jclass infoClass = env->GetObjectClass(packageInfo);
     if (infoClass == nullptr || !clearException(env)) return false;
     jfieldID field = env->GetFieldID(infoClass, "packageName", "Ljava/lang/String;");
@@ -169,7 +168,7 @@ bool packageInfoName(JNIEnv *env, jobject packageInfo, std::string *out) {
 }
 
 bool packageInfoSigner(JNIEnv *env, jobject packageInfo, int apiLevel, std::string *out) {
-    if (packageInfo == nullptr || out == nullptr) return false;
+    if (env == nullptr || packageInfo == nullptr || out == nullptr) return false;
     jclass infoClass = env->GetObjectClass(packageInfo);
     if (infoClass == nullptr || !clearException(env)) return false;
 
@@ -228,7 +227,8 @@ bool packageInfoSigner(JNIEnv *env, jobject packageInfo, int apiLevel, std::stri
     if (signature == nullptr || !clearException(env)) return false;
 
     jclass signatureClass = env->GetObjectClass(signature);
-    jmethodID toBytes = signatureClass == nullptr ? nullptr : env->GetMethodID(signatureClass, "toByteArray", "()[B");
+    jmethodID toBytes = signatureClass == nullptr ? nullptr
+        : env->GetMethodID(signatureClass, "toByteArray", "()[B");
     if (toBytes == nullptr || !clearException(env)) {
         if (signatureClass != nullptr) env->DeleteLocalRef(signatureClass);
         env->DeleteLocalRef(signature);
@@ -254,6 +254,15 @@ void addPath(std::vector<std::string> *paths, const std::string &path) {
     if (std::find(paths->begin(), paths->end(), path) == paths->end()) {
         paths->push_back(path);
     }
+}
+
+void removePaths(std::vector<std::string> *paths, const std::vector<std::string> &remove) {
+    if (paths == nullptr) return;
+    paths->erase(
+        std::remove_if(paths->begin(), paths->end(), [&](const std::string &value) {
+            return std::find(remove.begin(), remove.end(), value) != remove.end();
+        }),
+        paths->end());
 }
 
 void addStringArray(JNIEnv *env, jobjectArray array, std::vector<std::string> *paths) {
@@ -304,6 +313,45 @@ void readStringArrayField(JNIEnv *env, jobject object, const char *name, std::ve
         env->DeleteLocalRef(array);
     }
     env->DeleteLocalRef(clazz);
+}
+
+bool verifyArchive(JNIEnv *env,
+                   jobject packageManager,
+                   jmethodID getArchiveInfo,
+                   const std::string &path,
+                   jint flags,
+                   int apiLevel,
+                   const std::string &expectedPackage,
+                   const std::string &expectedSigning,
+                   bool mandatory,
+                   bool *verified) {
+    if (verified != nullptr) *verified = false;
+    if (path.empty()) return !mandatory;
+
+    jstring pathArg = env->NewStringUTF(path.c_str());
+    jobject archiveInfo = env->CallObjectMethod(packageManager, getArchiveInfo, pathArg, flags);
+    env->DeleteLocalRef(pathArg);
+
+    const bool callOk = clearException(env);
+    if (!callOk || archiveInfo == nullptr) {
+        if (archiveInfo != nullptr) env->DeleteLocalRef(archiveInfo);
+        return !mandatory;
+    }
+
+    std::string archiveName;
+    if (!packageInfoName(env, archiveInfo, &archiveName) || archiveName != expectedPackage) {
+        env->DeleteLocalRef(archiveInfo);
+        return false;
+    }
+
+    std::string archiveSigning;
+    const bool hasSigner = packageInfoSigner(env, archiveInfo, apiLevel, &archiveSigning);
+    env->DeleteLocalRef(archiveInfo);
+    if (!hasSigner) return !mandatory;
+    if (upperAscii(archiveSigning) != expectedSigning) return false;
+
+    if (verified != nullptr) *verified = true;
+    return true;
 }
 
 std::vector<std::string> splitLines(const std::string &value) {
@@ -367,12 +415,13 @@ jboolean verifyInstalledIdentity(JNIEnv *env, jclass,
     }
 
     auto contextPackageValue = static_cast<jstring>(env->CallObjectMethod(context, getPackageName));
-    if (!clearException(env) || toString(env, contextPackageValue) != expectedPackage) {
-        if (contextPackageValue != nullptr) env->DeleteLocalRef(contextPackageValue);
+    const bool packageCallOk = clearException(env);
+    const std::string contextPackage = toString(env, contextPackageValue);
+    if (contextPackageValue != nullptr) env->DeleteLocalRef(contextPackageValue);
+    if (!packageCallOk || contextPackage != expectedPackage) {
         env->DeleteLocalRef(contextClass);
         return JNI_FALSE;
     }
-    env->DeleteLocalRef(contextPackageValue);
 
     jobject packageManager = env->CallObjectMethod(context, getPackageManager);
     jobject appInfo = env->CallObjectMethod(context, getApplicationInfo);
@@ -391,7 +440,6 @@ jboolean verifyInstalledIdentity(JNIEnv *env, jclass,
         return JNI_FALSE;
     }
 
-    std::vector<std::string> archivePaths;
     std::string sourceDir;
     std::string publicSourceDir;
     if (!readStringField(env, appInfo, "sourceDir", &sourceDir) || sourceDir.empty()) {
@@ -401,21 +449,25 @@ jboolean verifyInstalledIdentity(JNIEnv *env, jclass,
         return JNI_FALSE;
     }
     readStringField(env, appInfo, "publicSourceDir", &publicSourceDir);
-    addPath(&archivePaths, sourceDir);
-    addPath(&archivePaths, publicSourceDir);
-    readStringArrayField(env, appInfo, "splitSourceDirs", &archivePaths);
-    readStringArrayField(env, appInfo, "splitPublicSourceDirs", &archivePaths);
+
+    std::vector<std::string> primaryArchives;
+    std::vector<std::string> optionalArchives;
+    addPath(&primaryArchives, sourceDir);
+    addPath(&optionalArchives, publicSourceDir);
+    readStringArrayField(env, appInfo, "splitSourceDirs", &optionalArchives);
+    readStringArrayField(env, appInfo, "splitPublicSourceDirs", &optionalArchives);
 
     auto codePathValue = static_cast<jstring>(env->CallObjectMethod(context, getPackageCodePath));
     if (clearException(env) && codePathValue != nullptr) {
-        addPath(&archivePaths, toString(env, codePathValue));
+        addPath(&primaryArchives, toString(env, codePathValue));
         env->DeleteLocalRef(codePathValue);
     }
     auto resourcePathValue = static_cast<jstring>(env->CallObjectMethod(context, getPackageResourcePath));
     if (clearException(env) && resourcePathValue != nullptr) {
-        addPath(&archivePaths, toString(env, resourcePathValue));
+        addPath(&optionalArchives, toString(env, resourcePathValue));
         env->DeleteLocalRef(resourcePathValue);
     }
+    removePaths(&optionalArchives, primaryArchives);
 
     jclass pmClass = env->GetObjectClass(packageManager);
     jmethodID getInstalledInfo = pmClass == nullptr ? nullptr : env->GetMethodID(
@@ -447,9 +499,9 @@ jboolean verifyInstalledIdentity(JNIEnv *env, jclass,
     const bool installedValid = packageInfoName(env, installedInfo, &installedName)
         && installedName == expectedPackage
         && packageInfoSigner(env, installedInfo, apiLevel, &installedSigning)
-        && installedSigning == expectedSigning;
+        && upperAscii(installedSigning) == expectedSigning;
     env->DeleteLocalRef(installedInfo);
-    if (!installedValid || archivePaths.empty()) {
+    if (!installedValid || primaryArchives.empty()) {
         env->DeleteLocalRef(pmClass);
         env->DeleteLocalRef(packageManager);
         env->DeleteLocalRef(appInfo);
@@ -457,42 +509,47 @@ jboolean verifyInstalledIdentity(JNIEnv *env, jclass,
         return JNI_FALSE;
     }
 
-    size_t verifiedArchives = 0;
-    for (const std::string &path : archivePaths) {
-        jstring pathArg = env->NewStringUTF(path.c_str());
-        jobject archiveInfo = env->CallObjectMethod(packageManager, getArchiveInfo, pathArg, flags);
-        env->DeleteLocalRef(pathArg);
-        if (!clearException(env) || archiveInfo == nullptr) {
-            if (archiveInfo != nullptr) env->DeleteLocalRef(archiveInfo);
+    size_t verifiedPrimary = 0;
+    for (const std::string &path : primaryArchives) {
+        bool verified = false;
+        if (!verifyArchive(
+                env, packageManager, getArchiveInfo, path, flags, apiLevel,
+                expectedPackage, expectedSigning, true, &verified)) {
             env->DeleteLocalRef(pmClass);
             env->DeleteLocalRef(packageManager);
             env->DeleteLocalRef(appInfo);
             env->DeleteLocalRef(contextClass);
             return JNI_FALSE;
         }
+        if (verified) ++verifiedPrimary;
+    }
 
-        std::string archiveName;
-        std::string archiveSigning;
-        const bool archiveValid = packageInfoName(env, archiveInfo, &archiveName)
-            && archiveName == expectedPackage
-            && packageInfoSigner(env, archiveInfo, apiLevel, &archiveSigning)
-            && archiveSigning == expectedSigning;
-        env->DeleteLocalRef(archiveInfo);
-        if (!archiveValid) {
+    if (verifiedPrimary == 0) {
+        env->DeleteLocalRef(pmClass);
+        env->DeleteLocalRef(packageManager);
+        env->DeleteLocalRef(appInfo);
+        env->DeleteLocalRef(contextClass);
+        return JNI_FALSE;
+    }
+
+    for (const std::string &path : optionalArchives) {
+        bool ignoredVerified = false;
+        if (!verifyArchive(
+                env, packageManager, getArchiveInfo, path, flags, apiLevel,
+                expectedPackage, expectedSigning, false, &ignoredVerified)) {
             env->DeleteLocalRef(pmClass);
             env->DeleteLocalRef(packageManager);
             env->DeleteLocalRef(appInfo);
             env->DeleteLocalRef(contextClass);
             return JNI_FALSE;
         }
-        ++verifiedArchives;
     }
 
     env->DeleteLocalRef(pmClass);
     env->DeleteLocalRef(packageManager);
     env->DeleteLocalRef(appInfo);
     env->DeleteLocalRef(contextClass);
-    return verifiedArchives > 0 ? JNI_TRUE : JNI_FALSE;
+    return JNI_TRUE;
 }
 
 bool verifySignedIdentityBinding(JNIEnv *env,
