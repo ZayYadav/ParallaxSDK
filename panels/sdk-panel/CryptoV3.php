@@ -110,6 +110,11 @@ final class CryptoV3
         if (!isset($this->keys[$keyId])) {
             throw new RuntimeException('Unknown response key id.');
         }
+
+        if (($payload['status'] ?? '') === 'success') {
+            $payload['identity_signature'] = $this->signIdentityBinding($payload, $keyId);
+        }
+
         $requestId = $context['request_id'];
         $iv = random_bytes(12);
         $tag = '';
