@@ -18,6 +18,7 @@ on:
     branches:
       - main
       - 'security/**'
+      - 'fix/**'
     paths:
       - 'panels/sdk-panel/**'
       - 'BLACK-OPNE/build.gradle'
@@ -72,12 +73,25 @@ jobs:
         run: |
           set -euo pipefail
           FILE='One-Core-Engine/app/build.gradle'
+          CURRENT_PIN='sha256/Ina/GY9COYngSpB7Ht+asGkJ5LV99jpBHYz11jXRSWM='
+          KNOWN_BAD_PIN='sha256/Ina/GY9CQYngSpB7Ht+asGkJ5LV99jpBHYz11jXRsWM='
+
           if grep -F -- 'resolveVerifiedLeafTlsPin' "$FILE"; then
             echo 'Release builds must not auto-enroll a live TLS certificate.' >&2
             exit 1
           fi
           if grep -F -- 'pins.add(livePin)' "$FILE"; then
             echo 'Release builds must not append a network-observed TLS pin.' >&2
+            exit 1
+          fi
+
+          # The approved production pin must be source-controlled and merged with optional
+          # repository rotation pins. This prevents a syntactically-valid typo in a GitHub
+          # variable from producing an APK that can never reach the licensing API.
+          grep -F -- "$CURRENT_PIN" "$FILE" >/dev/null
+          grep -F -- 'parallaxBuiltInTlsPins + parallaxConfiguredTlsPinList' "$FILE" >/dev/null
+          if grep -F -- "$KNOWN_BAD_PIN" "$FILE"; then
+            echo 'Known mistyped production TLS pin must never be source-controlled.' >&2
             exit 1
           fi
 
