@@ -85,14 +85,17 @@ public final class VirtualOAuthRouter {
             return null;
         }
 
-        Uri redirectUri = extractRedirectUri(authUri);
-        if (redirectUri == null && isTwitterHost(authUri)) {
-            redirectUri = inferLegacyTwitterRedirect(virtualPackage, userId);
+        Uri redirectUri;
+        if (isTwitterHost(authUri)) {
+            redirectUri = resolveTwitterRedirectUri(authUri, userId, virtualPackage);
+        } else {
+            redirectUri = extractRedirectUri(authUri);
+            if (!isSupportedCustomRedirect(redirectUri)
+                    || !redirectBelongsToVirtualPackage(redirectUri, virtualPackage, userId)) {
+                return null;
+            }
         }
-        if (!isSupportedCustomRedirect(redirectUri)) {
-            return null;
-        }
-        if (!redirectBelongsToVirtualPackage(redirectUri, virtualPackage, userId)) {
+        if (redirectUri == null) {
             return null;
         }
 
@@ -142,6 +145,28 @@ public final class VirtualOAuthRouter {
                 || host.endsWith(".googleapis.com")
                 || host.endsWith(".twitter.com")
                 || host.endsWith(".x.com");
+    }
+
+    /**
+     * Resolves the callback owned by the virtual app for a Twitter/X OAuth URL.
+     * This is shared by browser Auth Tab and real Twitter/X application routing.
+     */
+    public static Uri resolveTwitterRedirectUri(
+            Uri authUri, int userId, String virtualPackage) {
+        if (!isTwitterHost(authUri)
+                || virtualPackage == null || virtualPackage.trim().isEmpty()
+                || userId < 0) {
+            return null;
+        }
+        Uri redirectUri = extractRedirectUri(authUri);
+        if (redirectUri == null) {
+            redirectUri = inferLegacyTwitterRedirect(virtualPackage, userId);
+        }
+        if (!isSupportedCustomRedirect(redirectUri)
+                || !redirectBelongsToVirtualPackage(redirectUri, virtualPackage, userId)) {
+            return null;
+        }
+        return redirectUri;
     }
 
     private static boolean isTwitterHost(Uri uri) {
