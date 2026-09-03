@@ -5,11 +5,15 @@ import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
+import android.os.UserHandle;
+import android.util.Log;
 
 import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+
+import black.android.content.pm.BRParceledListSlice;
 
 import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.BActivityThread;
@@ -27,9 +31,9 @@ import top.niunaijun.blackbox.utils.compat.ParceledListSliceCompat;
  *
  * Scope is intentionally narrow: only Facebook's platform token service and
  * Facebook login Activities are hidden. Other Facebook features/package metadata
- * stay available. The one Twitter/X exception below only restores discovery of
- * the official exported SingleSignOnActivity that the legacy Twitter Kit probes
- * explicitly before deciding whether to fall back to its obsolete web OAuth path.
+ * stay available. The one Twitter/X exception below restores discovery of the
+ * official exported SingleSignOnActivity that legacy Twitter Kit probes before
+ * deciding whether to fall back to its obsolete web OAuth path.
  */
 @ScanClass({IPackageManagerProxy.class})
 public final class IFacebookWebPackageManagerProxy extends IPackageManagerProxy {
@@ -39,6 +43,7 @@ public final class IFacebookWebPackageManagerProxy extends IPackageManagerProxy 
     private static final String TWITTER_PACKAGE = "com.twitter.android";
     private static final String TWITTER_SSO_ACTIVITY =
             "com.twitter.android.SingleSignOnActivity";
+    private static final String TWITTER_SSO_TAG = "TwitterSSOCompat";
 
     @Override
     public void injectHook() {
@@ -94,11 +99,14 @@ public final class IFacebookWebPackageManagerProxy extends IPackageManagerProxy 
      * CustomTabActivity remains visible.
      *
      * Legacy Twitter Kit uses this same PackageManager method to probe the exact
-     * official SingleSignOnActivity. The Facebook-specific proxy must not hide
-     * that provider-owned Activity: if it is really installed, enabled and
-     * exported, return the system ActivityInfo unchanged. No signature/package
-     * identity is fabricated; Twitter Kit's own signing-certificate check remains
-     * authoritative before it reaches this query.
+     * official SingleSignOnActivity. For that one explicit provider-owned probe,
+     * always ask Android's original system PackageManager first. If Android's
+     * query result gets filtered on an OS/version-specific path, fall back to the
+     * original raw IPackageManager getActivityInfo() and finally the host PM.
+     *
+     * No package/signature identity is fabricated. Only a real, enabled, exported
+     * ActivityInfo for com.twitter.android.SingleSignOnActivity is accepted, and
+     * Twitter Kit's own certificate check still runs before this query.
      */
     @ProxyMethod("queryIntentActivities")
     public static final class QueryFacebookCallbackActivities extends MethodHook {
@@ -108,7 +116,7 @@ public final class IFacebookWebPackageManagerProxy extends IPackageManagerProxy 
                     ? (Intent) args[0] : null;
 
             if (isTwitterSsoDiscoveryIntent(intent)) {
-                return queryOfficialTwitterSsoActivity(method, intent);
+                return queryOfficialTwitterSsoActivity(who, method, args, intent);
             }
 
             if (!isFacebookCustomTabCallbackIntent(intent)) {
@@ -127,48 +135,165 @@ public final class IFacebookWebPackageManagerProxy extends IPackageManagerProxy 
         }
     }
 
-    private static Object queryOfficialTwitterSsoActivity(Method method, Intent intent) {
-        ResolveInfo resolve = resolveOfficialTwitterSsoActivity(intent);
-        List<ResolveInfo> resolves = resolve == null
-                ? Collections.<ResolveInfo>emptyList()
-                : Collections.singletonList(resolve);
-        if (ParceledListSliceCompat.isReturnParceledListSlice(method)) {
-            return ParceledListSliceCompat.create(resolves);
-        }
-        return resolves;
-    }
-
-    private static ResolveInfo resolveOfficialTwitterSsoActivity(Intent intent) {
+    private static Object queryOfficialTwitterSsoActivity(
+            Object who, Method queryMethod, Object[] queryArgs, Intent intent) {
+        Object systemResult = null;
         try {
-            if (intent == null || intent.getComponent() == null
-                    || BlackBoxCore.getContext() == null) {
-                return null;
+            // This is the original, unwrapped IPackageManager method represented by
+            // `who`, not BlackBox's virtual package manager.
+            systemResult = queryMethod.invoke(who, queryArgs);
+            if (containsUsableTwitterSso(systemResult)) {
+                Log.i(TWITTER_SSO_TAG, "native SSO discovery: system query matched");
+                return systemResult;
             }
+            Log.w(TWITTER_SSO_TAG,
+                    "native SSO discovery: system query returned no usable activity");
+        } catch (Throwable error) {
+            logSsoLookupFailure("system query", error);
+        }
 
-            ComponentName component = intent.getComponent();
-            ActivityInfo activityInfo = BlackBoxCore.getContext()
-                    .getPackageManager()
-                    .getActivityInfo(component, 0);
-            if (activityInfo == null
-                    || !TWITTER_PACKAGE.equals(activityInfo.packageName)
-                    || !TWITTER_SSO_ACTIVITY.equals(activityInfo.name)
-                    || !activityInfo.enabled
-                    || !activityInfo.exported
-                    || (activityInfo.applicationInfo != null
-                    && !activityInfo.applicationInfo.enabled)) {
-                return null;
-            }
-
+        ActivityInfo activityInfo = resolveOfficialTwitterSsoActivity(who, intent);
+        if (isUsableTwitterSsoActivity(activityInfo)) {
             ResolveInfo resolveInfo = new ResolveInfo();
             resolveInfo.activityInfo = activityInfo;
             resolveInfo.resolvePackageName = activityInfo.packageName;
             resolveInfo.isDefault = true;
-            return resolveInfo;
-        } catch (Throwable ignored) {
-            // If the official provider really is absent/unavailable, preserve the
-            // normal "not found" result and let Twitter Kit choose its fallback.
+            List<ResolveInfo> resolves = Collections.singletonList(resolveInfo);
+            Log.i(TWITTER_SSO_TAG, "native SSO discovery: ActivityInfo fallback matched");
+            if (ParceledListSliceCompat.isReturnParceledListSlice(queryMethod)) {
+                return ParceledListSliceCompat.create(resolves);
+            }
+            return resolves;
+        }
+
+        Log.e(TWITTER_SSO_TAG,
+                "native SSO discovery: official SingleSignOnActivity unavailable");
+
+        // Preserve the platform's original empty result shape when possible.
+        if (systemResult != null) {
+            return systemResult;
+        }
+        List<ResolveInfo> empty = Collections.emptyList();
+        if (ParceledListSliceCompat.isReturnParceledListSlice(queryMethod)) {
+            return ParceledListSliceCompat.create(empty);
+        }
+        return empty;
+    }
+
+    private static boolean containsUsableTwitterSso(Object result) {
+        List<?> list = extractResolveList(result);
+        if (list == null || list.isEmpty()) {
+            return false;
+        }
+        for (Object item : list) {
+            if (!(item instanceof ResolveInfo)) {
+                continue;
+            }
+            ResolveInfo resolveInfo = (ResolveInfo) item;
+            if (isUsableTwitterSsoActivity(resolveInfo.activityInfo)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static List<?> extractResolveList(Object result) {
+        if (result instanceof List) {
+            return (List<?>) result;
+        }
+        if (ParceledListSliceCompat.isParceledListSlice(result)) {
+            try {
+                return BRParceledListSlice.get(result).getList();
+            } catch (Throwable error) {
+                logSsoLookupFailure("ParceledListSlice decode", error);
+            }
+        }
+        return null;
+    }
+
+    private static ActivityInfo resolveOfficialTwitterSsoActivity(Object who, Intent intent) {
+        if (intent == null || intent.getComponent() == null) {
             return null;
         }
+        ComponentName component = intent.getComponent();
+
+        // Prefer the original system IPackageManager object. This bypasses both
+        // virtual package state and ApplicationPackageManager's hooked mPM field.
+        ActivityInfo direct = getActivityInfoFromRawSystemPm(who, component);
+        if (isUsableTwitterSsoActivity(direct)) {
+            return direct;
+        }
+
+        // Compatibility fallback for platform variants where the hidden binder
+        // signature cannot be reflected safely. AppSystemEnv keeps Twitter open,
+        // so the normal host PM still resolves to the real installed package.
+        try {
+            if (BlackBoxCore.getContext() == null) {
+                return null;
+            }
+            ActivityInfo activityInfo = BlackBoxCore.getContext()
+                    .getPackageManager()
+                    .getActivityInfo(component, 0);
+            if (isUsableTwitterSsoActivity(activityInfo)) {
+                return activityInfo;
+            }
+        } catch (Throwable error) {
+            logSsoLookupFailure("host PackageManager getActivityInfo", error);
+        }
+        return null;
+    }
+
+    private static ActivityInfo getActivityInfoFromRawSystemPm(
+            Object who, ComponentName component) {
+        if (who == null || component == null) {
+            return null;
+        }
+        try {
+            Method[] methods = who.getClass().getMethods();
+            for (Method candidate : methods) {
+                if (!"getActivityInfo".equals(candidate.getName())) {
+                    continue;
+                }
+                Class<?>[] types = candidate.getParameterTypes();
+                if (types.length != 3
+                        || !ComponentName.class.isAssignableFrom(types[0])
+                        || !(types[1] == int.class || types[1] == Integer.class
+                        || types[1] == long.class || types[1] == Long.class)
+                        || !(types[2] == int.class || types[2] == Integer.class)) {
+                    continue;
+                }
+
+                Object flags = (types[1] == long.class || types[1] == Long.class)
+                        ? 0L : 0;
+                Object result = candidate.invoke(
+                        who, component, flags, UserHandle.myUserId());
+                if (result instanceof ActivityInfo) {
+                    return (ActivityInfo) result;
+                }
+            }
+        } catch (Throwable error) {
+            logSsoLookupFailure("raw IPackageManager getActivityInfo", error);
+        }
+        return null;
+    }
+
+    private static boolean isUsableTwitterSsoActivity(ActivityInfo activityInfo) {
+        return activityInfo != null
+                && TWITTER_PACKAGE.equals(activityInfo.packageName)
+                && TWITTER_SSO_ACTIVITY.equals(activityInfo.name)
+                && activityInfo.enabled
+                && activityInfo.exported
+                && (activityInfo.applicationInfo == null
+                || activityInfo.applicationInfo.enabled);
+    }
+
+    private static void logSsoLookupFailure(String stage, Throwable error) {
+        Throwable cause = error;
+        while (cause != null && cause.getCause() != null && cause.getCause() != cause) {
+            cause = cause.getCause();
+        }
+        String type = cause == null ? "unknown" : cause.getClass().getSimpleName();
+        Log.w(TWITTER_SSO_TAG, "native SSO discovery: " + stage + " failed (" + type + ")");
     }
 
     private static boolean isTwitterSsoDiscoveryIntent(Intent intent) {
