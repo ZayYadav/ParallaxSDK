@@ -29,14 +29,10 @@ import top.niunaijun.blackbox.utils.compat.ParceledListSliceCompat;
  * resolved against the real installed Twitter/X package.</p>
  *
  * <p>Recent official X builds can remove the old public SingleSignOnActivity while
- * retaining their real app-authorization entry point. Twitter Kit unfortunately
- * hard-codes the removed component. When that exact legacy component is absent,
- * this compatibility layer may remap the SAME Intent object to a real, enabled,
- * exported and permission-accessible authorization Activity in the same official
- * {@code com.twitter.android} package. Twitter Kit then adds its original SSO
- * extras and starts that real provider Activity normally. The existing OneCore
- * external-auth bridge keeps the real provider UI outside the virtual process and
- * returns Android's real Activity result to the original :pN guest process.</p>
+ * retaining real exported app entry points. Twitter Kit unfortunately hard-codes
+ * the removed component. When that exact legacy component is absent, this layer
+ * may remap the SAME Intent object to a real, enabled, exported and permission-
+ * accessible Activity in the official {@code com.twitter.android} package.</p>
  *
  * <p>No package/signature identity, OAuth token, token secret, consumer credential
  * or provider result is fabricated. If no real accessible successor exists, the
@@ -51,19 +47,18 @@ public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
             "com.twitter.android.SingleSignOnActivity";
 
     /**
-     * Known real authorization Activities shipped by official Twitter/X builds.
-     * They are never assumed usable: Android must report the exact component as
-     * installed, enabled, exported and launch-permission-accessible first.
+     * First entry is verified from X 12.22.0 manifest and manually launch-tested:
+     * exported=true and handles x.com/twitter.com ACTION_VIEW deep links.
+     * Remaining entries cover older/alternate official builds.
      */
     private static final String[] TWITTER_SSO_SUCCESSORS = new String[]{
+            "com.x.android.deeplink.XUrlInterpreterActivity",
             "com.twitter.android.AuthorizeAppActivity",
             "com.twitter.app.authorizeapp.AppAuthorizationActivity"
     };
 
     @Override
     public void injectHook() {
-        // Preserve every normal IPackageManager hook first, then restore the
-        // existing Facebook compatibility hooks exactly as before.
         super.injectHook();
         addMethodHook("resolveIntent",
                 new IFacebookWebPackageManagerProxy.ResolveIntentFacebookWebFirst());
@@ -83,31 +78,23 @@ public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
             Intent intent = findIntent(args);
             final boolean legacyTwitterProbe = isExactTwitterSsoProbe(intent);
 
-            // Run the already-shipped Facebook/Twitter compatibility logic first.
-            // It performs the real system query and real ActivityInfo fallbacks.
             Object result = existingCompat.hook(who, method, args);
-
             if (!legacyTwitterProbe) {
                 return result;
             }
 
-            // Prefer the exact legacy provider component when it genuinely exists.
             if (containsUsableTwitterSso(result)) {
-                Log.i(TAG, "native SSO discovery: verified real legacy activity available"
+                Log.w(TAG, "native SSO discovery: verified real legacy activity available"
                         + processSuffix());
                 return result;
             }
 
-            // Newer X releases can keep the actual authorization Activity while
-            // removing only SingleSignOnActivity. Remap the original Intent object
-            // itself so Twitter Kit subsequently starts the real successor after
-            // it appends its own ck/cs extras. Nothing sensitive is read or logged.
             Object successor = tryOfficialTwitterSsoSuccessor(who, method, args, intent);
             if (successor != null) {
                 return successor;
             }
 
-            Log.i(TAG,
+            Log.w(TAG,
                     "native SSO discovery: no accessible official successor; using OAuth fallback"
                             + processSuffix());
             return emptyResult(method);
@@ -134,18 +121,14 @@ public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
                 continue;
             }
 
-            // IntentUtils.isActivityAvailable() receives the caller's Intent by
-            // reference before the binder call. Mutating that same object is what
-            // makes Twitter Kit's following startActivityForResult() target the
-            // real replacement component rather than the removed legacy class.
             originalIntent.setComponent(component);
 
             Object systemResult = null;
             try {
                 systemResult = queryMethod.invoke(who, queryArgs);
                 if (containsUsableActivity(systemResult, className)) {
-                    Log.i(TAG, "native SSO discovery: mapped legacy entry to official "
-                            + simpleName(className) + processSuffix());
+                    Log.w(TAG, "native SSO discovery: mapped legacy entry to official "
+                            + className + processSuffix());
                     return systemResult;
                 }
             } catch (Throwable error) {
@@ -153,16 +136,13 @@ public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
                         + rootType(error) + ")" + processSuffix());
             }
 
-            // Some Android releases apply visibility filtering to the raw query
-            // even though getActivityInfo() above returned the real component.
-            // Repackage that real ActivityInfo without changing package/name.
             ResolveInfo resolveInfo = new ResolveInfo();
             resolveInfo.activityInfo = activityInfo;
             resolveInfo.resolvePackageName = activityInfo.packageName;
             resolveInfo.isDefault = true;
             List<ResolveInfo> resolves = Collections.singletonList(resolveInfo);
-            Log.i(TAG, "native SSO discovery: mapped legacy entry to official "
-                    + simpleName(className) + " via ActivityInfo" + processSuffix());
+            Log.w(TAG, "native SSO discovery: mapped legacy entry to official "
+                    + className + " via ActivityInfo" + processSuffix());
             if (ParceledListSliceCompat.isReturnParceledListSlice(queryMethod)) {
                 return ParceledListSliceCompat.create(resolves);
             }
@@ -283,13 +263,6 @@ public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
             return ParceledListSliceCompat.create(empty);
         }
         return empty;
-    }
-
-    private static String simpleName(String className) {
-        if (className == null) return "unknown";
-        int dot = className.lastIndexOf('.');
-        return dot >= 0 && dot + 1 < className.length()
-                ? className.substring(dot + 1) : className;
     }
 
     private static String processSuffix() {
