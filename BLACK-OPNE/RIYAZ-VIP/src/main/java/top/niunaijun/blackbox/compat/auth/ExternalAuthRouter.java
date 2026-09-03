@@ -95,6 +95,8 @@ public final class ExternalAuthRouter {
 
     private static final String GCLOUD_TWITTER_WEB_ACTIVITY =
             "com.itop.twitterwrapper.TwitterWebActivity";
+    private static final String LEGACY_TWITTER_SSO_ACTIVITY =
+            "com.twitter.android.SingleSignOnActivity";
 
     private static final Set<String> TRUSTED_PROVIDER_PACKAGES = new HashSet<>(Arrays.asList(
             "com.google.android.gms",
@@ -182,6 +184,12 @@ public final class ExternalAuthRouter {
         if (source == null || resultTo == null || requestCode < 0
                 || virtualPackage == null || virtualPackage.trim().isEmpty()) {
             return null;
+        }
+
+        Intent legacyTwitterCompat = createLegacyTwitterSsoCompatIntent(
+                source, resultTo, resultWho, requestCode, virtualPackage);
+        if (legacyTwitterCompat != null) {
+            return legacyTwitterCompat;
         }
 
         // Stock BGMI/GCloud starts TwitterWebActivity explicitly rather than
@@ -279,15 +287,120 @@ public final class ExternalAuthRouter {
             int requestCode,
             String virtualPackage,
             int bpid) {
+        return createBaseBridge(resultTo, resultWho, requestCode,
+                virtualPackage, bpid, VirtualOAuthBridgeActivity.class.getName());
+    }
+
+    private static Intent createBaseBridge(
+            IBinder resultTo,
+            String resultWho,
+            int requestCode,
+            String virtualPackage,
+            int bpid,
+            String bridgeActivity) {
         Intent bridge = new Intent();
         bridge.setComponent(new ComponentName(
                 BlackBoxCore.getHostPkg(),
-                VirtualOAuthBridgeActivity.class.getName()));
+                bridgeActivity));
         bridge.putExtra(EXTRA_EXTERNAL_AUTH, true);
         bridge.putExtra(EXTRA_BPID, bpid);
         bridge.putExtra(EXTRA_USER_ID, BActivityThread.getUserId());
         putResultTarget(bridge, resultTo, resultWho, requestCode, virtualPackage);
         return bridge;
+    }
+
+    /**
+     * Twitter Kit 3.x hard-codes an Activity removed from recent X builds. Its
+     * package-signature check runs before this start, so bridge only the exact
+     * historical component and only while an official provider package is really
+     * installed and the original component is unavailable.
+     */
+    private static Intent createLegacyTwitterSsoCompatIntent(
+            Intent source,
+            IBinder resultTo,
+            String resultWho,
+            int requestCode,
+            String virtualPackage) {
+        if (!isLegacyTwitterSsoIntent(source) || realActivityExists(source)
+                || !hasInstalledTwitterProvider()) {
+            return null;
+        }
+        String consumerKey = boundedStringExtra(source, "ck", 512);
+        String consumerSecret = boundedStringExtra(source, "cs", 1024);
+        if (consumerKey == null || consumerSecret == null) {
+            return null;
+        }
+        int bpid = BActivityThread.getAppPid();
+        if (bpid < 0 || bpid > 24) {
+            return null;
+        }
+
+        Intent bridge = createBaseBridge(
+                resultTo, resultWho, requestCode, virtualPackage, bpid,
+                TwitterSsoCompatActivity.class.getName());
+        bridge.putExtra(TwitterSsoCompatActivity.EXTRA_COMPAT_MODE, true);
+        bridge.putExtra("ck", consumerKey);
+        bridge.putExtra("cs", consumerSecret);
+        String sdkVersion = resolveLegacyTwitterSdkVersion();
+        if (sdkVersion != null) {
+            bridge.putExtra(TwitterSsoCompatActivity.EXTRA_SDK_VERSION, sdkVersion);
+        }
+        return prepareBridgeForLaunch(bridge);
+    }
+
+    private static boolean isLegacyTwitterSsoIntent(Intent intent) {
+        ComponentName component = intent == null ? null : intent.getComponent();
+        return component != null
+                && "com.twitter.android".equals(component.getPackageName())
+                && LEGACY_TWITTER_SSO_ACTIVITY.equals(component.getClassName());
+    }
+
+    private static boolean realActivityExists(Intent intent) {
+        try {
+            ComponentName component = intent == null ? null : intent.getComponent();
+            return component != null && BlackBoxCore.getContext().getPackageManager()
+                    .getActivityInfo(component, 0) != null;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static boolean hasInstalledTwitterProvider() {
+        try {
+            PackageManager pm = BlackBoxCore.getContext().getPackageManager();
+            for (String packageName : TWITTER_NATIVE_PROVIDER_PACKAGES) {
+                try {
+                    if (pm.getApplicationInfo(packageName, 0) != null) return true;
+                } catch (PackageManager.NameNotFoundException ignored) {
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return false;
+    }
+
+    private static String boundedStringExtra(Intent intent, String name, int maxLength) {
+        try {
+            String value = intent == null ? null : intent.getStringExtra(name);
+            return value != null && !value.trim().isEmpty() && value.length() <= maxLength
+                    ? value : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static String resolveLegacyTwitterSdkVersion() {
+        try {
+            ClassLoader loader = BActivityThread.getApplication().getClassLoader();
+            Class<?> twitterCore = loader.loadClass("com.twitter.sdk.android.core.TwitterCore");
+            Object instance = twitterCore.getMethod("getInstance").invoke(null);
+            Object version = twitterCore.getMethod("getVersion").invoke(instance);
+            String value = version instanceof String ? (String) version : null;
+            return value != null && !value.trim().isEmpty() && value.length() <= 80
+                    ? value : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 
     /**

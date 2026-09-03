@@ -16,6 +16,7 @@ import black.android.content.pm.BRParceledListSlice;
 
 import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.BActivityThread;
+import top.niunaijun.blackbox.compat.auth.TwitterSsoCallbackActivity;
 import top.niunaijun.blackbox.core.system.user.BUserHandle;
 import top.niunaijun.blackbox.fake.hook.MethodHook;
 import top.niunaijun.blackbox.fake.hook.ProxyMethod;
@@ -104,9 +105,10 @@ public final class IFacebookWebPackageManagerProxy extends IPackageManagerProxy 
      * query result gets filtered on an OS/version-specific path, fall back to the
      * original raw IPackageManager getActivityInfo() and finally the host PM.
      *
-     * No package/signature identity is fabricated. Only a real, enabled, exported
-     * ActivityInfo for com.twitter.android.SingleSignOnActivity is accepted, and
-     * Twitter Kit's own certificate check still runs before this query.
+     * A real exported provider Activity remains preferred. When a recent X build
+     * has removed it, report the host compatibility Activity as the available
+     * handler; the subsequent exact legacy start is narrowly rewritten to that
+     * bridge. Twitter Kit's own provider certificate check still runs first.
      */
     @ProxyMethod("queryIntentActivities")
     public static final class QueryFacebookCallbackActivities extends MethodHook {
@@ -166,8 +168,23 @@ public final class IFacebookWebPackageManagerProxy extends IPackageManagerProxy 
             return resolves;
         }
 
+        ActivityInfo compatInfo = resolveTwitterSsoCompatActivity();
+        if (compatInfo != null) {
+            ResolveInfo resolveInfo = new ResolveInfo();
+            resolveInfo.activityInfo = compatInfo;
+            resolveInfo.resolvePackageName = compatInfo.packageName;
+            resolveInfo.isDefault = true;
+            List<ResolveInfo> resolves = Collections.singletonList(resolveInfo);
+            Log.i(TWITTER_SSO_TAG,
+                    "native SSO discovery: legacy compatibility bridge matched");
+            if (ParceledListSliceCompat.isReturnParceledListSlice(queryMethod)) {
+                return ParceledListSliceCompat.create(resolves);
+            }
+            return resolves;
+        }
+
         Log.e(TWITTER_SSO_TAG,
-                "native SSO discovery: official SingleSignOnActivity unavailable");
+                "native SSO discovery: provider and compatibility bridge unavailable");
 
         // Preserve the platform's original empty result shape when possible.
         if (systemResult != null) {
@@ -241,6 +258,20 @@ public final class IFacebookWebPackageManagerProxy extends IPackageManagerProxy 
             logSsoLookupFailure("host PackageManager getActivityInfo", error);
         }
         return null;
+    }
+
+    private static ActivityInfo resolveTwitterSsoCompatActivity() {
+        try {
+            if (BlackBoxCore.getContext() == null) return null;
+            ComponentName component = new ComponentName(
+                    BlackBoxCore.getHostPkg(), TwitterSsoCallbackActivity.class.getName());
+            ActivityInfo info = BlackBoxCore.getContext().getPackageManager()
+                    .getActivityInfo(component, 0);
+            return info != null && info.enabled && info.exported ? info : null;
+        } catch (Throwable error) {
+            logSsoLookupFailure("compatibility ActivityInfo", error);
+            return null;
+        }
     }
 
     private static ActivityInfo getActivityInfoFromRawSystemPm(
