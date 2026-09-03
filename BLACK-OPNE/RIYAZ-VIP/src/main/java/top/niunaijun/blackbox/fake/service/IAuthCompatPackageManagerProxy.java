@@ -27,12 +27,13 @@ import top.niunaijun.blackbox.utils.compat.ParceledListSliceCompat;
  *
  * <p>BGMI's legacy Twitter Kit hard-codes
  * {@code com.twitter.android.SingleSignOnActivity}. Modern official X builds may
- * remove that component while still exposing a real exported authorization UI.
+ * remove that component while still exposing a real exported app entry point.
  * For the exact legacy probe only, this class rewrites the same Intent object to
  * a real, enabled, exported, permission-accessible Activity from the installed
  * official X/Twitter package.</p>
  *
- * <p>The resolver first tries known historical successor names, then scans the
+ * <p>The resolver first tries the verified modern X deep-link entry point observed
+ * in the installed manifest, then historical successor names, then scans the
  * installed official package for exported auth/authorize/oauth/sso/login
  * Activities and selects the strongest candidate. No account, token, cookie,
  * consumer secret, signature, or provider result is fabricated or extracted.</p>
@@ -45,7 +46,13 @@ public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
     private static final String TWITTER_SSO_ACTIVITY =
             "com.twitter.android.SingleSignOnActivity";
 
+    /**
+     * First candidate is verified on the user's installed X 12.22.0 build:
+     * exported=true and handles http/https x.com/twitter.com plus x:/twitter:.
+     * The remaining names cover older/alternate official builds.
+     */
     private static final String[] TWITTER_SSO_SUCCESSORS = new String[]{
+            "com.x.android.deeplink.XUrlInterpreterActivity",
             "com.twitter.android.AuthorizeAppActivity",
             "com.twitter.app.authorizeapp.AppAuthorizationActivity"
     };
@@ -110,16 +117,15 @@ public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
                 candidate.packageName, candidate.name);
 
         // Twitter Kit passes the same Intent instance into the availability check
-        // and later startActivityForResult(). Rewriting this exact object is what
-        // redirects the old hard-coded SingleSignOnActivity launch to the real X
-        // authorization Activity without inventing a provider result.
+        // and later startActivityForResult(). Rewriting this exact object redirects
+        // the removed legacy component to a real exported official X component.
         originalIntent.setComponent(component);
 
         try {
             Object systemResult = queryMethod.invoke(who, queryArgs);
             if (containsUsableActivity(systemResult, candidate.name)) {
                 Log.w(TAG, "forced legacy SSO probe -> real official X Activity: "
-                        + simpleName(candidate.name) + processSuffix());
+                        + candidate.name + processSuffix());
                 return systemResult;
             }
         } catch (Throwable error) {
@@ -136,7 +142,7 @@ public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
 
         List<ResolveInfo> resolves = Collections.singletonList(resolveInfo);
         Log.w(TAG, "forced legacy SSO probe -> real official X Activity via ActivityInfo: "
-                + simpleName(candidate.name) + processSuffix());
+                + candidate.name + processSuffix());
         if (ParceledListSliceCompat.isReturnParceledListSlice(queryMethod)) {
             return ParceledListSliceCompat.create(resolves);
         }
@@ -148,14 +154,14 @@ public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
             return null;
         }
 
-        // First try known real successor names.
+        // First try exact verified/known official component names.
         for (String className : TWITTER_SSO_SUCCESSORS) {
             try {
                 ActivityInfo info = pm.getActivityInfo(
                         new ComponentName(TWITTER_PACKAGE, className), 0);
                 if (isUsableOfficialActivity(pm, info)) {
-                    Log.w(TAG, "hard-coded real X auth candidate available: "
-                            + simpleName(className) + processSuffix());
+                    Log.w(TAG, "hard-coded real X handoff candidate available: "
+                            + className + processSuffix());
                     return info;
                 }
             } catch (Throwable ignored) {
