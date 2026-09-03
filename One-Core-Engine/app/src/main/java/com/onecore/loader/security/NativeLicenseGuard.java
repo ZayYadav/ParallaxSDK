@@ -52,7 +52,7 @@ final class NativeLicenseGuard {
         return value;
     }
 
-    static void assertSecure(Context context, String[] tlsPins, String publicKeyB64) {
+    static void assertSecure(Context context, String publicKeyB64) {
         if (!AVAILABLE || context == null) {
             throw new SecurityException("Native licensing guard is unavailable");
         }
@@ -81,7 +81,6 @@ final class NativeLicenseGuard {
         try {
             result = nativeCheckEnvironment(
                     context.getPackageName(),
-                    tlsPins == null ? new String[0] : tlsPins,
                     publicKeyB64 == null ? "" : publicKeyB64,
                     proxyConfigured,
                     debuggerConnected);
@@ -139,7 +138,6 @@ final class NativeLicenseGuard {
     /** Returns 0 when the native process/transport environment passes all checks. */
     private static native int nativeCheckEnvironment(
             String packageName,
-            String[] tlsPins,
             String publicKeyB64,
             boolean proxyConfigured,
             boolean debuggerConnected);

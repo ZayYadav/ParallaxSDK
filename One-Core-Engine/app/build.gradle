@@ -18,34 +18,6 @@ apply from: '../signing.gradle'
 def parallaxApiPublicKey = providers.gradleProperty('parallaxApiPublicKey')
         .orElse(System.getenv('PARALLAX_API_PUBLIC_KEY_B64') ?: '')
         .get()
-def parallaxConfiguredTlsPins = providers.gradleProperty('parallaxTlsPins')
-        .orElse(System.getenv('PARALLAX_TLS_PINS') ?: '')
-        .get()
-
-// Source-controlled emergency/rotation anchor for the live licensing host.
-// Repository variables may add future/backup pins, but a typo in the variable must not
-// remove the currently approved production SPKI pin from the APK.
-def parallaxBuiltInTlsPins = [
-        'sha256/Ina/GY9COYngSpB7Ht+asGkJ5LV99jpBHYz11jXRSWM='
-]
-def parseTlsPins = { String raw ->
-    if (raw == null || raw.trim().isEmpty()) {
-        return []
-    }
-    def pins = raw.split(',', -1)
-            .collect { it.trim() }
-            .findAll { !it.isEmpty() }
-    if (pins.any { !(it ==~ /^sha256\/[A-Za-z0-9+\/]{43}=$/) }) {
-        throw new GradleException('PARALLAX_TLS_PINS must contain valid OkHttp SHA-256 pins')
-    }
-    return pins
-}
-def parallaxConfiguredTlsPinList = parseTlsPins(parallaxConfiguredTlsPins)
-def parallaxTlsPinList = (parallaxBuiltInTlsPins + parallaxConfiguredTlsPinList).unique()
-if (parallaxTlsPinList.isEmpty() || parallaxTlsPinList.size() > 8) {
-    throw new GradleException('Effective PARALLAX_TLS_PINS must contain between 1 and 8 pins')
-}
-def parallaxTlsPins = parallaxTlsPinList.join(',')
 
 def oneCoreAllowedSigningSha256 = providers.gradleProperty('onecoreAllowedSigningSha256')
         .orElse(System.getenv('ONECORE_ALLOWED_SIGNING_SHA256') ?: '')
@@ -120,9 +92,9 @@ tasks.configureEach { task ->
     }
 }
 
-// TLS pins are explicit trust anchors. The source-controlled production pin is always kept in
-// the effective set; repository variables are additive rotation/backup pins only. Never derive
-// or auto-enroll a network-observed certificate into a release artifact.
+// Release builds still require the application-layer API public key. TLS server identity is
+// validated by Android/OkHttp's platform trust store and hostname verifier; the Loader no longer
+// embeds or requires certificate/SPKI pins.
 if (releaseTaskRequested) {
     byte[] publicKeyDer
     try {
@@ -132,9 +104,6 @@ if (releaseTaskRequested) {
     }
     if (publicKeyDer.length < 256 || publicKeyDer.length > 1024) {
         throw new GradleException('PARALLAX_API_PUBLIC_KEY_B64 has an invalid DER size')
-    }
-    if (!parallaxTlsPinList.containsAll(parallaxBuiltInTlsPins)) {
-        throw new GradleException('Built-in production TLS pin is missing from the effective release trust set')
     }
 }
 
@@ -249,7 +218,6 @@ android {
         // This removes unused language packs contributed by dependencies.
         resourceConfigurations += ['en']
         buildConfigField "String", "PARALLAX_API_PUBLIC_KEY_B64", javaString(parallaxApiPublicKey)
-        buildConfigField "String", "PARALLAX_TLS_PINS", javaString(parallaxTlsPins)
 
         ndk {
             abiFilters "arm64-v8a"

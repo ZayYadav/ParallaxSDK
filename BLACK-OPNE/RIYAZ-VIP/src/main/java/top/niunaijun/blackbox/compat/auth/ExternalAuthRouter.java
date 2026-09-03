@@ -19,6 +19,8 @@ import org.lsposed.lsparanoid.Obfuscate;
 
 import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.BActivityThread;
+import top.niunaijun.blackbox.compat.oauth.TwitterNativeAuthBridgeActivity;
+import top.niunaijun.blackbox.compat.oauth.TwitterOAuthSessionStore;
 import top.niunaijun.blackbox.compat.oauth.VirtualOAuthBridgeActivity;
 import top.niunaijun.blackbox.compat.oauth.VirtualOAuthRouter;
 import top.niunaijun.blackbox.utils.compat.IntentRedirectCompat;
@@ -34,20 +36,21 @@ import top.niunaijun.blackbox.utils.compat.IntentRedirectCompat;
  * IntentSenders are accepted only when Android reports an allow-listed creator
  * package, so a cloned app cannot use this bridge for arbitrary external flows.
  *
- * Twitter/X OAuth is native-provider-first. This includes the GCloud/IMSDK
+ * Twitter/X OAuth is real-app-first. This includes the GCloud/IMSDK
  * `com.itop.twitterwrapper.TwitterWebActivity` observed in stock BGMI: when its
  * launch extras already contain a Twitter/X OAuth URL, the URL is extracted
- * without logging it and offered to the real Twitter/X app first. If the exact
- * URL is not present or Android says the provider cannot handle it, the stock
- * web flow remains untouched.
+ * without logging it and offered to the installed official Twitter/X app first.
+ * A host callback trampoline preserves the guest's original Activity result for
+ * supported legacy custom-scheme redirects. If safe app routing is unavailable,
+ * the existing Auth Tab/web flow remains the compatibility fallback.
  *
  * No package identity, signatures, cookies, passwords, or tokens are spoofed.
  *
  * Android 16 compatibility note: provider UI is launched from the host-main
  * bridge rather than from the guest :pN process. A normal startActivityForResult
  * bridge remains attached to Android's original resultTo token, so the host
- * trampoline returns exactly one system-delivered result. Only detached
- * IntentSender bridges use the private :pN provider relay.
+ * trampoline returns exactly one system-delivered result. Detached IntentSender
+ * and Twitter custom-scheme callbacks use the private :pN provider relay.
  */
 @Obfuscate
 public final class ExternalAuthRouter {
@@ -107,6 +110,12 @@ public final class ExternalAuthRouter {
             "com.x.android"
     ));
 
+    private static final Set<String> TWITTER_PROVIDER_PACKAGES = new HashSet<>(Arrays.asList(
+            "com.twitter.android",
+            "com.twitter.android.lite",
+            "com.x.android"
+    ));
+
     private static final String[] TWITTER_NATIVE_PROVIDER_PACKAGES = new String[]{
             "com.twitter.android",
             "com.x.android",
@@ -130,6 +139,10 @@ public final class ExternalAuthRouter {
         return packageName != null && TRUSTED_PROVIDER_PACKAGES.contains(packageName);
     }
 
+    public static boolean isTwitterProviderPackage(String packageName) {
+        return packageName != null && TWITTER_PROVIDER_PACKAGES.contains(packageName);
+    }
+
     public static boolean isTrustedProviderIntent(Intent intent) {
         return trustedProviderPackage(intent) != null;
     }
@@ -145,8 +158,8 @@ public final class ExternalAuthRouter {
         try {
             return isTrustedProviderPackage(sender.getCreatorPackage());
         } catch (Throwable ignored) {
-            return false;
         }
+        return false;
     }
 
     public static IntentSender wrapIntentSender(Object target) {
@@ -293,7 +306,7 @@ public final class ExternalAuthRouter {
     /**
      * Prefer the real Twitter/X application only when Android's real PackageManager
      * confirms that the installed provider advertises support for this exact OAuth
-     * URL. This deliberately avoids hard-coding a private provider Activity name.
+     * URL and the host can safely capture the guest's declared callback scheme.
      */
     private static Intent createTwitterNativeResultBridgeIntent(
             Intent source,
@@ -301,7 +314,16 @@ public final class ExternalAuthRouter {
             String resultWho,
             int requestCode,
             String virtualPackage) {
-        if (!isTrustedTwitterOAuthUri(source == null ? null : source.getData())) {
+        Uri authUri = source == null ? null : source.getData();
+        if (!isTrustedTwitterOAuthUri(authUri)) {
+            return null;
+        }
+
+        int userId = BActivityThread.getUserId();
+        Uri redirectUri = VirtualOAuthRouter.resolveTwitterRedirectUri(
+                authUri, userId, virtualPackage);
+        if (redirectUri == null
+                || !TwitterOAuthSessionStore.isHostCaptureSupported(redirectUri)) {
             return null;
         }
 
@@ -322,9 +344,16 @@ public final class ExternalAuthRouter {
         providerIntent.setPackage(providerPackage);
         providerIntent.putExtra(EXTRA_DIRECT_PROVIDER_DISPATCH, true);
 
-        Intent bridge = createBaseBridge(
-                resultTo, resultWho, requestCode, virtualPackage, bpid);
+        Intent bridge = new Intent();
+        bridge.setComponent(new ComponentName(
+                BlackBoxCore.getHostPkg(),
+                TwitterNativeAuthBridgeActivity.class.getName()));
+        bridge.putExtra(EXTRA_BPID, bpid);
+        bridge.putExtra(EXTRA_USER_ID, userId);
         bridge.putExtra(EXTRA_PROVIDER_INTENT, providerIntent);
+        bridge.putExtra(VirtualOAuthRouter.EXTRA_AUTH_URL, authUri.toString());
+        bridge.putExtra(VirtualOAuthRouter.EXTRA_REDIRECT_URI, redirectUri.toString());
+        putResultTarget(bridge, resultTo, resultWho, requestCode, virtualPackage);
         bridge.addFlags(source.getFlags() & (
                 Intent.FLAG_ACTIVITY_NO_ANIMATION
                         | Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -346,7 +375,9 @@ public final class ExternalAuthRouter {
                     continue;
                 }
                 if (packageName.equals(resolved.activityInfo.packageName)
-                        && isTrustedProviderPackage(packageName)) {
+                        && isTwitterProviderPackage(packageName)
+                        && resolved.activityInfo.enabled
+                        && resolved.activityInfo.exported) {
                     return packageName;
                 }
             }
@@ -530,7 +561,7 @@ public final class ExternalAuthRouter {
         return isTwitterHttpsUri(uri);
     }
 
-    private static boolean isTrustedTwitterOAuthUri(Uri uri) {
+    public static boolean isTrustedTwitterOAuthUri(Uri uri) {
         return isTwitterHttpsUri(uri) && isLikelyTwitterOAuthUri(uri);
     }
 

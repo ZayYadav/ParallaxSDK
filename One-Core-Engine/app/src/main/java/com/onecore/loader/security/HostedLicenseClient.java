@@ -20,7 +20,6 @@ import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
-import okhttp3.CertificatePinner;
 import okhttp3.ConnectionSpec;
 import okhttp3.HttpUrl;
 import okhttp3.MediaType;
@@ -30,7 +29,7 @@ import okhttp3.Response;
 import okhttp3.ResponseBody;
 import okio.BufferedSource;
 
-/** Fail-closed encrypted client for the pinned Parallax licensing API. */
+/** Fail-closed encrypted client for the Parallax licensing API over platform-validated TLS. */
 @Obfuscate
 public final class HostedLicenseClient {
     static final String GAME_ID = "PUBG";
@@ -41,8 +40,6 @@ public final class HostedLicenseClient {
             Pattern.compile("^[A-Za-z0-9_-]{4,64}$");
     private static final Pattern RECEIPT_PATTERN =
             Pattern.compile("^[A-Za-z0-9_-]{32,64}$");
-    private static final Pattern TLS_PIN_PATTERN =
-            Pattern.compile("^sha256/[A-Za-z0-9+/]{43}=$");
     private static final Pattern PUBLIC_KEY_PATTERN =
             Pattern.compile("^[A-Za-z0-9+/]+={0,2}$");
 
@@ -57,14 +54,12 @@ public final class HostedLicenseClient {
     private final String connectUrl;
     private final String connectHost;
     private final String apiPublicKey;
-    private final String[] tlsPins;
 
     public HostedLicenseClient(Context context) {
         this.context = context.getApplicationContext();
         this.apiPublicKey = configuredPublicKey();
-        this.tlsPins = configuredPins();
 
-        NativeLicenseGuard.assertSecure(this.context, tlsPins, apiPublicKey);
+        NativeLicenseGuard.assertSecure(this.context, apiPublicKey);
         this.connectUrl = NativeLicenseGuard.connectUrl();
         this.connectHost = NativeLicenseGuard.connectHost();
 
@@ -73,17 +68,10 @@ public final class HostedLicenseClient {
             throw new SecurityException("Native licensing endpoint validation failed");
         }
 
-        CertificatePinner.Builder pins = new CertificatePinner.Builder();
-        int pinCount = 0;
-        for (String pin : tlsPins) {
-            pins.add(connectHost, pin);
-            pinCount++;
-        }
-        if (pinCount == 0) {
-            throw new IllegalStateException("Licensing TLS pins are not configured");
-        }
+        // Deliberately use Android/OkHttp's normal CA chain + hostname validation.
+        // Certificate/SPKI pinning is not used by the Loader. The encrypted signed
+        // application protocol and all existing integrity/runtime checks remain active.
         this.httpClient = new okhttp3.OkHttpClient.Builder()
-                .certificatePinner(pins.build())
                 .connectionSpecs(Arrays.asList(ConnectionSpec.MODERN_TLS))
                 .proxy(Proxy.NO_PROXY)
                 .connectTimeout(10, TimeUnit.SECONDS)
@@ -99,7 +87,7 @@ public final class HostedLicenseClient {
     public String activate(String activationKey) {
         try {
             // Native pre-flight: endpoint/config + tracer/injection/interception checks.
-            NativeLicenseGuard.assertSecure(context, tlsPins, apiPublicKey);
+            NativeLicenseGuard.assertSecure(context, apiPublicKey);
 
             AppIntegrity.Verification integrity = AppIntegrity.verify(context);
             if (!integrity.isValid()) {
@@ -137,7 +125,7 @@ public final class HostedLicenseClient {
                     }
 
                     // Native post-flight catches a tracer/injection arriving while the request was active.
-                    NativeLicenseGuard.assertSecure(context, tlsPins, apiPublicKey);
+                    NativeLicenseGuard.assertSecure(context, apiPublicKey);
 
                     String body = readBoundedJson(response);
                     JSONObject decrypted = LicenseTransportCrypto.decryptResponse(body, encrypted);
@@ -343,21 +331,6 @@ public final class HostedLicenseClient {
         return value;
     }
 
-    private static String[] configuredPins() {
-        String value = BuildConfig.PARALLAX_TLS_PINS;
-        if (value == null || value.trim().isEmpty()) {
-            return new String[0];
-        }
-        String[] configured = value.split(",", -1);
-        for (int index = 0; index < configured.length; index++) {
-            configured[index] = configured[index].trim();
-            if (!TLS_PIN_PATTERN.matcher(configured[index]).matches()) {
-                throw new IllegalStateException("Licensing TLS pin configuration is invalid");
-            }
-        }
-        return configured;
-    }
-
     private static String userFacingError(Exception exception) {
         String message = exception.getMessage();
         String normalized = message == null ? "" : message.toLowerCase(Locale.US);
@@ -365,7 +338,9 @@ public final class HostedLicenseClient {
                 || normalized.contains("native licensing")) {
             return "Secure verification environment rejected";
         }
-        if (normalized.contains("certificate pinning") || normalized.contains("peer not authenticated")) {
+        if (normalized.contains("peer not authenticated")
+                || normalized.contains("hostname")
+                || normalized.contains("certificate")) {
             return "Secure server identity validation failed";
         }
         if (normalized.contains("configured") || normalized.contains("encryption")

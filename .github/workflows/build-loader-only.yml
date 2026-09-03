@@ -32,7 +32,6 @@ jobs:
       NDK_VERSION: 27.2.12479018
       BUILD_LOG_DIR: loader-only-build-logs
       PARALLAX_API_PUBLIC_KEY_B64: ${{ vars.PARALLAX_API_PUBLIC_KEY_B64 }}
-      PARALLAX_TLS_PINS: ${{ vars.PARALLAX_TLS_PINS }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -78,11 +77,11 @@ jobs:
           unzip -tq "${LOADER_AAR_PATH}"
           sha256sum "${LOADER_AAR_PATH}" | tee "${BUILD_LOG_DIR}/bundled-aar.sha256"
 
-      - name: Configure Loader transport and artifact tier
+      - name: Configure Loader encrypted transport and artifact tier
         shell: bash
         run: |
           set -euo pipefail
-          if [ -n "${PARALLAX_API_PUBLIC_KEY_B64:-}" ] && [ -n "${PARALLAX_TLS_PINS:-}" ]; then
+          if [ -n "${PARALLAX_API_PUBLIC_KEY_B64:-}" ]; then
             echo 'PARALLAX_HAS_RELEASE_TRANSPORT=true' >> "$GITHUB_ENV"
           else
             openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
@@ -92,9 +91,8 @@ jobs:
               -pubout -outform DER 2>/dev/null | base64 -w0)
             rm -f /tmp/parallax-loader-only-private.pem
             echo "PARALLAX_API_PUBLIC_KEY_B64=${PUBLIC_KEY}" >> "$GITHUB_ENV"
-            echo 'PARALLAX_TLS_PINS=sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' >> "$GITHUB_ENV"
             echo 'PARALLAX_HAS_RELEASE_TRANSPORT=false' >> "$GITHUB_ENV"
-            echo 'WARNING: using non-production transport configuration for this CI build.'
+            echo 'WARNING: using non-production application-layer encryption configuration for this CI build.'
           fi
 
           if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ] \
@@ -108,7 +106,6 @@ jobs:
           fi
 
           if [ -n "${PARALLAX_API_PUBLIC_KEY_B64:-}" ] \
-            && [ -n "${PARALLAX_TLS_PINS:-}" ] \
             && [ -n "${ANDROID_KEYSTORE_BASE64:-}" ] \
             && [ -n "${STORE_PASSWORD:-}" ] \
             && [ -n "${KEY_ALIAS:-}" ] \
@@ -118,12 +115,11 @@ jobs:
             echo 'PARALLAX_ARTIFACT_TIER=ci-nonproduction' >> "$GITHUB_ENV"
           fi
 
-      - name: Validate encrypted Loader transport
+      - name: Validate encrypted Loader protocol configuration
         shell: python
         run: |
           import base64
           import os
-          import re
 
           try:
               public_key = base64.b64decode(
@@ -134,17 +130,6 @@ jobs:
               raise SystemExit("PARALLAX_API_PUBLIC_KEY_B64 is invalid") from error
           if len(public_key) < 256 or len(public_key) > 1024:
               raise SystemExit("PARALLAX_API_PUBLIC_KEY_B64 has an invalid DER size")
-
-          pins = [
-              item.strip()
-              for item in os.environ.get("PARALLAX_TLS_PINS", "").split(",")
-              if item.strip()
-          ]
-          if not pins or any(
-              not re.fullmatch(r"sha256/[A-Za-z0-9+/]{43}=", item)
-              for item in pins
-          ):
-              raise SystemExit("PARALLAX_TLS_PINS must contain valid SHA-256 pins")
 
       - name: Configure Loader signing keystore
         working-directory: ${{ env.LOADER_PROJECT_DIR }}
@@ -204,7 +189,6 @@ jobs:
             'https://parallaxloader.parallaxserver.online/api/v2/connect' \
             'parallax-license-v2-request' \
             'parallax-license-v2-response:' \
-            'Licensing TLS pins are not configured' \
             'accounts.google.com' \
             'www.facebook.com' \
             'oauth.x.com' \
@@ -261,7 +245,7 @@ jobs:
             printf 'parallaxcore_source=repository-bundled-aar\n'
             printf 'commit=%s\n' "${GITHUB_SHA}"
             if [ "${PARALLAX_ARTIFACT_TIER}" != 'production' ]; then
-              printf 'warning=CI verification build only; configure production transport and signing before distribution.\n'
+              printf 'warning=CI verification build only; configure production application-layer encryption and signing before distribution.\n'
             fi
             sha256sum "${LOADER_AAR_PATH}" "$RELEASE_APK" "$DEBUG_APK"
           } | tee "${BUILD_LOG_DIR}/loader-only-artifact-info.txt"
