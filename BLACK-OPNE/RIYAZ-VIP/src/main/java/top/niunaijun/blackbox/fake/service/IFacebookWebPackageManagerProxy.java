@@ -5,7 +5,6 @@ import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
-import android.os.UserHandle;
 import android.util.Log;
 
 import java.lang.reflect.Method;
@@ -17,6 +16,7 @@ import black.android.content.pm.BRParceledListSlice;
 
 import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.BActivityThread;
+import top.niunaijun.blackbox.core.system.user.BUserHandle;
 import top.niunaijun.blackbox.fake.hook.MethodHook;
 import top.niunaijun.blackbox.fake.hook.ProxyMethod;
 import top.niunaijun.blackbox.fake.hook.ScanClass;
@@ -263,10 +263,26 @@ public final class IFacebookWebPackageManagerProxy extends IPackageManagerProxy 
                     continue;
                 }
 
-                Object flags = (types[1] == long.class || types[1] == Long.class)
-                        ? 0L : 0;
+                Object flags;
+                if (types[1] == long.class || types[1] == Long.class) {
+                    flags = Long.valueOf(0L);
+                } else {
+                    flags = Integer.valueOf(0);
+                }
+
+                int hostUserId = 0;
+                try {
+                    if (BlackBoxCore.getContext() != null
+                            && BlackBoxCore.getContext().getApplicationInfo() != null) {
+                        hostUserId = BUserHandle.getUserId(
+                                BlackBoxCore.getContext().getApplicationInfo().uid);
+                    }
+                } catch (Throwable error) {
+                    logSsoLookupFailure("host user-id lookup", error);
+                }
+
                 Object result = candidate.invoke(
-                        who, component, flags, UserHandle.myUserId());
+                        who, component, flags, Integer.valueOf(hostUserId));
                 if (result instanceof ActivityInfo) {
                     return (ActivityInfo) result;
                 }
