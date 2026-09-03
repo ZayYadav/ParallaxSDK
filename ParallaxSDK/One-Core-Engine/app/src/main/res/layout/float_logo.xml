@@ -1,0 +1,2499 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout
+     xmlns:android="http://schemas.android.com/apk/res/android"
+     xmlns:app="http://schemas.android.com/apk/res-auto"
+     xmlns:tools="http://schemas.android.com/tools"
+     android:layout_height="wrap_content"
+     android:layout_width="wrap_content"
+     android:textAlignment="viewEnd"
+     tools:ignore="HardcodedText, UseSwitchCompatOrMaterialXml, UselessParent, TooManyViews"
+     android:layout_gravity="start|end">
+
+    <RelativeLayout
+         android:layout_height="wrap_content"
+         android:layout_width="wrap_content"
+         android:visibility="visible"
+         android:id="@+id/relativeLayoutParent">
+
+        <RelativeLayout
+             android:layout_height="wrap_content"
+             android:layout_width="wrap_content"
+             android:orientation="vertical">
+
+            <ImageView
+                 android:layout_height="50dp"
+                 android:layout_width="50dp"
+                 android:scaleType="centerCrop"
+                 android:src="@drawable/parallax_labs_brand"
+                 tools:ignore="ContentDescription" />
+
+        </RelativeLayout>
+
+    </RelativeLayout>
+
+    <RelativeLayout
+         android:layout_height="wrap_content"
+         android:layout_width="280dp"
+         android:visibility="visible"
+         android:id="@+id/espView">
+
+        <LinearLayout
+             android:layout_height="wrap_content"
+             android:layout_width="280dp"
+             android:orientation="horizontal">
+
+            <LinearLayout
+                 android:layout_height="300dp"
+                 android:layout_width="50dp"
+                 android:background="#192231"
+                 android:gravity="top|center"
+                 android:orientation="vertical"
+                 android:layout_weight="1.0">
+
+                <LinearLayout
+                     android:layout_height="40dp"
+                     android:layout_width="match_parent"
+                     android:gravity="center"
+                     android:id="@+id/bg_playerBtn">
+
+                    <ImageView
+                         android:layout_height="30.0dip"
+                         android:layout_width="30.0dip"
+                         android:src="@drawable/esp"
+                         tools:ignore="ContentDescription"
+                         android:id="@+id/playerBtn" />
+
+                </LinearLayout>
+
+                <LinearLayout
+                     android:layout_height="40dp"
+                     android:layout_width="match_parent"
+                     android:gravity="center"
+                     android:id="@+id/bg_pickupBtn">
+
+                    <ImageView
+                         android:layout_height="30.0dip"
+                         android:layout_width="30.0dip"
+                         android:src="@drawable/loot"
+                         tools:ignore="ContentDescription"
+                         android:id="@+id/pickupBtn" />
+
+                </LinearLayout>
+
+                <LinearLayout
+                     android:layout_height="40dp"
+                     android:layout_width="match_parent"
+                     android:gravity="center"
+                     android:id="@+id/bg_trackBtn">
+
+                    <ImageView
+                         android:layout_height="30.0dip"
+                         android:layout_width="30.0dip"
+                         android:src="@drawable/track"
+                         tools:ignore="ContentDescription"
+                         android:id="@+id/trackBtn" />
+
+                </LinearLayout>
+
+                <LinearLayout
+                     android:layout_height="40dp"
+                     android:layout_width="match_parent"
+                     android:gravity="center"
+                     android:id="@+id/bg_setting">
+
+                    <ImageView
+                         android:layout_height="50dp"
+                         android:layout_width="50dp"
+                         android:src="@drawable/inject"
+                         tools:ignore="ContentDescription"
+                         android:id="@+id/setBtn" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <LinearLayout
+                 android:layout_height="match_parent"
+                 android:layout_width="wrap_content"
+                 android:visibility="visible"
+                 android:background="#1e2a3e"
+                 android:orientation="vertical"
+                 android:layout_weight="5.0"
+                 android:id="@+id/layout_main_view">
+
+                <RelativeLayout
+                     android:layout_height="wrap_content"
+                     android:layout_width="match_parent"
+                     android:orientation="horizontal">
+
+                    <TextView
+                         android:layout_height="wrap_content"
+                         android:layout_width="match_parent"
+                         android:layout_centerVertical="true"
+                         android:padding="4dp"
+                         android:textSize="17sp"
+                         android:textColor="#FFFFFF"
+                         android:layout_marginLeft="5dp"
+                         android:paddingVertical="5dp"
+                         android:fontFamily="@font/acme"
+                         android:paddingHorizontal="10dp"
+                         android:layout_weight="1"
+                         android:id="@+id/textview_subx"
+                         android:text="Display" />
+
+                    <TextView
+                         android:layout_height="wrap_content"
+                         android:layout_width="wrap_content"
+                         android:layout_marginEnd="10dp"
+                         android:layout_centerVertical="true"
+                         android:fontFamily="@font/acme"
+                         android:textSize="16dp"
+                         android:layout_alignParentEnd="true"
+                         android:textColor="#0cf5c6"
+                         android:id="@+id/closeBtn"
+                         android:text="⨉" />
+
+                </RelativeLayout>
+
+                <ScrollView
+                     android:layout_height="match_parent"
+                     android:layout_width="match_parent"
+                     android:background="#1e2a3e"
+                     android:id="@+id/contentView">
+
+                    <LinearLayout
+                         android:layout_height="wrap_content"
+                         android:layout_width="match_parent"
+                         android:padding="3sp"
+                         android:orientation="vertical">
+
+                        <LinearLayout
+                             android:layout_height="wrap_content"
+                             android:layout_width="match_parent"
+                             android:orientation="vertical"
+                             android:layout_marginLeft="10dp">
+
+                            <LinearLayout
+                                 android:layout_height="match_parent"
+                                 android:layout_width="match_parent"
+                                 android:visibility="visible"
+                                 android:orientation="vertical"
+                                 android:id="@+id/players">
+
+                                <LinearLayout
+                                     android:layout_height="80dp"
+                                     android:layout_width="match_parent"
+                                     android:orientation="vertical">
+
+                                    <Switch
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:fontFamily="@font/acme"
+                                         android:textColor="#ffffff"
+                                         android:theme="@style/PKSwitch2"
+                                         tools:ignore="HardcodedText,UseSwitchCompatOrMaterialXml"
+                                         android:id="@+id/isLogobypass"
+                                         android:text="LOGO BYPASS" />
+
+                                    <Switch
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:fontFamily="@font/acme"
+                                         android:textColor="#ffffff"
+                                         android:theme="@style/PKSwitch2"
+                                         tools:ignore="HardcodedText,UseSwitchCompatOrMaterialXml"
+                                         android:id="@+id/Islandbypass"
+                                         android:text="ISLAND BYPASS"
+                                         android:textStyle="bold" />
+
+                                    <Switch
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:fontFamily="@font/acme"
+                                         android:textColor="#ffffff"
+                                         android:theme="@style/PKSwitch2"
+                                         tools:ignore="HardcodedText,UseSwitchCompatOrMaterialXml"
+                                         android:id="@+id/ESP_ENABLE"
+                                         android:text="ESP ENABLE"
+                                         android:textStyle="bold" />
+
+                                </LinearLayout>
+
+                                <LinearLayout
+                                     android:layout_height="wrap_content"
+                                     android:layout_width="match_parent"
+                                     android:gravity="center_vertical"
+                                     android:baselineAligned="false"
+                                     android:clipToPadding="false"
+                                     android:focusable="true"
+                                     android:paddingTop="8dp">
+
+                                    <TextView
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:textSize="16sp"
+                                         android:fontFamily="@font/acme"
+                                         android:textColor="#ffffff"
+                                         android:layout_weight="1.0"
+                                         android:textStyle="normal"
+                                         android:text="Render framerate" />
+
+                                </LinearLayout>
+
+                                <ScrollView
+                                     android:layout_height="wrap_content"
+                                     android:layout_width="match_parent"
+                                     android:orientation="horizontal">
+
+                                    <LinearLayout
+                                         android:layout_height="40dp"
+                                         android:layout_width="match_parent"
+                                         android:orientation="horizontal">
+
+                                        <RadioGroup
+                                             android:layout_height="30dp"
+                                             android:layout_width="match_parent"
+                                             android:orientation="horizontal"
+                                             android:id="@+id/radioFPS">
+
+                                            <RadioButton
+                                                 android:layout_height="match_parent"
+                                                 android:layout_width="wrap_content"
+                                                 android:alpha="0.8"
+                                                 android:fontFamily="@font/acme"
+                                                 android:textSize="10dp"
+                                                 android:textColor="#ffffff"
+                                                 android:checked="true"
+                                                 android:theme="@style/PKSwitch"
+                                                 android:id="@+id/fps30"
+                                                 android:tag="1"
+                                                 android:text="30 FPS" />
+
+                                            <RadioButton
+                                                 android:layout_height="match_parent"
+                                                 android:layout_width="wrap_content"
+                                                 android:alpha="0.8"
+                                                 android:fontFamily="@font/acme"
+                                                 android:textSize="10dp"
+                                                 android:textColor="#ffffff"
+                                                 android:theme="@style/PKSwitch"
+                                                 android:id="@+id/fps45"
+                                                 android:tag="2"
+                                                 android:text="45 FPS" />
+
+                                            <RadioButton
+                                                 android:layout_height="match_parent"
+                                                 android:layout_width="wrap_content"
+                                                 android:alpha="0.8"
+                                                 android:fontFamily="@font/acme"
+                                                 android:textSize="10dp"
+                                                 android:textColor="#ffffff"
+                                                 android:theme="@style/PKSwitch"
+                                                 android:id="@+id/fps60"
+                                                 android:tag="3"
+                                                 android:text="60 FPS" />
+
+                                            <RadioButton
+                                                 android:layout_height="match_parent"
+                                                 android:layout_width="wrap_content"
+                                                 android:fontFamily="@font/acme"
+                                                 android:textSize="10dp"
+                                                 android:textColor="#ffffff"
+                                                 android:theme="@style/PKSwitch"
+                                                 android:id="@+id/fps90"
+                                                 android:text="90 FPS" />
+
+                                            <RadioButton
+                                                 android:layout_height="wrap_content"
+                                                 android:layout_width="wrap_content"
+                                                 android:alpha="0.8"
+                                                 android:fontFamily="@font/acme"
+                                                 android:textSize="10dp"
+                                                 android:textColor="#ffffff"
+                                                 android:theme="@style/PKSwitch"
+                                                 android:id="@+id/fps120"
+                                                 android:text="120 FPS" />
+
+                                        </RadioGroup>
+
+                                    </LinearLayout>
+
+                                </ScrollView>
+
+                                <LinearLayout
+                                     android:layout_height="wrap_content"
+                                     android:layout_width="match_parent"
+                                     android:gravity="center_vertical"
+                                     android:baselineAligned="false"
+                                     android:clipToPadding="false"
+                                     android:focusable="true"
+                                     android:paddingTop="12dp">
+
+                                    <TextView
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:textSize="16sp"
+                                         android:fontFamily="@font/acme"
+                                         android:textColor="#ffffff"
+                                         android:layout_weight="1.0"
+                                         android:textStyle="normal"
+                                         android:text="ESP generic adjustment" />
+
+                                </LinearLayout>
+
+                                <LinearLayout
+                                     android:layout_height="wrap_content"
+                                     android:layout_width="match_parent"
+                                     android:orientation="horizontal">
+
+                                    <LinearLayout
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:orientation="vertical">
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="match_parent"
+                                             android:fontFamily="@font/acme"
+                                             android:textColor="#ffffff"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/isHealth"
+                                             android:text="Health" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="match_parent"
+                                             android:fontFamily="@font/acme"
+                                             android:textColor="#ffffff"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/isTeamID"
+                                             android:text="Team ID" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="match_parent"
+                                             android:fontFamily="@font/acme"
+                                             android:textColor="#ffffff"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/isHead"
+                                             android:text="Red dots" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="match_parent"
+                                             android:fontFamily="@font/acme"
+                                             android:textColor="#ffffff"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/isEnemyWeapon"
+                                             android:text="Weapon" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="match_parent"
+                                             android:fontFamily="@font/acme"
+                                             android:textColor="#ffffff"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/isBack"
+                                             android:text="Edge warning" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="match_parent"
+                                             android:fontFamily="@font/acme"
+                                             android:textColor="#ffffff"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/isGrenadeWarning"
+                                             android:text="Grenade alert" />
+
+                                    </LinearLayout>
+
+                                    <LinearLayout
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:orientation="vertical">
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="match_parent"
+                                             android:fontFamily="@font/acme"
+                                             android:textColor="#ffffff"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/isName"
+                                             android:text="Name" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="match_parent"
+                                             android:fontFamily="@font/acme"
+                                             android:textColor="#ffffff"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/isDist"
+                                             android:text="Distance" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="match_parent"
+                                             android:fontFamily="@font/acme"
+                                             android:textColor="#ffffff"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/isSkelton"
+                                             android:text="Skeletons" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="match_parent"
+                                             android:fontFamily="@font/acme"
+                                             android:textColor="#ffffff"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/isBoxCount"
+                                             android:text="Box Itme" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="match_parent"
+                                             android:fontFamily="@font/acme"
+                                             android:textColor="#ffffff"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/isTeam"
+                                             android:text="Teammates" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="match_parent"
+                                             android:fontFamily="@font/acme"
+                                             android:textColor="#ffffff"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/isline"
+                                             android:text="Radar line" />
+
+                                    </LinearLayout>
+
+                                </LinearLayout>
+
+                                <LinearLayout
+                                     android:layout_height="wrap_content"
+                                     android:layout_width="match_parent"
+                                     android:gravity="center_vertical"
+                                     android:orientation="vertical"
+                                     android:baselineAligned="false"
+                                     android:clipToPadding="false"
+                                     android:focusable="true"
+                                     android:paddingTop="12dp">
+
+                                    <TextView
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:textSize="16sp"
+                                         android:fontFamily="@font/acme"
+                                         android:textColor="#ffffff"
+                                         android:textStyle="normal"
+                                         android:text="Bounding box display mode" />
+
+                                    <TextView
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:alpha="0.8"
+                                         android:textAppearance="?android:textAppearanceListItemSecondary"
+                                         android:fontFamily="@font/acme"
+                                         android:textColor="#ffffff"
+                                         android:text="Show the bounding box of the player\nmodels" />
+
+                                </LinearLayout>
+
+                                <RadioGroup
+                                     android:layout_height="wrap_content"
+                                     android:layout_width="match_parent"
+                                     android:orientation="vertical"
+                                     android:paddingStart="10dp"
+                                     android:theme="@style/PKSwitch"
+                                     android:id="@+id/radiooBox">
+
+                                    <RadioButton
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:alpha="0.8"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/BoxOff"
+                                         android:tag="0"
+                                         android:text="Off" />
+
+                                    <RadioButton
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:alpha="0.8"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/BoxStroke"
+                                         android:tag="1"
+                                         android:text="Legacy mode" />
+
+                                    <RadioButton
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:alpha="0.8"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/BoxFilled"
+                                         android:tag="2"
+                                         android:text="Precise mode" />
+
+                                </RadioGroup>
+
+                                <LinearLayout
+                                     android:layout_height="wrap_content"
+                                     android:layout_width="match_parent"
+                                     android:gravity="center_vertical"
+                                     android:orientation="vertical"
+                                     android:baselineAligned="false"
+                                     android:clipToPadding="false"
+                                     android:focusable="true"
+                                     android:paddingTop="12dp">
+
+                                    <TextView
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:textSize="16sp"
+                                         android:fontFamily="@font/acme"
+                                         android:textColor="#ffffff"
+                                         android:textStyle="normal"
+                                         android:text="Radar line display mode" />
+
+                                    <TextView
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:textAppearance="?android:textAppearanceListItemSecondary"
+                                         android:fontFamily="@font/acme"
+                                         android:textColor="#ffffff"
+                                         android:text="Show the radar line of player \npostions" />
+
+                                </LinearLayout>
+
+                                <RadioGroup
+                                     android:layout_height="wrap_content"
+                                     android:layout_width="match_parent"
+                                     android:orientation="vertical"
+                                     android:paddingBottom="10dp"
+                                     android:paddingStart="10dp"
+                                     android:theme="@style/PKSwitch"
+                                     android:id="@+id/radiooLine">
+
+                                    <RadioButton
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/LineOff"
+                                         android:tag="0"
+                                         android:text="Off" />
+
+                                    <RadioButton
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/LineTop"
+                                         android:tag="1"
+                                         android:text="Top line" />
+
+                                    <RadioButton
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/LineCenter"
+                                         android:tag="2"
+                                         android:text="Center line" />
+
+                                    <RadioButton
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/LineBottom"
+                                         android:tag="3"
+                                         android:text="Bottom line" />
+
+                                </RadioGroup>
+
+                            </LinearLayout>
+
+                            <LinearLayout
+                                 android:layout_height="match_parent"
+                                 android:layout_width="match_parent"
+                                 android:visibility="gone"
+                                 android:background="@null"
+                                 android:gravity="center_horizontal"
+                                 android:orientation="horizontal"
+                                 android:layout_marginTop="10dp"
+                                 android:id="@+id/modeitems2">
+
+                                <TextView
+                                     android:layout_height="wrap_content"
+                                     android:layout_width="wrap_content"
+                                     android:fontFamily="@font/acme"
+                                     android:textColor="#FFFFFF"
+                                     android:id="@+id/itemBtn"
+                                     android:text="Items"
+                                     android:textStyle="normal" />
+
+                                <Space
+                                     android:layout_height="match_parent"
+                                     android:layout_width="20dp" />
+
+                                <TextView
+                                     android:layout_height="wrap_content"
+                                     android:layout_width="wrap_content"
+                                     android:fontFamily="@font/acme"
+                                     android:textColor="#FFFFFF"
+                                     android:id="@+id/vehicleBtn"
+                                     android:text="Vehicles"
+                                     android:textStyle="normal" />
+
+                            </LinearLayout>
+
+                            <LinearLayout
+                                 android:layout_height="match_parent"
+                                 android:layout_width="match_parent"
+                                 android:visibility="gone"
+                                 android:orientation="horizontal"
+                                 android:id="@+id/selectorItems">
+
+                                <LinearLayout
+                                     android:layout_height="match_parent"
+                                     android:layout_width="match_parent"
+                                     android:visibility="gone"
+                                     android:paddingEnd="?android:listPreferredItemPaddingRight"
+                                     android:orientation="horizontal"
+                                     android:paddingStart="?android:listPreferredItemPaddingLeft"
+                                     android:id="@+id/vehicles"
+                                     android:paddingTop="?android:listPreferredItemPaddingLeft">
+
+                                    <LinearLayout
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:orientation="vertical">
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="wrap_content"
+                                             android:fontFamily="@font/acme"
+                                             android:textSize="14sp"
+                                             android:textColor="#ffffff"
+                                             android:checked="true"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/AquaRail"
+                                             android:text="AquaRail" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="wrap_content"
+                                             android:fontFamily="@font/acme"
+                                             android:textSize="14sp"
+                                             android:textColor="#ffffff"
+                                             android:checked="true"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/Boat"
+                                             android:text="Boat" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="wrap_content"
+                                             android:fontFamily="@font/acme"
+                                             android:textSize="14sp"
+                                             android:textColor="#ffffff"
+                                             android:checked="true"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/Bus"
+                                             android:text="Bus" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="wrap_content"
+                                             android:fontFamily="@font/acme"
+                                             android:textSize="14sp"
+                                             android:textColor="#ffffff"
+                                             android:checked="true"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/Glider"
+                                             android:text="Glider" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="wrap_content"
+                                             android:fontFamily="@font/acme"
+                                             android:textSize="14sp"
+                                             android:textColor="#ffffff"
+                                             android:checked="true"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/Mirado"
+                                             android:text="Mirado" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="wrap_content"
+                                             android:fontFamily="@font/acme"
+                                             android:textSize="14sp"
+                                             android:textColor="#ffffff"
+                                             android:checked="true"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/PickUp"
+                                             android:text="PickUp" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="wrap_content"
+                                             android:fontFamily="@font/acme"
+                                             android:textSize="14sp"
+                                             android:textColor="#ffffff"
+                                             android:checked="true"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/Scooter"
+                                             android:text="Scooter" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="wrap_content"
+                                             android:fontFamily="@font/acme"
+                                             android:textSize="14sp"
+                                             android:textColor="#ffffff"
+                                             android:checked="true"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/Tuk"
+                                             android:text="Tuk" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="wrap_content"
+                                             android:fontFamily="@font/acme"
+                                             android:textSize="14sp"
+                                             android:textColor="#ffffff"
+                                             android:checked="true"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/Snowbike"
+                                             android:text="Snowbike" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="wrap_content"
+                                             android:fontFamily="@font/acme"
+                                             android:textSize="14sp"
+                                             android:textColor="#ffffff"
+                                             android:checked="true"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/Bigfoot"
+                                             android:text="Bigfoot" />
+
+                                    </LinearLayout>
+
+                                    <LinearLayout
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:orientation="vertical">
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="wrap_content"
+                                             android:fontFamily="@font/acme"
+                                             android:textSize="14sp"
+                                             android:textColor="#ffffff"
+                                             android:checked="true"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/BRDM"
+                                             android:text="BRDM" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="wrap_content"
+                                             android:fontFamily="@font/acme"
+                                             android:textSize="14sp"
+                                             android:textColor="#ffffff"
+                                             android:checked="true"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/Buggy"
+                                             android:text="Buggy" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="wrap_content"
+                                             android:fontFamily="@font/acme"
+                                             android:textSize="14sp"
+                                             android:textColor="#ffffff"
+                                             android:checked="true"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/Dacia"
+                                             android:text="Dacia" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="wrap_content"
+                                             android:fontFamily="@font/acme"
+                                             android:textSize="14sp"
+                                             android:textColor="#ffffff"
+                                             android:checked="true"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/CoupeRB"
+                                             android:text="CoupeRB" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="wrap_content"
+                                             android:fontFamily="@font/acme"
+                                             android:textSize="14sp"
+                                             android:textColor="#ffffff"
+                                             android:checked="true"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/ATV"
+                                             android:text="ATV" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="wrap_content"
+                                             android:fontFamily="@font/acme"
+                                             android:textSize="14sp"
+                                             android:textColor="#ffffff"
+                                             android:checked="true"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/LadaNiva"
+                                             android:text="LadaNiva" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="wrap_content"
+                                             android:fontFamily="@font/acme"
+                                             android:textSize="14sp"
+                                             android:textColor="#ffffff"
+                                             android:checked="true"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/Bike"
+                                             android:text="Bike" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="wrap_content"
+                                             android:fontFamily="@font/acme"
+                                             android:textSize="14sp"
+                                             android:textColor="#ffffff"
+                                             android:checked="true"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/Rony"
+                                             android:text="Rony" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="wrap_content"
+                                             android:fontFamily="@font/acme"
+                                             android:textSize="14sp"
+                                             android:textColor="#ffffff"
+                                             android:checked="true"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/Snowmobile"
+                                             android:text="Snowmobile" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="wrap_content"
+                                             android:fontFamily="@font/acme"
+                                             android:textSize="14sp"
+                                             android:textColor="#ffffff"
+                                             android:checked="true"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/UAZ"
+                                             android:text="UAZ" />
+
+                                        <CheckBox
+                                             android:layout_height="wrap_content"
+                                             android:layout_width="wrap_content"
+                                             android:fontFamily="@font/acme"
+                                             android:textSize="14sp"
+                                             android:textColor="#ffffff"
+                                             android:checked="true"
+                                             android:theme="@style/PKSwitch"
+                                             android:id="@+id/UTV"
+                                             android:text="UTV" />
+
+                                    </LinearLayout>
+
+                                </LinearLayout>
+
+                                <LinearLayout
+                                     android:layout_height="match_parent"
+                                     android:layout_width="match_parent"
+                                     android:visibility="visible"
+                                     android:orientation="vertical"
+                                     android:theme="@style/PKSwitch"
+                                     android:id="@+id/items">
+
+                                    <TextView
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:textAlignment="center"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="18sp"
+                                         android:textColor="#ffffff"
+                                         android:layout_marginTop="10dp"
+                                         android:textStyle="normal"
+                                         android:layout_gravity="center"
+                                         android:text="Special Items" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/FlareGun"
+                                         android:text="Flare Gun" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/GhillieSuit"
+                                         android:text="Ghillie Suit" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/AirDrop"
+                                         android:text="AirDrop" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/DropPlane"
+                                         android:text="DropPlane" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/Loot"
+                                         android:text="Loot" />
+
+                                    <TextView
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:textAlignment="center"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="18sp"
+                                         android:textColor="#ffffff"
+                                         android:textStyle="normal"
+                                         android:layout_gravity="center"
+                                         android:text="Scopes" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/hollow"
+                                         android:text="Hollow" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/reddot"
+                                         android:text="Red Dot" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/canted"
+                                         android:text="Canted" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/twox"
+                                         android:text="2x" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/threex"
+                                         android:text="3x" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/fourx"
+                                         android:text="4x" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/sixx"
+                                         android:text="6x" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/eightx"
+                                         android:text="8x" />
+
+                                    <TextView
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:visibility="visible"
+                                         android:textAlignment="center"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="18sp"
+                                         android:textColor="#ffffff"
+                                         android:textStyle="normal"
+                                         android:layout_gravity="center"
+                                         android:text="Auto and SMG" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/AUG"
+                                         android:text="AUG" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/M762"
+                                         android:text="M762" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/SCARL"
+                                         android:text="SCAR-L" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/M416"
+                                         android:text="M416" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/M16A4"
+                                         android:text="M16A4" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/Mk47Mutant"
+                                         android:text="Mk47 Mutant" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/G36C"
+                                         android:text="G36C" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/QBZ"
+                                         android:text="QBZ" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/AKM"
+                                         android:text="AKM" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/Groza"
+                                         android:text="Groza" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Bizon"
+                                         android:text="Bizon" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/TommyGun"
+                                         android:text="TommyGun" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/MP5K"
+                                         android:text="MP5K" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/UMP"
+                                         android:text="UMP" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Vector"
+                                         android:text="Vector" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Uzi"
+                                         android:text="Uzi" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/DP28"
+                                         android:text="DP28" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/M249"
+                                         android:text="M249" />
+
+                                    <TextView
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:visibility="visible"
+                                         android:textAlignment="center"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="18sp"
+                                         android:textColor="#ffffff"
+                                         android:textStyle="normal"
+                                         android:layout_gravity="center"
+                                         android:text="Snipers" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/AWM"
+                                         android:text="AWM" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/QBU"
+                                         android:text="QBU" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/SLR"
+                                         android:text="SLR" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/SKS"
+                                         android:text="SKS" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/Mini14"
+                                         android:text="Mini14" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/M24"
+                                         android:text="M24" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/Kar98k"
+                                         android:text="Kar98k" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/VSS"
+                                         android:text="VSS" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Win94"
+                                         android:text="Win94" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:checked="true"
+                                         android:id="@+id/Mk14"
+                                         android:text="Mk14" />
+
+                                    <TextView
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:visibility="visible"
+                                         android:textAlignment="center"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="18sp"
+                                         android:textColor="#ffffff"
+                                         android:textStyle="normal"
+                                         android:layout_gravity="center"
+                                         android:text="Shotgun and Pan" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/S12K"
+                                         android:text="S12K" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/DBS"
+                                         android:text="DBS" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/S686"
+                                         android:text="S686" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/S1897"
+                                         android:text="S1897" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Sickle"
+                                         android:text="Sickle" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Machete"
+                                         android:text="Machete" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/CrossBow"
+                                         android:text="CrossBow" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Pan"
+                                         android:text="Pan" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Crowbar"
+                                         android:text="Crowbar" />
+
+                                    <TextView
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:visibility="visible"
+                                         android:textAlignment="center"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="18sp"
+                                         android:textColor="#ffffff"
+                                         android:textStyle="normal"
+                                         android:layout_gravity="center"
+                                         android:text="Pistols" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/SawedOff"
+                                         android:text="SawedOff" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/R1895"
+                                         android:text="R1895" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/DesertEagle"
+                                         android:text="Desert Eagle" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Vz61"
+                                         android:text="Vz61" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/P92"
+                                         android:text="P92" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/P18C"
+                                         android:text="P18C" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/R45"
+                                         android:text="R45" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/P1911"
+                                         android:text="P1911" />
+
+                                    <TextView
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:visibility="visible"
+                                         android:textAlignment="center"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="18sp"
+                                         android:textColor="#ffffff"
+                                         android:textStyle="normal"
+                                         android:layout_gravity="center"
+                                         android:text="Ammo" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/sst"
+                                         android:text="7.62" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/ffACP"
+                                         android:text="45ACP" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/ffs"
+                                         android:text="5.56" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textColor="#ffffff"
+                                         tools:ignore="InOrMmUsage"
+                                         android:id="@+id/nmm"
+                                         android:text="9mm" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/tzzMagnum"
+                                         android:text="300Magnum" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/otGuage"
+                                         android:text="12 Guage" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Arrow"
+                                         android:text="Arrow" />
+
+                                    <TextView
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:textAlignment="center"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="18sp"
+                                         android:textColor="#ffffff"
+                                         android:textStyle="normal"
+                                         android:layout_gravity="center"
+                                         android:text="Bag Helmet Vest" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Baglvl1"
+                                         android:text="Bag L 1" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Baglvl2"
+                                         android:text="Bag L 2" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Baglvl3"
+                                         android:text="Bag L 3" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Helmetlvl1"
+                                         android:text="Helmet 1" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Helmetlvl2"
+                                         android:text="Helmet 2" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Helmetlvl3"
+                                         android:text="Helmet 3" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Vestlvl1"
+                                         android:text="Vest L 1" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Vestlvl2"
+                                         android:text="Vest L 2" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Vestlvl3"
+                                         android:text="Vest L 3" />
+
+                                    <TextView
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:visibility="visible"
+                                         android:textAlignment="center"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="18sp"
+                                         android:textColor="#ffffff"
+                                         android:textStyle="normal"
+                                         android:layout_gravity="center"
+                                         android:text="Health Kits" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Painkiller"
+                                         android:text="PainKiller" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Adrenaline"
+                                         android:text="Adrenaline" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Bandage"
+                                         android:text="Bandage" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/FirstAidKit"
+                                         android:text="FirstAidKit" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/EnergyDrink"
+                                         android:text="Energy Drink" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Medkit"
+                                         android:text="Medkit" />
+
+                                    <TextView
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:visibility="visible"
+                                         android:textAlignment="center"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="18sp"
+                                         android:textColor="#ffffff"
+                                         android:textStyle="normal"
+                                         android:layout_gravity="center"
+                                         android:text="Throwables" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Stung"
+                                         android:text="Stung" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Grenade"
+                                         android:text="Grenade" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Smoke"
+                                         android:text="Smoke" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Molotov"
+                                         android:text="Molotov" />
+
+                                    <TextView
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:textAlignment="center"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="18sp"
+                                         android:textColor="#ffffff"
+                                         android:textStyle="normal"
+                                         android:layout_gravity="center"
+                                         android:text="Other Items" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/FlashHiderAr"
+                                         android:text="Flash Hider Ar" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/ArCompensator"
+                                         android:text="Ar Compensator" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/CompensatorSMG"
+                                         android:text="Compensator SMG" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/TacticalStock"
+                                         android:text="Tactical Stock" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Duckbill"
+                                         android:text="Duckbill" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/FlashHiderSniper"
+                                         android:text="Flash Hider Snp" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:textSize="14sp"
+                                         android:fontFamily="@font/acme"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/SuppressorSMG"
+                                         android:text="Suppressor SMG" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/HalfGrip"
+                                         android:text="Half Grip" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/Choke"
+                                         android:text="Choke" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/StockMicroUZI"
+                                         android:text="Stock Micro UZI" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/SniperCompensator"
+                                         android:text="SniperCompensator" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/SuppressorSniper"
+                                         android:text="Sup Sniper" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/SuppressorAr"
+                                         android:text="Suppressor Ar" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/ExQdSniper"
+                                         android:text="Ex.Qd.Sniper" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/QdSMG"
+                                         android:text="Qd.SMG" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/ExSMG"
+                                         android:text="Ex.SMG" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/QdSniper"
+                                         android:text="Qd.Sniper" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/ExSniper"
+                                         android:text="Ex.Sniper" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/ExAr"
+                                         android:text="Ex.Ar" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/ExQdAr"
+                                         android:text="Ex.Qd.Ar" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/QdAr"
+                                         android:text="Qd.Ar" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/ExQdSMG"
+                                         android:text="Ex.Qd.SMG" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/QuiverCrossBow"
+                                         android:text="Quiver CrossBow" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/BulletLoop"
+                                         android:text="Bullet Loop" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/ThumbGrip"
+                                         android:text="Thumb Grip" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/LaserSight"
+                                         android:text="Laser Sight" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/AngledGrip"
+                                         android:text="Angled Grip" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/LightGrip"
+                                         android:text="Light Grip" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/GasCan"
+                                         android:text="Gas Can" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/FlashHiderSMG"
+                                         android:text="Flash Hider SMG" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/VerticalGrip"
+                                         android:text="Vertical Grip" />
+
+                                    <CheckBox
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="wrap_content"
+                                         android:fontFamily="@font/acme"
+                                         android:textSize="14sp"
+                                         android:textColor="#ffffff"
+                                         android:id="@+id/CheekPad"
+                                         android:text="CheekPad" />
+
+                                </LinearLayout>
+
+                            </LinearLayout>
+
+                            <LinearLayout
+                                 android:layout_height="match_parent"
+                                 android:layout_width="match_parent"
+                                 android:visibility="gone"
+                                 android:orientation="vertical"
+                                 android:theme="@style/PKSwitch2"
+                                 android:id="@+id/selectorTrack">
+
+                                <Switch
+                                     android:layout_height="wrap_content"
+                                     android:layout_width="match_parent"
+                                     android:textSize="18sp"
+                                     android:layout_marginLeft="10dp"
+                                     android:textColor="#FFFFFF"
+                                     android:layout_marginTop="10dp"
+                                     tools:ignore="UseSwitchCompatOrMaterialXml"
+                                     android:layout_gravity="center"
+                                     android:fontFamily="@font/acme"
+                                     android:checked="false"
+                                     android:id="@+id/aimbot"
+                                     android:textStyle="normal"
+                                     android:text="Aimbot" />
+
+                                <TextView
+                                     android:layout_height="wrap_content"
+                                     android:layout_width="match_parent"
+                                     android:gravity="center|start"
+                                     android:fontFamily="@font/acme"
+                                     android:textSize="15sp"
+                                     android:textColor="#000000"
+                                     android:layout_marginTop="10dp"
+                                     android:layout_marginStart="25dp"
+                                     android:text="Fov Circle" />
+
+                                <LinearLayout
+                                     android:layout_height="wrap_content"
+                                     android:layout_width="match_parent"
+                                     android:weightSum="10"
+                                     android:gravity="center"
+                                     android:orientation="horizontal">
+
+                                    <SeekBar
+                                         android:layout_height="24dp"
+                                         android:layout_width="0dp"
+                                         android:max="120"
+                                         android:splitTrack="false"
+                                         android:paddingBottom="10dp"
+                                         android:layout_marginStart="20dp"
+                                         android:progress="0"
+                                         android:theme="@style/PKSwitch2"
+                                         android:layout_weight="8.5"
+                                         android:id="@+id/radiusaim"
+                                         android:paddingTop="8dp" />
+
+                                    <TextView
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="0dp"
+                                         android:paddingEnd="10dp"
+                                         android:layout_marginEnd="10dp"
+                                         android:gravity="center"
+                                         android:textSize="10dp"
+                                         android:textColor="#000000"
+                                         android:paddingStart="10dp"
+                                         android:layout_weight="1.5"
+                                         android:id="@+id/intradius"
+                                         android:text="0" />
+
+                                </LinearLayout>
+
+                                <TextView
+                                     android:layout_height="wrap_content"
+                                     android:layout_width="match_parent"
+                                     android:textSize="15sp"
+                                     android:fontFamily="@font/acme"
+                                     android:layout_marginLeft="10dp"
+                                     android:textColor="#ffffff"
+                                     android:id="@+id/textView7"
+                                     android:text="Tracking Position"
+                                     android:textStyle="normal" />
+
+                                <RadioGroup
+                                     android:layout_height="match_parent"
+                                     android:layout_width="match_parent"
+                                     android:layout_marginLeft="15dp"
+                                     android:theme="@style/PKSwitch2"
+                                     android:id="@+id/aimbotmode">
+
+                                    <RadioButton
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:fontFamily="@font/acme"
+                                         android:textColor="#ffffff"
+                                         android:layout_marginTop="8dp"
+                                         android:checked="true"
+                                         android:layout_weight="1"
+                                         android:id="@+id/radioButton"
+                                         android:tag="1"
+                                         android:text="Head" />
+
+                                    <RadioButton
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:fontFamily="@font/acme"
+                                         android:textColor="#ffffff"
+                                         android:layout_marginTop="8dp"
+                                         android:id="@+id/radioButton2"
+                                         android:tag="2"
+                                         android:text="Body" />
+
+                                    <RadioButton
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:fontFamily="@font/acme"
+                                         android:textColor="#ffffff"
+                                         android:layout_marginTop="8dp"
+                                         android:layout_weight="3"
+                                         tools:ignore="HardcodedText"
+                                         android:id="@+id/radioButton3"
+                                         android:tag="3"
+                                         android:text="Pelvis" />
+
+                                </RadioGroup>
+
+                                <TextView
+                                     android:layout_height="wrap_content"
+                                     android:layout_width="match_parent"
+                                     android:fontFamily="@font/acme"
+                                     android:textSize="15sp"
+                                     android:layout_marginLeft="10dp"
+                                     android:textColor="#ffffff"
+                                     android:id="@+id/textView8"
+                                     android:text="Tracking Priority"
+                                     android:textStyle="normal" />
+
+                                <RadioGroup
+                                     android:layout_height="match_parent"
+                                     android:layout_width="match_parent"
+                                     android:layout_marginLeft="15dp"
+                                     android:theme="@style/PKSwitch2"
+                                     android:id="@+id/aimby">
+
+                                    <RadioButton
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:fontFamily="@font/acme"
+                                         android:textColor="#ffffff"
+                                         android:layout_marginTop="8dp"
+                                         android:checked="true"
+                                         android:layout_weight="1"
+                                         android:id="@+id/radioButton9"
+                                         android:tag="1"
+                                         android:text="CrossHair Priority" />
+
+                                    <RadioButton
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="match_parent"
+                                         android:fontFamily="@font/acme"
+                                         android:textColor="#ffffff"
+                                         android:layout_marginTop="8dp"
+                                         android:id="@+id/radioButton4"
+                                         android:tag="0"
+                                         android:text="Distance Priority" />
+
+                                </RadioGroup>
+
+                                <Switch
+                                     android:layout_height="wrap_content"
+                                     android:layout_width="match_parent"
+                                     android:fontFamily="@font/acme"
+                                     android:layout_marginLeft="10dp"
+                                     android:textColor="#ffffff"
+                                     android:checked="true"
+                                     android:theme="@style/PKSwitch2"
+                                     tools:ignore="HardcodedText,UseSwitchCompatOrMaterialXml"
+                                     android:id="@+id/aimknocked"
+                                     android:text="Knocked" />
+
+                                <TextView
+                                     android:layout_height="wrap_content"
+                                     android:layout_width="match_parent"
+                                     android:gravity="center|start"
+                                     android:fontFamily="@font/acme"
+                                     android:textSize="15sp"
+                                     android:textColor="#000000"
+                                     android:layout_marginTop="10dp"
+                                     android:layout_marginStart="25dp"
+                                     android:text="Distance" />
+
+                                <LinearLayout
+                                     android:layout_height="wrap_content"
+                                     android:layout_width="match_parent"
+                                     android:weightSum="10"
+                                     android:gravity="center"
+                                     android:orientation="horizontal">
+
+                                    <SeekBar
+                                         android:layout_height="24dp"
+                                         android:layout_width="0dp"
+                                         android:max="120"
+                                         android:splitTrack="false"
+                                         android:paddingBottom="10dp"
+                                         android:layout_marginStart="20dp"
+                                         android:progress="0"
+                                         android:theme="@style/PKSwitch2"
+                                         android:layout_weight="8.5"
+                                         android:id="@+id/distanceaim"
+                                         android:paddingTop="8dp" />
+
+                                    <TextView
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="0dp"
+                                         android:paddingEnd="10dp"
+                                         android:layout_marginEnd="10dp"
+                                         android:gravity="center"
+                                         android:textSize="10dp"
+                                         android:textColor="#000000"
+                                         android:paddingStart="10dp"
+                                         android:layout_weight="1.5"
+                                         android:id="@+id/intdistance"
+                                         android:text="0" />
+
+                                </LinearLayout>
+
+                                <TextView
+                                     android:layout_height="wrap_content"
+                                     android:layout_width="match_parent"
+                                     android:gravity="center|start"
+                                     android:fontFamily="@font/acme"
+                                     android:textSize="15sp"
+                                     android:textColor="#000000"
+                                     android:layout_marginTop="10dp"
+                                     android:layout_marginStart="25dp"
+                                     android:text="Recoil Competation" />
+
+                                <LinearLayout
+                                     android:layout_height="wrap_content"
+                                     android:layout_width="match_parent"
+                                     android:weightSum="10"
+                                     android:gravity="center"
+                                     android:orientation="horizontal">
+
+                                    <SeekBar
+                                         android:layout_height="24dp"
+                                         android:layout_width="0dp"
+                                         android:max="70"
+                                         android:splitTrack="false"
+                                         android:paddingBottom="10dp"
+                                         android:layout_marginStart="20dp"
+                                         android:progress="0"
+                                         android:theme="@style/PKSwitch2"
+                                         android:layout_weight="8.5"
+                                         android:id="@+id/recoil"
+                                         android:paddingTop="8dp" />
+
+                                    <TextView
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="0dp"
+                                         android:paddingEnd="10dp"
+                                         android:layout_marginEnd="10dp"
+                                         android:gravity="center"
+                                         android:textSize="10dp"
+                                         android:textColor="#000000"
+                                         android:paddingStart="10dp"
+                                         android:layout_weight="1.5"
+                                         android:id="@+id/intrecoil"
+                                         android:text="0" />
+
+                                </LinearLayout>
+
+                            </LinearLayout>
+
+                            <LinearLayout
+                                 android:layout_height="match_parent"
+                                 android:layout_width="match_parent"
+                                 android:visibility="gone"
+                                 android:paddingEnd="?android:listPreferredItemPaddingRight"
+                                 android:orientation="vertical"
+                                 android:paddingStart="?android:listPreferredItemPaddingLeft"
+                                 android:id="@+id/memoryMenu">
+
+                                <TextView
+                                     android:layout_height="wrap_content"
+                                     android:layout_width="match_parent"
+                                     android:gravity="center|start"
+                                     android:fontFamily="@font/acme"
+                                     android:textSize="15sp"
+                                     android:textColor="#000000"
+                                     android:layout_marginTop="10dp"
+                                     android:layout_marginStart="25dp"
+                                     android:id="@+id/textView6"
+                                     android:text="Wide View" />
+
+                                <LinearLayout
+                                     android:layout_height="wrap_content"
+                                     android:layout_width="match_parent"
+                                     android:weightSum="10"
+                                     android:gravity="center"
+                                     android:orientation="horizontal">
+
+                                    <SeekBar
+                                         android:layout_height="24dp"
+                                         android:layout_width="0dp"
+                                         android:max="5"
+                                         android:splitTrack="false"
+                                         android:paddingBottom="10dp"
+                                         android:layout_marginStart="20dp"
+                                         android:progress="0"
+                                         android:theme="@style/PKSwitch2"
+                                         android:layout_weight="8.5"
+                                         android:id="@+id/wideView"
+                                         android:paddingTop="8dp" />
+
+                                    <TextView
+                                         android:layout_height="wrap_content"
+                                         android:layout_width="0dp"
+                                         android:paddingEnd="10dp"
+                                         android:layout_marginEnd="10dp"
+                                         android:gravity="center"
+                                         android:textSize="10dp"
+                                         android:textColor="#000000"
+                                         android:paddingStart="10dp"
+                                         android:layout_weight="1.5"
+                                         android:id="@+id/int_wideView"
+                                         android:text="0" />
+
+                                </LinearLayout>
+
+                                <Switch
+                                     android:layout_height="wrap_content"
+                                     android:layout_width="match_parent"
+                                     android:fontFamily="@font/acme"
+                                     android:layout_marginLeft="10dp"
+                                     android:textColor="#ffffff"
+                                     android:theme="@style/PKSwitch2"
+                                     tools:ignore="HardcodedText,UseSwitchCompatOrMaterialXml"
+                                     android:id="@+id/MagicBullet"
+                                     android:text="MagicBullet" />
+
+                            </LinearLayout>
+
+                        </LinearLayout>
+
+                    </LinearLayout>
+
+                </ScrollView>
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </RelativeLayout>
+
+</FrameLayout>

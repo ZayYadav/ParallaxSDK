@@ -1,0 +1,7 @@
+.gradle/
+.kotlin/
+.cxx/
+build/
+local.properties
+RIYAZ-VIP/build/
+RIYAZ-VIP/.cxx/

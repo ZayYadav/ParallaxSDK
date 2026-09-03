@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<issues format="6" by="lint 8.2.0" type="baseline" client="gradle" dependencies="false" name="AGP (8.2.0)" variant="fatal" version="8.2.0">
+
+    <issue
+        id="MissingDefaultResource"
+        message="The layout &quot;frame_toast&quot; in layout-w936dp has no declaration in the base `layout` folder; this can lead to crashes when the resource is queried in a configuration that does not match this qualifier"
+        errorLine1="&lt;RelativeLayout"
+        errorLine2=" ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout-w936dp/frame_toast.xml"
+            line="2"
+            column="2"/>
+    </issue>
+
+    <issue
+        id="MissingDefaultResource"
+        message="The layout &quot;frame_toast_berhasil&quot; in layout-w936dp has no declaration in the base `layout` folder; this can lead to crashes when the resource is queried in a configuration that does not match this qualifier"
+        errorLine1="&lt;GridLayout"
+        errorLine2=" ~~~~~~~~~~">
+        <location
+            file="src/main/res/layout-w936dp/frame_toast_berhasil.xml"
+            line="2"
+            column="2"/>
+    </issue>
+
+</issues>

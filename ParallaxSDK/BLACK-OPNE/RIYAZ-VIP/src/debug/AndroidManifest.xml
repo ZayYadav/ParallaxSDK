@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <queries>
+        <package android:name="com.google.android.gms" />
+        <package android:name="com.google.android.play.games" />
+        <package android:name="com.facebook.katana" />
+        <package android:name="com.facebook.wakizashi" />
+        <package android:name="com.facebook.lite" />
+        <package android:name="com.twitter.android" />
+        <package android:name="com.twitter.android.lite" />
+        <package android:name="com.x.android" />
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
+
+        <intent>
+            <action android:name="android.support.customtabs.action.CustomTabsService" />
+        </intent>
+
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
+
+    <application>
+        <activity
+            android:name="top.niunaijun.blackbox.compat.oauth.VirtualOAuthBridgeActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+
+        <!--
+             Meta's Custom Tab redirect uses fbconnect://cct.<package>. The host
+             receiver is deliberately broad at manifest level because the virtual
+             package is dynamic; FacebookOAuthCallbackActivity accepts a URI only
+             when it matches an active, state-validated Facebook OAuth session.
+        -->
+        <activity
+            android:name="top.niunaijun.blackbox.compat.oauth.FacebookOAuthCallbackActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="fbconnect" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

@@ -1,0 +1,364 @@
+/* ═══════════════════════════════════════════════════
+   ONEBOX PANEL — Upgraded Design System v2.0
+   ═══════════════════════════════════════════════════ */
+
+
+
+body {
+    font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: linear-gradient(135deg, var(--p-bg1,#050810) 0%, var(--p-bg2,#0f172a) 35%, var(--p-bg3,#1e3a8a) 70%, var(--p-bg4,#312e81) 100%);
+    background-size: 400% 400%;
+    animation: obBgShift 20s ease infinite;
+    min-height: 100vh;
+    color: #fff;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+}
+
+@keyframes obBgShift {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* ── GLASS CARD ── */
+.ob-glass {
+    background: rgba(12,18,36,0.72);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 20px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width:6px; }
+::-webkit-scrollbar-track { background: rgba(255,255,255,0.03); border-radius:10px; }
+::-webkit-scrollbar-thumb { background: rgba(201,168,76,0.3); border-radius:10px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(201,168,76,0.55); }
+
+/* ── WATERMARK ── */
+.ob-watermark {
+    position: fixed; bottom:12px; left:0; right:0;
+    text-align:center; font-size:.6rem; letter-spacing:.15em;
+    text-transform:uppercase; color:rgba(255,255,255,0.07);
+    z-index:1; pointer-events:none;
+}
+
+/* ══════════════════════════════════════
+   UPGRADED BUTTON SYSTEM
+   ══════════════════════════════════════ */
+
+/* ── PRIMARY ACTION BUTTON (Generate, Save, Submit) ── */
+.ob-btn,
+.btn-ios,
+.btn-save,
+.generate-btn .btn-ios {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    padding: 13px 28px;
+    border: none;
+    border-radius: 14px;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: #fff;
+    cursor: pointer;
+    overflow: hidden;
+    transition: transform 0.25s cubic-bezier(.34,1.5,.64,1), box-shadow 0.25s ease;
+    text-decoration: none;
+    background: linear-gradient(135deg, var(--p-primary, #c9a84c) 0%, #e8c96a 50%, var(--p-primary, #c9a84c) 100%);
+    background-size: 200% 200%;
+    box-shadow: 0 4px 20px rgba(201,168,76,0.35);
+}
+
+.ob-btn::before,
+.btn-ios::before,
+.btn-save::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.28) 50%, transparent 100%);
+    transform: translateX(-100%);
+    transition: transform 0.55s ease;
+}
+
+.ob-btn:hover::before,
+.btn-ios:hover::before,
+.btn-save:hover::before {
+    transform: translateX(100%);
+}
+
+.ob-btn:hover,
+.btn-ios:hover,
+.btn-save:hover {
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 12px 32px rgba(201,168,76,0.55);
+    color: #fff;
+    text-decoration: none;
+}
+
+.ob-btn:active,
+.btn-ios:active,
+.btn-save:active {
+    transform: translateY(0) scale(0.98);
+    box-shadow: 0 2px 10px rgba(201,168,76,0.3);
+}
+
+/* Variant: Blue primary */
+.ob-btn-blue,
+.generate-btn .btn-ios {
+    background: linear-gradient(135deg, #2563eb 0%, #38bdf8 60%, #6366f1 100%);
+    background-size: 200% 200%;
+    box-shadow: 0 4px 20px rgba(37,99,235,0.4);
+}
+.ob-btn-blue:hover,
+.generate-btn .btn-ios:hover {
+    box-shadow: 0 12px 32px rgba(37,99,235,0.55);
+}
+
+/* Variant: Green success */
+.ob-btn-green {
+    background: linear-gradient(135deg, #059669 0%, #34d399 60%, #10b981 100%);
+    background-size: 200% 200%;
+    box-shadow: 0 4px 20px rgba(16,185,129,0.35);
+}
+.ob-btn-green:hover {
+    box-shadow: 0 12px 32px rgba(16,185,129,0.55);
+}
+
+/* Variant: Danger red */
+.ob-btn-danger {
+    background: linear-gradient(135deg, #dc2626 0%, #f87171 60%, #ef4444 100%);
+    background-size: 200% 200%;
+    box-shadow: 0 4px 20px rgba(220,38,38,0.35);
+}
+.ob-btn-danger:hover {
+    box-shadow: 0 12px 32px rgba(220,38,38,0.55);
+}
+
+/* ── GLASS ACTION BUTTONS (Table row actions: copy, edit, delete, usage) ── */
+.glass-btn,
+.btn-glass {
+    position: relative;
+    padding: 7px 15px;
+    border-radius: 50px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    border: 1px solid rgba(255,255,255,0.18);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: transform 0.22s cubic-bezier(.34,1.5,.64,1), box-shadow 0.22s ease, background 0.22s ease;
+    cursor: pointer;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.22);
+    background: rgba(255,255,255,0.05);
+    text-decoration: none;
+    font-family: 'Montserrat', sans-serif;
+}
+
+.glass-btn i,
+.btn-glass i { font-size: 0.75rem; }
+
+.glass-btn:hover,
+.btn-glass:hover {
+    transform: translateY(-2px) scale(1.06);
+    color: #fff;
+    text-decoration: none;
+}
+
+.glass-btn:active,
+.btn-glass:active {
+    transform: scale(0.97);
+}
+
+.glass-btn:disabled,
+.btn-glass:disabled {
+    opacity: 0.38;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+/* Copy */
+.btn-copy-glass {
+    color: #a5b4fc;
+    border-color: rgba(139,92,246,0.35);
+    background: rgba(99,102,241,0.1);
+}
+.btn-copy-glass:hover {
+    background: rgba(99,102,241,0.28);
+    border-color: rgba(139,92,246,0.6);
+    box-shadow: 0 0 18px rgba(99,102,241,0.45);
+    color: #e0e7ff;
+}
+
+/* Usage / Info */
+.btn-usage-glass {
+    color: #7dd3fc;
+    border-color: rgba(6,182,212,0.35);
+    background: rgba(6,182,212,0.1);
+}
+.btn-usage-glass:hover {
+    background: rgba(6,182,212,0.28);
+    border-color: rgba(6,182,212,0.6);
+    box-shadow: 0 0 18px rgba(6,182,212,0.45);
+    color: #e0f2fe;
+}
+
+/* Edit */
+.btn-edit-glass,
+.btn-edit {
+    color: #fde68a;
+    border-color: rgba(234,179,8,0.35);
+    background: rgba(234,179,8,0.1);
+}
+.btn-edit-glass:hover,
+.btn-edit:hover:not(:disabled) {
+    background: rgba(234,179,8,0.28);
+    border-color: rgba(234,179,8,0.6);
+    box-shadow: 0 0 18px rgba(234,179,8,0.45);
+    color: #fef3c7;
+    transform: translateY(-2px) scale(1.06);
+}
+
+/* Delete */
+.btn-delete-glass,
+.btn-delete {
+    color: #fca5a5;
+    border-color: rgba(239,68,68,0.35);
+    background: rgba(239,68,68,0.1);
+}
+.btn-delete-glass:hover,
+.btn-delete:hover:not(:disabled) {
+    background: rgba(239,68,68,0.28);
+    border-color: rgba(239,68,68,0.6);
+    box-shadow: 0 0 18px rgba(239,68,68,0.45);
+    color: #fee2e2;
+    transform: translateY(-2px) scale(1.06);
+}
+
+/* Green approve / activate */
+.btn-approve-glass {
+    color: #6ee7b7;
+    border-color: rgba(16,185,129,0.35);
+    background: rgba(16,185,129,0.1);
+}
+.btn-approve-glass:hover {
+    background: rgba(16,185,129,0.28);
+    border-color: rgba(16,185,129,0.6);
+    box-shadow: 0 0 18px rgba(16,185,129,0.45);
+    color: #d1fae5;
+}
+
+/* ── BACK / SECONDARY BUTTON ── */
+.btn-back,
+.ob-btn-secondary {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 11px 26px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 50px;
+    color: rgba(255,255,255,0.88);
+    font-size: 0.85rem;
+    font-weight: 600;
+    font-family: 'Montserrat', sans-serif;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(.34,1.5,.64,1);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.btn-back:hover,
+.ob-btn-secondary:hover {
+    background: rgba(255,255,255,0.15);
+    border-color: rgba(255,255,255,0.3);
+    transform: translateY(-3px);
+    box-shadow: 0 10px 24px rgba(0,0,0,0.35);
+    color: #fff;
+    text-decoration: none;
+}
+
+/* ── ICON-ONLY CIRCLE BUTTON ── */
+.ob-btn-icon {
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.14);
+    color: rgba(255,255,255,0.8);
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.22s cubic-bezier(.34,1.5,.64,1);
+}
+.ob-btn-icon:hover {
+    background: rgba(201,168,76,0.15);
+    border-color: rgba(201,168,76,0.4);
+    color: var(--p-primary, #c9a84c);
+    transform: scale(1.12) rotate(8deg);
+    box-shadow: 0 0 14px rgba(201,168,76,0.3);
+}
+
+/* ── RIPPLE EFFECT ── */
+.ob-btn, .btn-ios, .btn-save, .glass-btn, .btn-glass {
+    isolation: isolate;
+}
+.ob-btn .ripple,
+.btn-ios .ripple {
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.3);
+    transform: scale(0);
+    animation: obRipple 0.55s linear;
+    pointer-events: none;
+}
+@keyframes obRipple {
+    to { transform: scale(4); opacity: 0; }
+}
+
+/* ── FORM INPUTS (unified upgrade) ── */
+.form-control, .form-select {
+    background: rgba(0,0,0,0.28) !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
+    color: #fff !important;
+    border-radius: 12px !important;
+    padding: 11px 14px !important;
+    font-family: 'Montserrat', sans-serif;
+    transition: border-color 0.22s ease, box-shadow 0.22s ease;
+}
+.form-control:focus, .form-select:focus {
+    background: rgba(0,0,0,0.45) !important;
+    border-color: var(--p-primary, #c9a84c) !important;
+    box-shadow: 0 0 0 3px rgba(201,168,76,0.2), 0 0 16px rgba(201,168,76,0.15) !important;
+    color: #fff !important;
+    outline: none !important;
+}
+.form-control::placeholder { color: rgba(255,255,255,0.35) !important; }
+.form-select option { background: #1e2a45; color: #fff; }
+
+/* ── MODAL (unified upgrade) ── */
+.modal-content {
+    background: rgba(10,16,34,0.97) !important;
+    border: 1px solid rgba(201,168,76,0.2) !important;
+    border-radius: 20px !important;
+    backdrop-filter: blur(24px) !important;
+}
+.modal-header {
+    border-bottom: 1px solid rgba(255,255,255,0.08) !important;
+}
+.modal-footer {
+    border-top: 1px solid rgba(255,255,255,0.08) !important;
+    gap: 10px;
+}
+.modal-title { font-weight: 700; color: var(--p-primary, #c9a84c); }
+.btn-close { filter: invert(1) brightness(0.7); }

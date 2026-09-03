@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout
+	xmlns:android="http://schemas.android.com/apk/res/android"
+	android:layout_width="wrap_content"
+	android:layout_height="wrap_content"
+	xmlns:app="http://schemas.android.com/apk/res-auto">
+
+	<RelativeLayout
+		android:id="@+id/layoutControlView"
+		android:layout_width="wrap_content"
+		android:layout_height="wrap_content"
+		android:background="@drawable/ic_aimback">
+
+		<RelativeLayout
+			android:id="@+id/miniFloatMenu"
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:layout_centerInParent="true">
+
+			<ImageView
+				android:id="@+id/imgAimbot"
+				android:src="@drawable/ic_aimbot"
+				android:layout_width="36dp"
+				android:layout_height="36dp"
+				app:tint="#FFFFFF"
+				android:layout_centerInParent="true"/>
+
+		</RelativeLayout>
+
+	</RelativeLayout>
+
+</FrameLayout>
+
