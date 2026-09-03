@@ -3,7 +3,6 @@ buildscript {
     repositories {
         google()
         mavenCentral()
-        maven { url 'https://jitpack.io' }
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:8.11.1'
@@ -16,7 +15,14 @@ allprojects {
     repositories {
         google()
         mavenCentral()
-        maven { url 'https://jitpack.io' }
+        maven {
+            url 'https://jitpack.io'
+            content {
+                // JitPack is required only for explicitly GitHub-backed dependencies.
+                // Scoping prevents unrelated coordinates from being resolved there.
+                includeGroupByRegex 'com\\.github\\..*'
+            }
+        }
     }
 }
 

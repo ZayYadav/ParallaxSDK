@@ -109,12 +109,50 @@ function panel_security_bootstrap(array $config): void
     }
 }
 
+/**
+ * Forwarded headers are security-sensitive. Only honor them when the request
+ * arrived from an explicitly configured reverse-proxy IP.
+ */
+function panel_remote_is_trusted_proxy(array $config = []): bool
+{
+    $trustProxy = array_key_exists('TRUST_PROXY', $config)
+        ? ($config['TRUST_PROXY'] === true)
+        : (panel_config('TRUST_PROXY', false) === true);
+    if (!$trustProxy) {
+        return false;
+    }
+
+    $trustedProxies = array_key_exists('TRUSTED_PROXIES', $config)
+        ? $config['TRUSTED_PROXIES']
+        : panel_config('TRUSTED_PROXIES', []);
+    if (!is_array($trustedProxies) || $trustedProxies === []) {
+        // Fail closed: TRUST_PROXY alone must never make client-controlled
+        // X-Forwarded-* headers authoritative.
+        return false;
+    }
+
+    $remote = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
+    if (!filter_var($remote, FILTER_VALIDATE_IP)) {
+        return false;
+    }
+
+    foreach ($trustedProxies as $proxy) {
+        $proxy = trim((string) $proxy);
+        if ($proxy !== ''
+            && filter_var($proxy, FILTER_VALIDATE_IP)
+            && hash_equals($proxy, $remote)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 function panel_is_https(array $config = []): bool
 {
     if (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off') {
         return true;
     }
-    if (($config['TRUST_PROXY'] ?? false) === true) {
+    if (panel_remote_is_trusted_proxy($config)) {
         return strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
     }
     return false;
@@ -165,7 +203,7 @@ function panel_inject_csrf_fields(string $html): string
 
 function panel_client_ip(): string
 {
-    if (panel_config('TRUST_PROXY', false) === true) {
+    if (panel_remote_is_trusted_proxy()) {
         $forwarded = trim(explode(',', (string) ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? ''))[0]);
         if (filter_var($forwarded, FILTER_VALIDATE_IP)) {
             return $forwarded;
