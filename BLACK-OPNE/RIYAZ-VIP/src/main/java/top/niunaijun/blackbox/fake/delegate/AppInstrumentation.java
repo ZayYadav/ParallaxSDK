@@ -21,6 +21,7 @@ import black.android.app.BRActivityThread;
 import java.lang.reflect.Method;
 import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.BActivityThread;
+import top.niunaijun.blackbox.compat.auth.TwitterLegacyTlsCompat;
 import top.niunaijun.blackbox.fake.hook.HookManager;
 import top.niunaijun.blackbox.fake.hook.IInjectHook;
 import top.niunaijun.blackbox.fake.service.HCallbackStub;
@@ -182,13 +183,17 @@ public final class AppInstrumentation extends BaseInstrumentationDelegate implem
 	@Override
 	public void callActivityOnCreate(Activity activity, Bundle icicle, PersistableBundle persistentState) {
 		checkActivity(activity);
+		TwitterLegacyTlsCompat.armBeforeCreate(activity);
 		super.callActivityOnCreate(activity, icicle, persistentState);
+		TwitterLegacyTlsCompat.patchAfterCreate(activity);
 	}
 
 	@Override
 	public void callActivityOnCreate(Activity activity, Bundle icicle) {
 		checkActivity(activity);
+		TwitterLegacyTlsCompat.armBeforeCreate(activity);
 		super.callActivityOnCreate(activity, icicle);
+		TwitterLegacyTlsCompat.patchAfterCreate(activity);
 	}
 
 	@Override
