@@ -1,0 +1,202 @@
+name: Build Loader No TLS Pins Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - test/loader-no-tls-pins-20260903
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build no-pin Loader release APK
+    runs-on: ubuntu-latest
+
+    env:
+      SDK_PROJECT_DIR: BLACK-OPNE
+      SDK_MODULE: ParallaxCore
+      SDK_MODULE_DIR: RIYAZ-VIP
+      LOADER_PROJECT_DIR: One-Core-Engine
+      LOADER_AAR_PATH: One-Core-Engine/app/libs/ParallaxCore-release.aar
+      NDK_VERSION: 27.2.12479018
+      PARALLAX_API_PUBLIC_KEY_B64: ${{ vars.PARALLAX_API_PUBLIC_KEY_B64 }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      ONECORE_ALLOWED_SIGNING_SHA256: ${{ secrets.ONECORE_ALLOWED_SIGNING_SHA256 }}
+
+    steps:
+      - name: Checkout test branch
+        uses: actions/checkout@v6
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android packages
+        run: |
+          sdkmanager --install \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;${NDK_VERSION}"
+
+      - name: Configure Android SDK paths
+        run: |
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > "${SDK_PROJECT_DIR}/local.properties"
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > "${LOADER_PROJECT_DIR}/local.properties"
+          chmod +x "${SDK_PROJECT_DIR}/gradlew" "${LOADER_PROJECT_DIR}/gradlew"
+
+      - name: Configure API encryption key
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${PARALLAX_API_PUBLIC_KEY_B64:-}" ]; then
+            openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/parallax-ci-private.pem 2>/dev/null
+            PUBLIC_KEY=$(openssl pkey -in /tmp/parallax-ci-private.pem -pubout -outform DER 2>/dev/null | base64 -w0)
+            rm -f /tmp/parallax-ci-private.pem
+            echo "PARALLAX_API_PUBLIC_KEY_B64=${PUBLIC_KEY}" >> "$GITHUB_ENV"
+            echo "Using throwaway CI API public key because production variable is unavailable."
+          fi
+
+      - name: Patch Loader to use standard TLS trust without custom pins
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          gradle = Path("One-Core-Engine/app/build.gradle")
+          text = gradle.read_text(encoding="utf-8")
+          pattern = re.compile(
+              r"def parallaxConfiguredTlsPins = providers\.gradleProperty\('parallaxTlsPins'\).*?"
+              r"def parallaxTlsPins = parallaxTlsPinList\.join\(','\)\n",
+              re.S,
+          )
+          replacement = """// TEST BRANCH ONLY: custom certificate pinning disabled.\n// HTTPS still uses Android/OkHttp's normal CA and hostname verification.\ndef parallaxBuiltInTlsPins = []\ndef parallaxConfiguredTlsPinList = []\ndef parallaxTlsPinList = []\ndef parallaxTlsPins = ''\n"""
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit("Could not patch Gradle TLS pin configuration")
+          gradle.write_text(text, encoding="utf-8")
+
+          client = Path("One-Core-Engine/app/src/main/java/com/onecore/loader/security/HostedLicenseClient.java")
+          text = client.read_text(encoding="utf-8")
+          pattern = re.compile(
+              r"\s*CertificatePinner\.Builder pins = new CertificatePinner\.Builder\(\);.*?"
+              r"this\.httpClient = new okhttp3\.OkHttpClient\.Builder\(\)\s*"
+              r"\.certificatePinner\(pins\.build\(\)\)",
+              re.S,
+          )
+          replacement = """
+          // TEST BRANCH ONLY: no custom CertificatePinner. Standard platform TLS
+          // chain + hostname verification remains enabled by OkHttp.
+          this.httpClient = new okhttp3.OkHttpClient.Builder()"""
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit("Could not patch HostedLicenseClient CertificatePinner")
+          client.write_text(text, encoding="utf-8")
+
+          native = Path("One-Core-Engine/app/src/main/jni/main.cpp")
+          text = native.read_text(encoding="utf-8")
+          old = """    if (!valid_pins(env, tlsPins)) {
+              result |= GUARD_BAD_PINS;
+          }
+"""
+          new = """    // TEST BRANCH ONLY: an empty pin list is intentional. TLS is still
+          // authenticated by the platform trust store and hostname verification.
+"""
+          if old not in text:
+              raise SystemExit("Could not patch native TLS pin guard")
+          text = text.replace(old, new, 1)
+          native.write_text(text, encoding="utf-8")
+
+          print("No-pin test patch applied successfully")
+
+      - name: Verify no custom Parallax TLS pin is configured
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -Fq 'sha256/Ina/GY9COYngSpB7Ht+asGkJ5LV99jpBHYz11jXRSWM=' "${LOADER_PROJECT_DIR}/app/build.gradle"; then
+            echo "Built-in Parallax TLS pin still present" >&2
+            exit 1
+          fi
+          grep -F "def parallaxTlsPins = ''" "${LOADER_PROJECT_DIR}/app/build.gradle"
+          if grep -Fq '.certificatePinner(pins.build())' "${LOADER_PROJECT_DIR}/app/src/main/java/com/onecore/loader/security/HostedLicenseClient.java"; then
+            echo "CertificatePinner is still attached" >&2
+            exit 1
+          fi
+          echo "Custom Loader TLS pinning is disabled for this test build."
+
+      - name: Build SDK release AAR
+        working-directory: ${{ env.SDK_PROJECT_DIR }}
+        run: ./gradlew :${{ env.SDK_MODULE }}:assembleRelease --stacktrace
+
+      - name: Replace Loader AAR with fresh SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_AAR="${SDK_PROJECT_DIR}/${SDK_MODULE_DIR}/build/outputs/aar/${SDK_MODULE}-release.aar"
+          test -f "$SDK_AAR"
+          mkdir -p "$(dirname "${LOADER_AAR_PATH}")"
+          cp -f "$SDK_AAR" "${LOADER_AAR_PATH}"
+
+      - name: Configure signing keystore
+        working-directory: ${{ env.LOADER_PROJECT_DIR }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          STORE_FILE=$(awk -F= '/^storeFile=/{print $2}' signing.properties)
+          STORE_PASSWORD=${STORE_PASSWORD:-$(awk -F= '/^storePassword=/{print $2}' signing.properties)}
+          KEY_ALIAS=${KEY_ALIAS:-$(awk -F= '/^keyAlias=/{print $2}' signing.properties)}
+          KEY_PASSWORD=${KEY_PASSWORD:-$(awk -F= '/^keyPassword=/{print $2}' signing.properties)}
+          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            mkdir -p "$(dirname "$STORE_FILE")"
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$STORE_FILE"
+          fi
+          if [ ! -f "$STORE_FILE" ]; then
+            mkdir -p "$(dirname "$STORE_FILE")"
+            keytool -genkeypair \
+              -keystore "$STORE_FILE" \
+              -storetype JKS \
+              -storepass "$STORE_PASSWORD" \
+              -keypass "$KEY_PASSWORD" \
+              -alias "$KEY_ALIAS" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=NoPinTest,O=Parallax,C=IN"
+            echo "ONECORE_ALLOWED_SIGNING_SHA256=" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build no-pin signed release APK
+        working-directory: ${{ env.LOADER_PROJECT_DIR }}
+        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
+
+      - name: Verify release APK and pin absence
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_APK=$(find "${LOADER_PROJECT_DIR}/app/build/outputs/apk/release" -name '*.apk' -print -quit)
+          test -n "$RELEASE_APK"
+          "${ANDROID_HOME}/build-tools/36.0.0/apksigner" verify --verbose "$RELEASE_APK"
+          "${ANDROID_HOME}/build-tools/36.0.0/zipalign" -c -v 4 "$RELEASE_APK" >/dev/null
+          if grep -aFq 'sha256/Ina/GY9COYngSpB7Ht+asGkJ5LV99jpBHYz11jXRSWM=' "$RELEASE_APK"; then
+            echo "Known Parallax TLS pin found in APK" >&2
+            exit 1
+          fi
+          cp "$RELEASE_APK" ./OneCoreEdge-no-tls-pins-release.apk
+          sha256sum ./OneCoreEdge-no-tls-pins-release.apk
+
+      - name: Upload no-pin Loader APK
+        uses: actions/upload-artifact@v6
+        with:
+          name: OneCoreEdge-no-tls-pins-release
+          path: OneCoreEdge-no-tls-pins-release.apk
+          if-no-files-found: error
+          retention-days: 14
