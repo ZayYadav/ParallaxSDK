@@ -3,7 +3,6 @@ package top.niunaijun.blackbox.fake.service;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
-import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.util.Log;
 
@@ -13,7 +12,6 @@ import java.util.List;
 
 import black.android.content.pm.BRParceledListSlice;
 
-import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.BActivityThread;
 import top.niunaijun.blackbox.fake.hook.MethodHook;
 import top.niunaijun.blackbox.fake.hook.ProxyMethod;
@@ -23,20 +21,21 @@ import top.niunaijun.blackbox.utils.compat.ParceledListSliceCompat;
 /**
  * Combined external-auth PackageManager compatibility layer.
  *
- * <p>The existing Facebook web-first behavior is delegated unchanged to
+ * <p>Facebook compatibility behavior is delegated unchanged to
  * {@link IFacebookWebPackageManagerProxy}. For legacy Twitter Kit, the exact
- * {@code com.twitter.android.SingleSignOnActivity} availability probe is first
- * resolved against the real installed Twitter/X package.</p>
+ * {@code com.twitter.android.SingleSignOnActivity} probe is allowed only when
+ * that real legacy component actually exists.</p>
  *
- * <p>Recent official X builds can remove the old public SingleSignOnActivity while
- * retaining real exported app entry points. Twitter Kit unfortunately hard-codes
- * the removed component. When that exact legacy component is absent, this layer
- * may remap the SAME Intent object to a real, enabled, exported and permission-
- * accessible Activity in the official {@code com.twitter.android} package.</p>
+ * <p>Current X builds expose {@code com.x.android.deeplink.XUrlInterpreterActivity}
+ * for ACTION_VIEW URL routing, but that component is NOT a replacement for the
+ * old Twitter Kit SSO contract. The legacy SSO probe carries no OAuth URL, so
+ * remapping it to XUrlInterpreterActivity merely opens X's normal/home surface.
+ * A real X app handoff must therefore happen later, only after a genuine Twitter/X
+ * OAuth authorization URL has been created. ExternalAuthRouter already owns that
+ * URL-based flow.</p>
  *
- * <p>No package/signature identity, OAuth token, token secret, consumer credential
- * or provider result is fabricated. If no real accessible successor exists, the
- * proxy returns an empty result and Twitter Kit keeps its normal OAuth fallback.</p>
+ * <p>No provider result, account, OAuth token, cookie, consumer credential or
+ * signature identity is fabricated.</p>
  */
 @ScanClass({IPackageManagerProxy.class})
 public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
@@ -45,17 +44,6 @@ public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
     private static final String TWITTER_PACKAGE = "com.twitter.android";
     private static final String TWITTER_SSO_ACTIVITY =
             "com.twitter.android.SingleSignOnActivity";
-
-    /**
-     * First entry is verified from X 12.22.0 manifest and manually launch-tested:
-     * exported=true and handles x.com/twitter.com ACTION_VIEW deep links.
-     * Remaining entries cover older/alternate official builds.
-     */
-    private static final String[] TWITTER_SSO_SUCCESSORS = new String[]{
-            "com.x.android.deeplink.XUrlInterpreterActivity",
-            "com.twitter.android.AuthorizeAppActivity",
-            "com.twitter.app.authorizeapp.AppAuthorizationActivity"
-    };
 
     @Override
     public void injectHook() {
@@ -78,123 +66,29 @@ public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
             Intent intent = findIntent(args);
             final boolean legacyTwitterProbe = isExactTwitterSsoProbe(intent);
 
+            // Preserve all already-shipped Facebook/Twitter compatibility behavior.
             Object result = existingCompat.hook(who, method, args);
             if (!legacyTwitterProbe) {
                 return result;
             }
 
+            // Only advertise native legacy SSO if the exact provider Activity is
+            // genuinely present. Current X 12.x does not ship this component.
             if (containsUsableTwitterSso(result)) {
-                Log.w(TAG, "native SSO discovery: verified real legacy activity available"
+                Log.w(TAG, "legacy SingleSignOnActivity genuinely available"
                         + processSuffix());
                 return result;
             }
 
-            Object successor = tryOfficialTwitterSsoSuccessor(who, method, args, intent);
-            if (successor != null) {
-                return successor;
-            }
-
+            // Important: do NOT map this component-less/URL-less legacy probe to
+            // XUrlInterpreterActivity. That Activity is a deep-link interpreter,
+            // not the old startActivityForResult Twitter Kit SSO contract. Doing
+            // so opens the X home screen rather than an OAuth authorize screen.
             Log.w(TAG,
-                    "native SSO discovery: no accessible official successor; using OAuth fallback"
-                            + processSuffix());
+                    "legacy SingleSignOnActivity absent; URL-less SSO probe not remapped; "
+                            + "waiting for real OAuth authorization URL" + processSuffix());
             return emptyResult(method);
         }
-    }
-
-    private static Object tryOfficialTwitterSsoSuccessor(
-            Object who, Method queryMethod, Object[] queryArgs, Intent originalIntent) {
-        if (originalIntent == null || BlackBoxCore.getContext() == null) {
-            return null;
-        }
-
-        PackageManager pm = BlackBoxCore.getContext().getPackageManager();
-        for (String className : TWITTER_SSO_SUCCESSORS) {
-            ComponentName component = new ComponentName(TWITTER_PACKAGE, className);
-            ActivityInfo activityInfo;
-            try {
-                activityInfo = pm.getActivityInfo(component, 0);
-            } catch (Throwable ignored) {
-                continue;
-            }
-
-            if (!isUsableOfficialSuccessor(pm, activityInfo, className)) {
-                continue;
-            }
-
-            originalIntent.setComponent(component);
-
-            Object systemResult = null;
-            try {
-                systemResult = queryMethod.invoke(who, queryArgs);
-                if (containsUsableActivity(systemResult, className)) {
-                    Log.w(TAG, "native SSO discovery: mapped legacy entry to official "
-                            + className + processSuffix());
-                    return systemResult;
-                }
-            } catch (Throwable error) {
-                Log.w(TAG, "native SSO successor query failed ("
-                        + rootType(error) + ")" + processSuffix());
-            }
-
-            ResolveInfo resolveInfo = new ResolveInfo();
-            resolveInfo.activityInfo = activityInfo;
-            resolveInfo.resolvePackageName = activityInfo.packageName;
-            resolveInfo.isDefault = true;
-            List<ResolveInfo> resolves = Collections.singletonList(resolveInfo);
-            Log.w(TAG, "native SSO discovery: mapped legacy entry to official "
-                    + className + " via ActivityInfo" + processSuffix());
-            if (ParceledListSliceCompat.isReturnParceledListSlice(queryMethod)) {
-                return ParceledListSliceCompat.create(resolves);
-            }
-            return resolves;
-        }
-        return null;
-    }
-
-    private static boolean isUsableOfficialSuccessor(
-            PackageManager pm, ActivityInfo activityInfo, String expectedClassName) {
-        if (activityInfo == null
-                || !TWITTER_PACKAGE.equals(activityInfo.packageName)
-                || !expectedClassName.equals(activityInfo.name)
-                || !activityInfo.enabled
-                || !activityInfo.exported
-                || (activityInfo.applicationInfo != null
-                && !activityInfo.applicationInfo.enabled)) {
-            return false;
-        }
-
-        String permission = activityInfo.permission;
-        if (permission == null || permission.trim().isEmpty()) {
-            return true;
-        }
-        try {
-            return pm.checkPermission(permission, BlackBoxCore.getHostPkg())
-                    == PackageManager.PERMISSION_GRANTED;
-        } catch (Throwable ignored) {
-            return false;
-        }
-    }
-
-    private static boolean containsUsableActivity(Object result, String expectedClassName) {
-        List<?> list = extractList(result);
-        if (list == null || list.isEmpty()) {
-            return false;
-        }
-        for (Object item : list) {
-            if (!(item instanceof ResolveInfo)) {
-                continue;
-            }
-            ActivityInfo info = ((ResolveInfo) item).activityInfo;
-            if (info != null
-                    && TWITTER_PACKAGE.equals(info.packageName)
-                    && expectedClassName.equals(info.name)
-                    && info.enabled
-                    && info.exported
-                    && (info.applicationInfo == null || info.applicationInfo.enabled)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private static Intent findIntent(Object[] args) {
@@ -271,14 +165,5 @@ public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
         } catch (Throwable ignored) {
             return "";
         }
-    }
-
-    private static String rootType(Throwable error) {
-        Throwable current = error;
-        while (current != null && current.getCause() != null
-                && current.getCause() != current) {
-            current = current.getCause();
-        }
-        return current == null ? "unknown" : current.getClass().getSimpleName();
     }
 }
