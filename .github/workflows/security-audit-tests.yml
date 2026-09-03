@@ -11,6 +11,7 @@ on:
       - 'One-Core-Engine/app/src/main/jni/backends/ModsLoader.h'
       - '.github/workflows/build-hardened-safe.yml'
       - '.github/workflows/security-audit-tests.yml'
+      - 'SECURITY_AUDIT_2026-09-03.md'
   push:
     branches:
       - main
@@ -21,6 +22,7 @@ on:
       - 'One-Core-Engine/app/src/main/jni/backends/ModsLoader.h'
       - '.github/workflows/build-hardened-safe.yml'
       - '.github/workflows/security-audit-tests.yml'
+      - 'SECURITY_AUDIT_2026-09-03.md'
 
 permissions:
   contents: read
