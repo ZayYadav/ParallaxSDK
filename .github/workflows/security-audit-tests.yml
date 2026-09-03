@@ -1,0 +1,91 @@
+name: Security audit gates
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'panels/sdk-panel/**'
+      - 'One-Core-Engine/app/build.gradle'
+      - 'One-Core-Engine/app/src/main/jni/backends/ModsLoader.h'
+      - '.github/workflows/build-hardened-safe.yml'
+      - '.github/workflows/security-audit-tests.yml'
+  push:
+    branches:
+      - main
+      - 'security/**'
+    paths:
+      - 'panels/sdk-panel/**'
+      - 'One-Core-Engine/app/build.gradle'
+      - 'One-Core-Engine/app/src/main/jni/backends/ModsLoader.h'
+      - '.github/workflows/build-hardened-safe.yml'
+      - '.github/workflows/security-audit-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  security-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout audited source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Lint SDK panel security code
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l panels/sdk-panel/panel_security.php
+          php -l panels/sdk-panel/CryptoV3.php
+          php -l panels/sdk-panel/MfaHelper.php
+          php -l panels/sdk-panel/tests/security-self-test.php
+          php -l panels/sdk-panel/tests/proxy-trust-self-test.php
+
+      - name: Run SDK panel crypto and proxy security tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          php panels/sdk-panel/tests/security-self-test.php
+          php panels/sdk-panel/tests/proxy-trust-self-test.php
+
+      - name: Enforce immutable runtime artifact source
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE='One-Core-Engine/app/src/main/jni/backends/ModsLoader.h'
+          PINNED='https://raw.githubusercontent.com/ZayYadav/Parallaxapp/c31b43f515e5af248ce575520dfe80d139ac2f8d/JANGAM.zip'
+          grep -F -- "$PINNED" "$FILE" >/dev/null
+          if grep -F -- 'Parallaxapp/raw/refs/heads/main/JANGAM.zip' "$FILE"; then
+            echo 'Mutable runtime artifact URL is forbidden.' >&2
+            exit 1
+          fi
+
+      - name: Enforce offline TLS pin trust
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE='One-Core-Engine/app/build.gradle'
+          if grep -F -- 'resolveVerifiedLeafTlsPin' "$FILE"; then
+            echo 'Release builds must not auto-enroll a live TLS certificate.' >&2
+            exit 1
+          fi
+          if grep -F -- 'pins.add(livePin)' "$FILE"; then
+            echo 'Release builds must not append a network-observed TLS pin.' >&2
+            exit 1
+          fi
+
+      - name: Enforce immutable DPT trust chain
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE='.github/workflows/build-hardened-safe.yml'
+          if grep -F -- 'ParallaxDPT/.github/workflows/protect-apk.yml@main' "$FILE"; then
+            echo 'DPT reusable workflow must be pinned to an immutable commit.' >&2
+            exit 1
+          fi
+          if grep -E -- '^\s*dpt_ref:\s*main\s*$' "$FILE"; then
+            echo 'DPT source ref must be pinned to an immutable commit.' >&2
+            exit 1
+          fi
+          grep -F -- '7d72080525c22f2987cd46636730ee42a2056054' "$FILE" >/dev/null
