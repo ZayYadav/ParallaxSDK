@@ -3,6 +3,7 @@ package top.niunaijun.blackbox.fake.service;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
+import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.util.Log;
 
@@ -12,6 +13,8 @@ import java.util.List;
 
 import black.android.content.pm.BRParceledListSlice;
 
+import top.niunaijun.blackbox.BlackBoxCore;
+import top.niunaijun.blackbox.app.BActivityThread;
 import top.niunaijun.blackbox.fake.hook.MethodHook;
 import top.niunaijun.blackbox.fake.hook.ProxyMethod;
 import top.niunaijun.blackbox.fake.hook.ScanClass;
@@ -22,19 +25,22 @@ import top.niunaijun.blackbox.utils.compat.ParceledListSliceCompat;
  *
  * <p>The existing Facebook web-first behavior is delegated unchanged to
  * {@link IFacebookWebPackageManagerProxy}. For legacy Twitter Kit, the exact
- * {@code com.twitter.android.SingleSignOnActivity} availability probe is treated
- * conservatively: native SSO is advertised only when Android actually returns a
- * real, enabled, exported ActivityInfo for that exact component.</p>
+ * {@code com.twitter.android.SingleSignOnActivity} availability probe is first
+ * resolved against the real installed Twitter/X package.</p>
  *
- * <p>Modern Twitter/X builds may keep the package installed while removing the
- * old Twitter Kit SingleSignOnActivity. Returning any non-empty query result in
- * that situation is unsafe because Twitter Kit's IntentUtils only checks whether
- * the list is empty. A false-positive result makes Twitter Kit start a missing
- * SSO component and later report a bare {@code Authorize failed.} cancellation.
- * When the real activity is absent this proxy therefore returns a correctly
- * shaped empty result so Twitter Kit naturally continues to its OAuth/WebView
- * handler. No package, activity, signature, token, or provider identity is
- * fabricated.</p>
+ * <p>Recent official X builds can remove the old public SingleSignOnActivity while
+ * retaining their real app-authorization entry point. Twitter Kit unfortunately
+ * hard-codes the removed component. When that exact legacy component is absent,
+ * this compatibility layer may remap the SAME Intent object to a real, enabled,
+ * exported and permission-accessible authorization Activity in the same official
+ * {@code com.twitter.android} package. Twitter Kit then adds its original SSO
+ * extras and starts that real provider Activity normally. The existing OneCore
+ * external-auth bridge keeps the real provider UI outside the virtual process and
+ * returns Android's real Activity result to the original :pN guest process.</p>
+ *
+ * <p>No package/signature identity, OAuth token, token secret, consumer credential
+ * or provider result is fabricated. If no real accessible successor exists, the
+ * proxy returns an empty result and Twitter Kit keeps its normal OAuth fallback.</p>
  */
 @ScanClass({IPackageManagerProxy.class})
 public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
@@ -43,6 +49,16 @@ public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
     private static final String TWITTER_PACKAGE = "com.twitter.android";
     private static final String TWITTER_SSO_ACTIVITY =
             "com.twitter.android.SingleSignOnActivity";
+
+    /**
+     * Known real authorization Activities shipped by official Twitter/X builds.
+     * They are never assumed usable: Android must report the exact component as
+     * installed, enabled, exported and launch-permission-accessible first.
+     */
+    private static final String[] TWITTER_SSO_SUCCESSORS = new String[]{
+            "com.twitter.android.AuthorizeAppActivity",
+            "com.twitter.app.authorizeapp.AppAuthorizationActivity"
+    };
 
     @Override
     public void injectHook() {
@@ -65,27 +81,140 @@ public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             Intent intent = findIntent(args);
+            final boolean legacyTwitterProbe = isExactTwitterSsoProbe(intent);
 
             // Run the already-shipped Facebook/Twitter compatibility logic first.
             // It performs the real system query and real ActivityInfo fallbacks.
             Object result = existingCompat.hook(who, method, args);
 
-            if (!isExactTwitterSsoProbe(intent)) {
+            if (!legacyTwitterProbe) {
                 return result;
             }
 
-            // Twitter Kit's IntentUtils considers ANY non-empty list to mean SSO
-            // exists. Filter out stale/disabled/wrong-component results instead of
-            // allowing a false positive to force the legacy SSO handler.
+            // Prefer the exact legacy provider component when it genuinely exists.
             if (containsUsableTwitterSso(result)) {
-                Log.i(TAG, "native SSO discovery: verified real activity available");
+                Log.i(TAG, "native SSO discovery: verified real legacy activity available"
+                        + processSuffix());
                 return result;
+            }
+
+            // Newer X releases can keep the actual authorization Activity while
+            // removing only SingleSignOnActivity. Remap the original Intent object
+            // itself so Twitter Kit subsequently starts the real successor after
+            // it appends its own ck/cs extras. Nothing sensitive is read or logged.
+            Object successor = tryOfficialTwitterSsoSuccessor(who, method, args, intent);
+            if (successor != null) {
+                return successor;
             }
 
             Log.i(TAG,
-                    "native SSO discovery: real activity unavailable; using OAuth fallback");
+                    "native SSO discovery: no accessible official successor; using OAuth fallback"
+                            + processSuffix());
             return emptyResult(method);
         }
+    }
+
+    private static Object tryOfficialTwitterSsoSuccessor(
+            Object who, Method queryMethod, Object[] queryArgs, Intent originalIntent) {
+        if (originalIntent == null || BlackBoxCore.getContext() == null) {
+            return null;
+        }
+
+        PackageManager pm = BlackBoxCore.getContext().getPackageManager();
+        for (String className : TWITTER_SSO_SUCCESSORS) {
+            ComponentName component = new ComponentName(TWITTER_PACKAGE, className);
+            ActivityInfo activityInfo;
+            try {
+                activityInfo = pm.getActivityInfo(component, 0);
+            } catch (Throwable ignored) {
+                continue;
+            }
+
+            if (!isUsableOfficialSuccessor(pm, activityInfo, className)) {
+                continue;
+            }
+
+            // IntentUtils.isActivityAvailable() receives the caller's Intent by
+            // reference before the binder call. Mutating that same object is what
+            // makes Twitter Kit's following startActivityForResult() target the
+            // real replacement component rather than the removed legacy class.
+            originalIntent.setComponent(component);
+
+            Object systemResult = null;
+            try {
+                systemResult = queryMethod.invoke(who, queryArgs);
+                if (containsUsableActivity(systemResult, className)) {
+                    Log.i(TAG, "native SSO discovery: mapped legacy entry to official "
+                            + simpleName(className) + processSuffix());
+                    return systemResult;
+                }
+            } catch (Throwable error) {
+                Log.w(TAG, "native SSO successor query failed ("
+                        + rootType(error) + ")" + processSuffix());
+            }
+
+            // Some Android releases apply visibility filtering to the raw query
+            // even though getActivityInfo() above returned the real component.
+            // Repackage that real ActivityInfo without changing package/name.
+            ResolveInfo resolveInfo = new ResolveInfo();
+            resolveInfo.activityInfo = activityInfo;
+            resolveInfo.resolvePackageName = activityInfo.packageName;
+            resolveInfo.isDefault = true;
+            List<ResolveInfo> resolves = Collections.singletonList(resolveInfo);
+            Log.i(TAG, "native SSO discovery: mapped legacy entry to official "
+                    + simpleName(className) + " via ActivityInfo" + processSuffix());
+            if (ParceledListSliceCompat.isReturnParceledListSlice(queryMethod)) {
+                return ParceledListSliceCompat.create(resolves);
+            }
+            return resolves;
+        }
+        return null;
+    }
+
+    private static boolean isUsableOfficialSuccessor(
+            PackageManager pm, ActivityInfo activityInfo, String expectedClassName) {
+        if (activityInfo == null
+                || !TWITTER_PACKAGE.equals(activityInfo.packageName)
+                || !expectedClassName.equals(activityInfo.name)
+                || !activityInfo.enabled
+                || !activityInfo.exported
+                || (activityInfo.applicationInfo != null
+                && !activityInfo.applicationInfo.enabled)) {
+            return false;
+        }
+
+        String permission = activityInfo.permission;
+        if (permission == null || permission.trim().isEmpty()) {
+            return true;
+        }
+        try {
+            return pm.checkPermission(permission, BlackBoxCore.getHostPkg())
+                    == PackageManager.PERMISSION_GRANTED;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static boolean containsUsableActivity(Object result, String expectedClassName) {
+        List<?> list = extractList(result);
+        if (list == null || list.isEmpty()) {
+            return false;
+        }
+        for (Object item : list) {
+            if (!(item instanceof ResolveInfo)) {
+                continue;
+            }
+            ActivityInfo info = ((ResolveInfo) item).activityInfo;
+            if (info != null
+                    && TWITTER_PACKAGE.equals(info.packageName)
+                    && expectedClassName.equals(info.name)
+                    && info.enabled
+                    && info.exported
+                    && (info.applicationInfo == null || info.applicationInfo.enabled)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static Intent findIntent(Object[] args) {
@@ -154,5 +283,29 @@ public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
             return ParceledListSliceCompat.create(empty);
         }
         return empty;
+    }
+
+    private static String simpleName(String className) {
+        if (className == null) return "unknown";
+        int dot = className.lastIndexOf('.');
+        return dot >= 0 && dot + 1 < className.length()
+                ? className.substring(dot + 1) : className;
+    }
+
+    private static String processSuffix() {
+        try {
+            return " [bpid=" + BActivityThread.getAppPid() + "]";
+        } catch (Throwable ignored) {
+            return "";
+        }
+    }
+
+    private static String rootType(Throwable error) {
+        Throwable current = error;
+        while (current != null && current.getCause() != null
+                && current.getCause() != current) {
+            current = current.getCause();
+        }
+        return current == null ? "unknown" : current.getClass().getSimpleName();
     }
 }
