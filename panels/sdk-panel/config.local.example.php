@@ -32,14 +32,7 @@ return [
     'LEGACY_API_ENABLED' => false,
     'API_V2_ENABLED' => false,
     'REQUIRE_HTTPS' => true,
-
-    // Leave false when PHP is directly internet-facing. When a reverse proxy
-    // terminates TLS, set TRUST_PROXY=true and list only that proxy's REMOTE_ADDR
-    // values below. Forwarded headers are ignored unless the immediate peer is
-    // explicitly allowlisted.
     'TRUST_PROXY' => false,
-    'TRUSTED_PROXIES' => [],
-
     'RATE_LIMIT_PER_MINUTE' => 30,
     'API_REPLAY_WINDOW_SECONDS' => 120,
     'SESSION_IDLE_SECONDS' => 1800,

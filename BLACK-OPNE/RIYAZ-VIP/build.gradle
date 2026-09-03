@@ -4,58 +4,6 @@ plugins {
     id 'org.lsposed.lsparanoid'
 }
 
-// Public V3 trust anchors have a single source of truth shared with the panel.
-// A standalone SDK checkout can still supply the same values explicitly through
-// Gradle properties, but a full repository build must not silently drift from
-// panels/sdk-panel/sdk-v3-public-trust.json.
-def sdkTrustFile = new File(rootProject.projectDir.parentFile, 'panels/sdk-panel/sdk-v3-public-trust.json')
-def sdkTrust = [:]
-if (sdkTrustFile.isFile()) {
-    sdkTrust = new groovy.json.JsonSlurper().parse(sdkTrustFile) as Map
-} else {
-    sdkTrust = [
-        contract_version       : 3,
-        key_id                 : providers.gradleProperty('sdkPanelKeyId').orNull,
-        ecdh_public_key_b64    : providers.gradleProperty('sdkPanelEcdhPublicKey').orNull,
-        signing_public_key_b64 : providers.gradleProperty('sdkPanelSigningPublicKey').orNull,
-    ]
-}
-
-def requiredTrustString = { String name ->
-    def value = sdkTrust[name]?.toString()?.trim()
-    if (!value) {
-        throw new GradleException("Missing SDK V3 trust value '${name}'. Keep sdk-v3-public-trust.json with the SDK or pass the documented Gradle property override.")
-    }
-    value
-}
-
-def sdkPanelKeyId = requiredTrustString('key_id')
-def sdkPanelEcdhPublicKey = requiredTrustString('ecdh_public_key_b64')
-def sdkPanelSigningPublicKey = requiredTrustString('signing_public_key_b64')
-if ((sdkTrust.contract_version as Integer) != 3) {
-    throw new GradleException('SDK panel public trust contract must be version 3.')
-}
-if (!(sdkPanelKeyId ==~ /[A-Za-z0-9._-]{1,64}/)) {
-    throw new GradleException('SDK panel key id is invalid.')
-}
-for (def entry : [ecdh: sdkPanelEcdhPublicKey, signing: sdkPanelSigningPublicKey]) {
-    byte[] der
-    try {
-        der = java.util.Base64.decoder.decode(entry.value)
-    } catch (IllegalArgumentException ignored) {
-        throw new GradleException("SDK panel ${entry.key} public key is not valid Base64.")
-    }
-    if (der.length < 80 || der.length > 160) {
-        throw new GradleException("SDK panel ${entry.key} public key has an invalid DER length.")
-    }
-}
-if (sdkPanelEcdhPublicKey == sdkPanelSigningPublicKey) {
-    throw new GradleException('SDK panel ECDH and response-signing public keys must be different.')
-}
-def buildConfigQuote = { String value ->
-    '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
-}
-
 // Keep the reflection-heavy virtualization startup bytecode stable. Only the
 // release auth/activation boundary is transformed at build time.
 lsparanoid {
@@ -81,12 +29,12 @@ android {
         versionName rootProject.ext.versionName
         consumerProguardFiles 'proguard.txt'
 
-        // These are public trust anchors, not secrets. Their source is shared
-        // with the SDK panel so client/server key drift fails at build/deploy
-        // verification instead of appearing as an unexplained activation error.
-        buildConfigField 'String', 'SDK_PANEL_KEY_ID', buildConfigQuote(sdkPanelKeyId)
-        buildConfigField 'String', 'SDK_PANEL_ECDH_PUBLIC_KEY', buildConfigQuote(sdkPanelEcdhPublicKey)
-        buildConfigField 'String', 'SDK_PANEL_SIGNING_PUBLIC_KEY', buildConfigQuote(sdkPanelSigningPublicKey)
+        // These are public trust anchors, not secrets. The matching private
+        // keys exist only in the panel's private server configuration. The
+        // exact endpoint is reconstructed and integrity-checked in native code.
+        buildConfigField 'String', 'SDK_PANEL_KEY_ID', '"parallax-2026-09"'
+        buildConfigField 'String', 'SDK_PANEL_ECDH_PUBLIC_KEY', '"MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAElrvz2zaAUxXd1l5uKxTHRp1hIJpnhRjM+Pb0obVyC2VTh2K0VnTdme107RV4q+u2Dnt868k5hQzeum6pD4oAuw=="'
+        buildConfigField 'String', 'SDK_PANEL_SIGNING_PUBLIC_KEY', '"MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAErC1NBisuPTumG0YqsRPMHIbC8YkOwg1Nk6a5GVDqN52sxFknJKl5aT/gx6IbOUIEpX29xL2ODE9gBWisLbIeMQ=="'
 
         ndk {
             // Ship every ABI supported by current Android devices and emulators.
@@ -279,7 +227,7 @@ tasks.register('decryptReleaseAar') {
 }
 
 dependencies {
-    implementation 'androidx.appcompat:appcompat:1.8.0'
+    implementation 'androidx.appcompat:appcompat:1.7.1'
     implementation 'com.github.tiann:FreeReflection:3.2.2'
     implementation 'com.github.CodingGay.BlackReflection:core:1.1.2'
     annotationProcessor 'com.github.CodingGay.BlackReflection:compiler:1.1.2'

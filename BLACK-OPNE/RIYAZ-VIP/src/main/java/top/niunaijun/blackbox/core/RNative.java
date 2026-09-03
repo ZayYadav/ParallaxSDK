@@ -41,21 +41,14 @@ public class RNative {
     public static native void addIORule(String targetPath, String relocatePath);
     public static native void hideXposed();
     public static native boolean authorizeSdkSession(
-            Context context,
             String currentPackage,
             String currentSigningSha256,
             String authorizedPackage,
             String authorizedSigningSha256,
             String responseCanonical,
             String responseSignature,
-            String identityCanonical,
-            String identitySignature,
             long leaseExpiresAt,
             long serverTime);
-    public static native boolean verifyInstalledIdentity(
-            Context context,
-            String expectedPackage,
-            String expectedSigningSha256);
     public static native boolean isSdkSessionValid(long currentTime);
     public static native void clearSdkSession();
     public static native String getSdkPanelEndpoint();

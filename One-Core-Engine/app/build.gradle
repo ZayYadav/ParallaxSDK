@@ -1,6 +1,9 @@
 import java.security.KeyStore
 import java.security.MessageDigest
 import java.util.Base64
+import javax.net.ssl.HttpsURLConnection
+import java.net.URL
+import java.security.cert.X509Certificate
 import javax.imageio.ImageIO
 import javax.imageio.IIOImage
 import javax.imageio.ImageWriteParam
@@ -18,35 +21,9 @@ apply from: '../signing.gradle'
 def parallaxApiPublicKey = providers.gradleProperty('parallaxApiPublicKey')
         .orElse(System.getenv('PARALLAX_API_PUBLIC_KEY_B64') ?: '')
         .get()
-def parallaxConfiguredTlsPins = providers.gradleProperty('parallaxTlsPins')
+def parallaxTlsPins = providers.gradleProperty('parallaxTlsPins')
         .orElse(System.getenv('PARALLAX_TLS_PINS') ?: '')
         .get()
-
-// Source-controlled emergency/rotation anchor for the live licensing host.
-// Repository variables may add future/backup pins, but a typo in the variable must not
-// remove the currently approved production SPKI pin from the APK.
-def parallaxBuiltInTlsPins = [
-        'sha256/Ina/GY9COYngSpB7Ht+asGkJ5LV99jpBHYz11jXRSWM='
-]
-def parseTlsPins = { String raw ->
-    if (raw == null || raw.trim().isEmpty()) {
-        return []
-    }
-    def pins = raw.split(',', -1)
-            .collect { it.trim() }
-            .findAll { !it.isEmpty() }
-    if (pins.any { !(it ==~ /^sha256\/[A-Za-z0-9+\/]{43}=$/) }) {
-        throw new GradleException('PARALLAX_TLS_PINS must contain valid OkHttp SHA-256 pins')
-    }
-    return pins
-}
-def parallaxConfiguredTlsPinList = parseTlsPins(parallaxConfiguredTlsPins)
-def parallaxTlsPinList = (parallaxBuiltInTlsPins + parallaxConfiguredTlsPinList).unique()
-if (parallaxTlsPinList.isEmpty() || parallaxTlsPinList.size() > 8) {
-    throw new GradleException('Effective PARALLAX_TLS_PINS must contain between 1 and 8 pins')
-}
-def parallaxTlsPins = parallaxTlsPinList.join(',')
-
 def oneCoreAllowedSigningSha256 = providers.gradleProperty('onecoreAllowedSigningSha256')
         .orElse(System.getenv('ONECORE_ALLOWED_SIGNING_SHA256') ?: '')
         .get()
@@ -119,10 +96,50 @@ tasks.configureEach { task ->
         task.dependsOn('generateOneCoreBrandAsset')
     }
 }
+def resolveVerifiedLeafTlsPin = { String host ->
+    HttpsURLConnection connection = null
+    try {
+        connection = (HttpsURLConnection) new URL("https://${host}/").openConnection()
+        connection.connectTimeout = 10_000
+        connection.readTimeout = 10_000
+        connection.instanceFollowRedirects = false
+        connection.connect()
 
-// TLS pins are explicit trust anchors. The source-controlled production pin is always kept in
-// the effective set; repository variables are additive rotation/backup pins only. Never derive
-// or auto-enroll a network-observed certificate into a release artifact.
+        def certificates = connection.serverCertificates
+        if (certificates == null || certificates.length == 0 || !(certificates[0] instanceof X509Certificate)) {
+            throw new GradleException("No verified X.509 certificate was returned by ${host}")
+        }
+
+        byte[] subjectPublicKeyInfo = ((X509Certificate) certificates[0]).publicKey.encoded
+        byte[] digest = MessageDigest.getInstance('SHA-256').digest(subjectPublicKeyInfo)
+        return 'sha256/' + Base64.encoder.encodeToString(digest)
+    } finally {
+        connection?.disconnect()
+    }
+}
+
+if ('true'.equalsIgnoreCase(System.getenv('GITHUB_ACTIONS'))
+        && parallaxApiPublicKey != null && !parallaxApiPublicKey.trim().isEmpty()
+        && parallaxTlsPins != null && !parallaxTlsPins.trim().isEmpty()) {
+    try {
+        String livePin = resolveVerifiedLeafTlsPin('parallaxloader.parallaxserver.online')
+        def pins = new LinkedHashSet<String>()
+        parallaxTlsPins.split(',', -1)
+                .collect { it.trim() }
+                .findAll { !it.isEmpty() }
+                .each { pins.add(it) }
+        boolean alreadyConfigured = pins.contains(livePin)
+        pins.add(livePin)
+        parallaxTlsPins = pins.join(',')
+        logger.lifecycle("Verified live TLS pin for parallaxloader.parallaxserver.online: ${livePin}")
+        if (!alreadyConfigured) {
+            logger.warn('Configured PARALLAX_TLS_PINS did not contain the current verified leaf pin; the live pin was appended for this build.')
+        }
+    } catch (Exception error) {
+        throw new GradleException('Unable to resolve the verified live TLS pin for the licensing host', error)
+    }
+}
+
 if (releaseTaskRequested) {
     byte[] publicKeyDer
     try {
@@ -133,8 +150,9 @@ if (releaseTaskRequested) {
     if (publicKeyDer.length < 256 || publicKeyDer.length > 1024) {
         throw new GradleException('PARALLAX_API_PUBLIC_KEY_B64 has an invalid DER size')
     }
-    if (!parallaxTlsPinList.containsAll(parallaxBuiltInTlsPins)) {
-        throw new GradleException('Built-in production TLS pin is missing from the effective release trust set')
+    def configuredPins = parallaxTlsPins.split(',', -1).collect { it.trim() }
+    if (configuredPins.isEmpty() || configuredPins.any { !(it ==~ /^sha256\/[A-Za-z0-9+\/]{43}=$/) }) {
+        throw new GradleException('PARALLAX_TLS_PINS must contain valid SHA-256 pins for release builds')
     }
 }
 

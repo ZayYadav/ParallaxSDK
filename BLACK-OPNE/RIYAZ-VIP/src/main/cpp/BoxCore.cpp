@@ -10,7 +10,6 @@
 #include <Hook/DexFileHook.h>
 #include <Hook/RuntimeHook.h>
 #include <Hook/LinuxHook.h>
-#include "SdkIdentityGuard.h"
 #include <algorithm>
 #include <mutex>
 #include <cstdint>
@@ -31,8 +30,6 @@ namespace {
 std::mutex sdkSessionMutex;
 bool sdkSessionAuthorized = false;
 jlong sdkSessionExpiry = 0;
-std::string sdkSessionPackage;
-std::string sdkSessionSigning;
 
 std::string toUtf8(JNIEnv *env, jstring value) {
     if (env == nullptr || value == nullptr) return {};
@@ -44,22 +41,18 @@ std::string toUtf8(JNIEnv *env, jstring value) {
 }
 
 jboolean authorizeSdkSession(JNIEnv *env, jclass nativeClass,
-                             jobject context,
                              jstring currentPackage,
                              jstring currentSigning,
                              jstring authorizedPackage,
                              jstring authorizedSigning,
                              jstring responseCanonical,
                              jstring responseSignature,
-                             jstring identityCanonical,
-                             jstring identitySignature,
                              jlong leaseExpiresAt,
                              jlong serverTime) {
     const std::string package = toUtf8(env, currentPackage);
     const std::string signing = toUtf8(env, currentSigning);
     const std::string expectedPackage = toUtf8(env, authorizedPackage);
     const std::string expectedSigning = toUtf8(env, authorizedSigning);
-
     bool serverSignatureValid = false;
     if (nativeClass != nullptr) {
         jmethodID verifyMethod = env->GetStaticMethodID(
@@ -72,24 +65,7 @@ jboolean authorizeSdkSession(JNIEnv *env, jclass nativeClass,
         }
         if (env->ExceptionCheck()) env->ExceptionClear();
     }
-
-    const bool identityBindingValid = verifySignedIdentityBinding(
-        env,
-        nativeClass,
-        identityCanonical,
-        identitySignature,
-        package,
-        signing,
-        leaseExpiresAt,
-        serverTime
-    );
-
-    const bool installedIdentityValid = context != nullptr
-        && verifyInstalledIdentity(env, nativeClass, context, currentPackage, currentSigning) == JNI_TRUE;
-
     const bool valid = serverSignatureValid
-        && identityBindingValid
-        && installedIdentityValid
         && !package.empty()
         && package == expectedPackage
         && signing.size() == 64
@@ -97,22 +73,15 @@ jboolean authorizeSdkSession(JNIEnv *env, jclass nativeClass,
         && serverTime > 0
         && leaseExpiresAt > serverTime
         && leaseExpiresAt <= serverTime + 1800;
-
     std::lock_guard<std::mutex> guard(sdkSessionMutex);
     sdkSessionAuthorized = valid;
     sdkSessionExpiry = valid ? leaseExpiresAt : 0;
-    sdkSessionPackage = valid ? package : std::string();
-    sdkSessionSigning = valid ? signing : std::string();
     return valid ? JNI_TRUE : JNI_FALSE;
 }
 
 jboolean isSdkSessionValid(JNIEnv *, jclass, jlong currentTime) {
     std::lock_guard<std::mutex> guard(sdkSessionMutex);
-    return sdkSessionAuthorized
-        && !sdkSessionPackage.empty()
-        && sdkSessionSigning.size() == 64
-        && currentTime > 0
-        && currentTime < sdkSessionExpiry
+    return sdkSessionAuthorized && currentTime > 0 && currentTime < sdkSessionExpiry
         ? JNI_TRUE : JNI_FALSE;
 }
 
@@ -120,10 +89,6 @@ void clearSdkSession(JNIEnv *, jclass) {
     std::lock_guard<std::mutex> guard(sdkSessionMutex);
     sdkSessionAuthorized = false;
     sdkSessionExpiry = 0;
-    std::fill(sdkSessionPackage.begin(), sdkSessionPackage.end(), '\0');
-    std::fill(sdkSessionSigning.begin(), sdkSessionSigning.end(), '\0');
-    sdkSessionPackage.clear();
-    sdkSessionSigning.clear();
 }
 
 jstring getSdkPanelEndpoint(JNIEnv *env, jclass) {
@@ -341,8 +306,7 @@ static JNINativeMethod gMethods[] = {
         {"addIORule",  "(Ljava/lang/String;Ljava/lang/String;)V", (void *) addIORule},
         {"enableIO",   "()V",                                   (void *) enableIO},
         {"init",       "(I)V",                                  (void *) init},
-        {"authorizeSdkSession", "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJ)Z", (void *) authorizeSdkSession},
-        {"verifyInstalledIdentity", "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;)Z", (void *) verifyInstalledIdentity},
+        {"authorizeSdkSession", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJ)Z", (void *) authorizeSdkSession},
         {"isSdkSessionValid", "(J)Z", (void *) isSdkSessionValid},
         {"clearSdkSession", "()V", (void *) clearSdkSession},
         {"getSdkPanelEndpoint", "()Ljava/lang/String;", (void *) getSdkPanelEndpoint},

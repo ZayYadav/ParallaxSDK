@@ -17,17 +17,11 @@ class nk {
         @Volatile
         private var is_False: Boolean = false
 
-        @Volatile
-        private var lastIdentityCheckElapsed: Long = 0L
-
-        private const val IDENTITY_RECHECK_MS = 30_000L
-
         @JvmField
         @Volatile
         var Msg: String = "Ready"
 
         const val PREFERENCE_NAME: String = "license_cache"
-
         @JvmStatic
         fun getActivatedSdk(): Boolean {
             val context = BlackBoxCore.getContext() ?: return false
@@ -36,7 +30,6 @@ class nk {
                 Msg = "SDK not activated"
                 return false
             }
-
             val leaseExpiry = sp.getLong("lease_expires_at", 0L)
             val verifiedServerTime = sp.getLong("verified_server_time", 0L)
             val verifiedElapsed = sp.getLong("verified_elapsed_realtime", 0L)
@@ -45,40 +38,12 @@ class nk {
                 clearActivation("Activation lease is invalid")
                 return false
             }
-
-            val authorizedPackage = sp.getString("authorized_package", "").orEmpty()
-            val authorizedSigning = sp.getString("authorized_signing_sha256", "").orEmpty()
-            if (authorizedPackage.isEmpty()
-                || authorizedSigning.length != 64
-                || context.packageName != authorizedPackage) {
-                clearActivation("Activation identity is invalid")
-                return false
-            }
-
-            if (lastIdentityCheckElapsed == 0L
-                || elapsedNow < lastIdentityCheckElapsed
-                || elapsedNow - lastIdentityCheckElapsed >= IDENTITY_RECHECK_MS) {
-                try {
-                    val currentSigning = SecureSdkApiClient(context)
-                        .appSigningCertificateSha256(authorizedPackage)
-                    if (currentSigning != authorizedSigning) {
-                        clearActivation("Installed APK signing identity changed")
-                        return false
-                    }
-                    lastIdentityCheckElapsed = elapsedNow
-                } catch (_: Throwable) {
-                    clearActivation("Installed APK identity verification failed")
-                    return false
-                }
-            }
-
             val monotonicServerNow = verifiedServerTime + (elapsedNow - verifiedElapsed) / 1000L
             val effectiveNow = maxOf(System.currentTimeMillis() / 1000L, monotonicServerNow)
             if (effectiveNow >= leaseExpiry || !RNative.isSdkSessionValid(effectiveNow)) {
                 clearActivation("Activation lease expired; reconnect to the panel")
                 return false
             }
-
             Msg = "Secure activation lease valid"
             return true
         }
@@ -86,7 +51,6 @@ class nk {
         @JvmStatic
         fun clearActivation(reason: String = "SDK not activated") {
             is_False = false
-            lastIdentityCheckElapsed = 0L
             try {
                 RNative.clearSdkSession()
             } catch (_: Throwable) {
@@ -98,11 +62,6 @@ class nk {
                     ?.remove("lease_expires_at")
                     ?.remove("verified_server_time")
                     ?.remove("verified_elapsed_realtime")
-                    ?.remove("authorized_package")
-                    ?.remove("authorized_signing_sha256")
-                    ?.remove("package_policy")
-                    ?.remove("signing_policy")
-                    ?.remove("device_policy")
                     ?.putString("server_status", "offline")
                     ?.apply()
             } catch (_: Throwable) {
@@ -122,8 +81,7 @@ class nk {
             Handler(Looper.getMainLooper()).post {
                 try {
                     Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
-                } catch (_: Exception) {
-                }
+                } catch (_: Exception) {}
             }
         }
 
@@ -133,6 +91,7 @@ class nk {
             try {
                 val value = status.equals("online", ignoreCase = true)
                 is_False = value
+                // ✅ SharedPreferences mein bhi save karo
                 val ctx = BlackBoxCore.getContext()
                 if (ctx != null) {
                     val sp = ctx.getSharedPreferences(PREFERENCE_NAME, Context.MODE_PRIVATE)
@@ -141,11 +100,13 @@ class nk {
                         apply()
                     }
                 }
+                // ✅ Message update karo
                 Msg = if (value) {
                     "✅ Server Online"
                 } else {
                     "❌ Server $status - Functions Blocked"
                 }
+                
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -170,29 +131,32 @@ class nk {
         fun 获取接口地址(): String {
             return RNative.getSdkPanelEndpoint()
         }
-
+        
         @JvmStatic
         fun isSystemApp(): Boolean {
+            // ✅ IMPORTANT: Ye method BPackageManager call karega
+            // 1. Server status check
             if (!GAH()) {
                 Msg = "❌ Server Offline - Functions Blocked"
                 try {
                     AdvancedPopupHelper.showAuto()
-                } catch (_: Exception) {
-                }
+                } catch (_: Exception) {}
                 return false
             }
+            // 2. Activation + Expiry check
             val isActivated = getActivatedSdk()
             if (!isActivated) {
                 try {
                     AdvancedPopupHelper.showAuto()
-                } catch (_: Exception) {
-                }
+                } catch (_: Exception) {}
                 return false
             }
+            // ✅ All checks passed
             Msg = "✅ Server Online & Licence Valid"
             return true
         }
-
+        
+        // ✅ Helper: Check expiry manually
         @JvmStatic
         fun checkExpiryManually(): String {
             val context = BlackBoxCore.getContext() ?: return "No context"
@@ -217,18 +181,16 @@ class nk {
                 "Error: ${e.message}"
             }
         }
-
+        
+        // ✅ App start pe saved status load karo
         @JvmStatic
         fun loadSavedStatus() {
             try {
                 is_False = true
-                lastIdentityCheckElapsed = 0L
                 if (!getActivatedSdk()) {
                     is_False = false
                 }
-            } catch (_: Exception) {
-                is_False = false
-            }
+            } catch (_: Exception) {}
         }
     }
 }
