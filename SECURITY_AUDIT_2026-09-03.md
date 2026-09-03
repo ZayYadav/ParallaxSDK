@@ -2,13 +2,13 @@
 
 Audited base commit: `bd31143f030434158053e5105b1d9cd8f3ff7877` (`main`).
 
-This is a source/configuration security audit of the SDK, Loader, SDK panel, runtime-download path, repository governance, and active release workflow. It is not a claim that a client running on a fully compromised/rooted device can be made impossible to modify. The goal is fail-closed authorization, strong server trust, minimized replay/tamper windows, and a hardened software supply chain.
+This is a source/configuration security audit of the SDK, Loader, SDK panel, runtime-download path, repository governance, dependency resolution, and active release workflow. It is not a claim that a client running on a fully compromised/rooted device can be made impossible to modify. The goal is fail-closed authorization, strong server trust, minimized replay/tamper windows, and a hardened software supply chain.
 
 ## Executive summary
 
-The V3 SDK authorization design is materially stronger than the surrounding build/runtime supply chain. V3 uses authenticated ECDH/AES-GCM transport, server ECDSA signatures, request/nonce binding, device-key proof, short leases, and redundant Java/native package/signing checks. The largest risks found were mutable executable-artifact delivery, mutable CI trust references that receive signing secrets, build-time auto-trust of the currently observed TLS certificate, reverse-proxy header trust without an immediate-proxy allowlist, and an unprotected `main` branch with no repository rulesets.
+The V3 SDK authorization design is materially stronger than the surrounding build/runtime supply chain. V3 uses authenticated ECDH/AES-GCM transport, server ECDSA signatures, request/nonce binding, device-key proof, short leases, and redundant Java/native package/signing checks. The largest risks found were mutable executable-artifact delivery, mutable CI trust references that receive signing secrets, build-time auto-trust of the currently observed TLS certificate, reverse-proxy header trust without an immediate-proxy allowlist, unrestricted JitPack resolution, and an unprotected `main` branch with no repository rulesets.
 
-The hardening branch fixes the high-impact code/configuration issues that can be changed without altering the SDK panel license/key-generation flow. Compatibility-sensitive changes (permission reduction and SDK R8/lint enforcement) and repository settings that cannot be changed from this code PR are documented separately.
+The hardening branch fixes the high-impact code/configuration issues that can be changed without altering the SDK panel license/key-generation flow. Compatibility-sensitive changes (permission reduction and SDK R8/lint enforcement), cryptographic dependency verification metadata, and repository settings that cannot be safely generated or changed from this code PR are documented separately.
 
 ## Findings
 
@@ -20,6 +20,7 @@ The hardening branch fixes the high-impact code/configuration issues that can be
 | High | `TRUST_PROXY=true` trusted `X-Forwarded-For` / `X-Forwarded-Proto` without verifying the immediate proxy | **Fixed:** forwarded headers are authoritative only when `REMOTE_ADDR` is explicitly in `TRUSTED_PROXIES` |
 | High | Repository `main` is reported as `protected: false`, required status checks are off, and the repository exposes no rulesets | **Open / repository setting:** protect `main`, block force/deletion, require PR review and required security/build checks before merge |
 | High | SDK library manifest requests a very large set of sensitive/system permissions; those may merge into consuming apps | **Open / compatibility-sensitive:** split into minimal-core and virtualization/full permission profiles before removal |
+| Medium | Both Gradle projects allowed unrestricted JitPack repository resolution | **Fixed/partially residual:** JitPack is now removed from buildscript resolution and scoped to `com.github.*`; generate Gradle dependency verification metadata/locks from a clean resolved build as the next supply-chain step |
 | Medium | SDK release currently keeps `minifyEnabled false` and disables release lint enforcement | **Open / compatibility-sensitive:** restore hardening gradually after reflection/JNI regression suite is green |
 | Medium | V3 issues and stores a hashed `session_token`, but the Android activation path does not use that token for a heartbeat/session-validation endpoint | **Open:** revocation remains bounded by the signed lease renewal window rather than near-real-time session checks |
 | Medium | Runtime native archive authenticity now depends on an immutable Git commit + HTTPS rather than an application-verified signed SHA-256 manifest | **Open:** next phase should sign artifact metadata with an offline/server signing key and verify before extraction/load |
@@ -72,7 +73,11 @@ The hardening branch fixes the high-impact code/configuration issues that can be
 
 8. `.github/workflows/security-audit-tests.yml`
    - Added a pinned-action security gate that executes SDK panel crypto/proxy tests.
-   - Enforces the immutable runtime URL, offline TLS-pin trust, and immutable DPT workflow/ref invariants on relevant PRs and pushes.
+   - Enforces immutable runtime URL, offline TLS-pin trust, immutable DPT workflow/ref, and scoped JitPack invariants on relevant PRs and pushes.
+
+9. `BLACK-OPNE/build.gradle` and `One-Core-Engine/build.gradle`
+   - Removed unnecessary JitPack access from buildscript plugin resolution.
+   - Restricted project-level JitPack resolution to `com.github.*` coordinates instead of making JitPack a fallback repository for every dependency group.
 
 ## Deployment notes
 
@@ -105,16 +110,21 @@ A missing transport trust anchor is now a build failure, not an automatically tr
 
 The audited repository reports `main` as unprotected and no rulesets are configured. Configure repository protection so direct/force changes cannot bypass the security gates. At minimum require pull requests, block force-push/deletion, and require the security gate plus normal Android/PHP builds before merge.
 
+### Dependency verification
+
+JitPack is now scoped, but cryptographic Gradle dependency verification metadata should be generated from a trusted clean build after the complete dependency graph has resolved. Commit the resulting verification metadata and, where practical, dependency lock state; do not hand-author checksums without resolving the actual graph.
+
 ## Recommended next hardening phase
 
 1. Protect `main` and require successful security/build checks before merge.
 2. Add a signed runtime-artifact manifest and verify SHA-256/size/signature before ZIP extraction and before `System.load`.
-3. Add a V3 session validation/heartbeat endpoint that accepts the opaque session token, verifies its server-side hash, device/package/signing binding, revocation flag and expiry, and returns a short signed lease refresh.
-4. Split the SDK manifest into a minimal default profile and an explicit virtualization/full-permission profile so consuming apps do not inherit unnecessary dangerous permissions.
-5. Re-enable SDK release lint and R8 in stages with explicit reflection/JNI keep rules and regression tests rather than globally disabling checks.
-6. Remove tracked signing fallback credentials; generate local debug/CI signing config outside source control.
-7. Pin the remaining official GitHub Actions to immutable SHAs and let Dependabot update those pins by PR.
-8. Add device-key attestation/hardware-backed policy as an optional high-assurance mode where supported; keep a documented fallback for devices without hardware attestation.
+3. Generate Gradle dependency verification metadata and dependency locks from a trusted clean build.
+4. Add a V3 session validation/heartbeat endpoint that accepts the opaque session token, verifies its server-side hash, device/package/signing binding, revocation flag and expiry, and returns a short signed lease refresh.
+5. Split the SDK manifest into a minimal default profile and an explicit virtualization/full-permission profile so consuming apps do not inherit unnecessary dangerous permissions.
+6. Re-enable SDK release lint and R8 in stages with explicit reflection/JNI keep rules and regression tests rather than globally disabling checks.
+7. Remove tracked signing fallback credentials; generate local debug/CI signing config outside source control.
+8. Pin the remaining official GitHub Actions to immutable SHAs and let Dependabot update those pins by PR.
+9. Add device-key attestation/hardware-backed policy as an optional high-assurance mode where supported; keep a documented fallback for devices without hardware attestation.
 
 ## Validation checklist before merge
 
@@ -130,6 +140,7 @@ The audited repository reports `main` as unprotected and no rulesets are configu
 - Verify runtime archive download works from the pinned commit and fails if the URL is changed to HTTP/mutable/unavailable content.
 - Verify a proxy deployment with correct `TRUSTED_PROXIES`; also confirm spoofed forwarded headers are ignored on direct connections.
 - Enable `main` protection/rulesets and verify required checks prevent an unvalidated merge.
+- Generate dependency verification metadata from a clean trusted resolution and confirm subsequent builds reject unexpected artifact checksum changes.
 
 ## Risk statement
 
