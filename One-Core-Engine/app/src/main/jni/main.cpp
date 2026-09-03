@@ -25,7 +25,6 @@ constexpr int GUARD_TRACED = 1 << 1;
 constexpr int GUARD_INJECTED_MAP = 1 << 2;
 constexpr int GUARD_SUSPICIOUS_THREAD = 1 << 3;
 constexpr int GUARD_PROXY = 1 << 4;
-constexpr int GUARD_BAD_PINS = 1 << 5;
 constexpr int GUARD_BAD_PUBLIC_KEY = 1 << 6;
 constexpr int GUARD_WRITABLE_EXEC = 1 << 7;
 constexpr int GUARD_PRELOAD = 1 << 8;
@@ -116,36 +115,6 @@ bool suspicious_threads_present() {
     return found;
 }
 
-bool valid_pin_string(const std::string &pin) {
-    if (pin.size() != 51 || pin.rfind("sha256/", 0) != 0) return false;
-    for (size_t i = 7; i < pin.size(); ++i) {
-        const unsigned char ch = static_cast<unsigned char>(pin[i]);
-        const bool ok = std::isalnum(ch) || ch == '+' || ch == '/' || ch == '=';
-        if (!ok) return false;
-    }
-    return pin.back() == '=';
-}
-
-bool valid_pins(JNIEnv *env, jobjectArray pins) {
-    if (pins == nullptr) return false;
-    const jsize count = env->GetArrayLength(pins);
-    if (count <= 0 || count > 8) return false;
-    for (jsize i = 0; i < count; ++i) {
-        auto item = static_cast<jstring>(env->GetObjectArrayElement(pins, i));
-        if (item == nullptr) return false;
-        const char *raw = env->GetStringUTFChars(item, nullptr);
-        if (raw == nullptr) {
-            env->DeleteLocalRef(item);
-            return false;
-        }
-        const std::string pin(raw);
-        env->ReleaseStringUTFChars(item, raw);
-        env->DeleteLocalRef(item);
-        if (!valid_pin_string(pin)) return false;
-    }
-    return true;
-}
-
 bool valid_public_key(JNIEnv *env, jstring publicKey) {
     if (publicKey == nullptr) return false;
     const char *raw = env->GetStringUTFChars(publicKey, nullptr);
@@ -196,7 +165,6 @@ Java_com_onecore_loader_security_NativeLicenseGuard_nativeCheckEnvironment(
         JNIEnv *env,
         jclass,
         jstring packageName,
-        jobjectArray tlsPins,
         jstring publicKeyB64,
         jboolean proxyConfigured,
         jboolean debuggerConnected) {
@@ -213,9 +181,6 @@ Java_com_onecore_loader_security_NativeLicenseGuard_nativeCheckEnvironment(
     }
     if (proxyConfigured == JNI_TRUE) {
         result |= GUARD_PROXY;
-    }
-    if (!valid_pins(env, tlsPins)) {
-        result |= GUARD_BAD_PINS;
     }
     if (!valid_public_key(env, publicKeyB64)) {
         result |= GUARD_BAD_PUBLIC_KEY;
