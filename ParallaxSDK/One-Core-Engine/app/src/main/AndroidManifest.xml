@@ -24,6 +24,28 @@
     <permission 
         android:name="${applicationId}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
         android:protectionLevel="signature" />
+
+    <!--
+         Android 11+ package visibility is enforced against the Loader process itself.
+         Keep these provider queries in the application manifest rather than relying
+         only on the embedded SDK/AAR manifest: Twitter Kit's legacy SSO probe and
+         the host-side compatibility bridge both query the real installed X app.
+    -->
+    <queries>
+        <package android:name="com.twitter.android" />
+        <package android:name="com.twitter.android.lite" />
+        <package android:name="com.x.android" />
+
+        <intent>
+            <action android:name="android.accounts.AccountAuthenticator" />
+        </intent>
+
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
     
     <application
         android:name=".BoxApplication"
