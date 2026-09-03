@@ -74,16 +74,13 @@ jobs:
           printf 'sdk.dir=%s\n' "$ANDROID_HOME" > "${LOADER_PROJECT_DIR}/local.properties"
           chmod +x "${SDK_PROJECT_DIR}/gradlew" "${LOADER_PROJECT_DIR}/gradlew"
 
-      - name: Configure protected transport
+      - name: Validate production transport trust
         shell: bash
         run: |
           set -euo pipefail
           if [ -z "${PARALLAX_API_PUBLIC_KEY_B64:-}" ] || [ -z "${PARALLAX_TLS_PINS:-}" ]; then
-            openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/parallax-ci-private.pem 2>/dev/null
-            PUBLIC_KEY=$(openssl pkey -in /tmp/parallax-ci-private.pem -pubout -outform DER 2>/dev/null | base64 -w0)
-            rm -f /tmp/parallax-ci-private.pem
-            echo "PARALLAX_API_PUBLIC_KEY_B64=${PUBLIC_KEY}" >> "$GITHUB_ENV"
-            echo 'PARALLAX_TLS_PINS=sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' >> "$GITHUB_ENV"
+            echo 'Production PARALLAX_API_PUBLIC_KEY_B64 and PARALLAX_TLS_PINS are required.' >&2
+            exit 1
           fi
 
       - name: Build SDK release AAR
