@@ -13,6 +13,12 @@
         <package android:name="com.whatsapp" />
         <package android:name="com.whatsapp.w4b" />
 
+        <!-- Modern X/Twitter still exposes its Android account authenticator on
+             builds where the old SingleSignOnActivity is no longer present. -->
+        <intent>
+            <action android:name="android.accounts.AccountAuthenticator" />
+        </intent>
+
         <intent>
             <action android:name="android.support.customtabs.action.CustomTabsService" />
         </intent>
