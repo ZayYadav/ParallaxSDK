@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.content.pm.ServiceInfo;
 import android.util.Log;
 
 import java.lang.reflect.Method;
@@ -49,6 +50,8 @@ public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
     private static final String TWITTER_PACKAGE = "com.twitter.android";
     private static final String TWITTER_SSO_ACTIVITY =
             "com.twitter.android.SingleSignOnActivity";
+    private static final String TWITTER_AUTHENTICATOR_SERVICE =
+            "com.twitter.android.platform.TwitterAuthenticationService";
 
     /**
      * Known real authorization Activities shipped by official Twitter/X builds.
@@ -93,7 +96,7 @@ public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
 
             // Prefer the exact legacy provider component when it genuinely exists.
             if (containsUsableTwitterSso(result)) {
-                Log.i(TAG, "native SSO discovery: verified real legacy activity available"
+                Log.w(TAG, "native SSO discovery: verified real legacy activity available"
                         + processSuffix());
                 return result;
             }
@@ -107,8 +110,12 @@ public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
                 return successor;
             }
 
-            Log.i(TAG,
-                    "native SSO discovery: no accessible official successor; using OAuth fallback"
+            PackageManager pm = BlackBoxCore.getContext() == null
+                    ? null : BlackBoxCore.getContext().getPackageManager();
+            Log.w(TAG,
+                    "native SSO discovery: no compatible exported activity; "
+                            + "modernAccountAuthenticator=" + hasModernTwitterAuthenticator(pm)
+                            + "; using standards-based OAuth fallback"
                             + processSuffix());
             return emptyResult(method);
         }
@@ -126,11 +133,15 @@ public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
             ActivityInfo activityInfo;
             try {
                 activityInfo = pm.getActivityInfo(component, 0);
-            } catch (Throwable ignored) {
+            } catch (Throwable error) {
+                Log.w(TAG, "native SSO successor absent: " + simpleName(className)
+                        + " (" + rootType(error) + ")" + processSuffix());
                 continue;
             }
 
             if (!isUsableOfficialSuccessor(pm, activityInfo, className)) {
+                Log.w(TAG, "native SSO successor unusable: " + simpleName(className)
+                        + processSuffix());
                 continue;
             }
 
@@ -144,7 +155,7 @@ public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
             try {
                 systemResult = queryMethod.invoke(who, queryArgs);
                 if (containsUsableActivity(systemResult, className)) {
-                    Log.i(TAG, "native SSO discovery: mapped legacy entry to official "
+                    Log.w(TAG, "native SSO discovery: mapped legacy entry to official "
                             + simpleName(className) + processSuffix());
                     return systemResult;
                 }
@@ -161,7 +172,7 @@ public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
             resolveInfo.resolvePackageName = activityInfo.packageName;
             resolveInfo.isDefault = true;
             List<ResolveInfo> resolves = Collections.singletonList(resolveInfo);
-            Log.i(TAG, "native SSO discovery: mapped legacy entry to official "
+            Log.w(TAG, "native SSO discovery: mapped legacy entry to official "
                     + simpleName(className) + " via ActivityInfo" + processSuffix());
             if (ParceledListSliceCompat.isReturnParceledListSlice(queryMethod)) {
                 return ParceledListSliceCompat.create(resolves);
@@ -169,6 +180,23 @@ public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
             return resolves;
         }
         return null;
+    }
+
+    private static boolean hasModernTwitterAuthenticator(PackageManager pm) {
+        if (pm == null) {
+            return false;
+        }
+        try {
+            ServiceInfo info = pm.getServiceInfo(
+                    new ComponentName(TWITTER_PACKAGE, TWITTER_AUTHENTICATOR_SERVICE), 0);
+            return info != null
+                    && TWITTER_PACKAGE.equals(info.packageName)
+                    && TWITTER_AUTHENTICATOR_SERVICE.equals(info.name)
+                    && info.enabled
+                    && (info.applicationInfo == null || info.applicationInfo.enabled);
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private static boolean isUsableOfficialSuccessor(
