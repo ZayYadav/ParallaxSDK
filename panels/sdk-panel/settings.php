@@ -1,18 +1,16 @@
 <?php
-include 'conn.php';
+session_start();
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit();
 }
+include 'conn.php';
 include 'panel_helper.php';
-require_once __DIR__ . '/MfaHelper.php';
 
 $user_id = $_SESSION['user_id'];
 $P = get_panel_settings($conn);
 $message = '';
 $error = '';
-$recoveryCodes = [];
-$mfaSetupSecret = (string) ($_SESSION['pending_mfa_setup_secret'] ?? '');
 
 // Get current user details
 $stmt = $conn->prepare("SELECT * FROM users WHERE id = ?");
@@ -57,8 +55,8 @@ if (isset($_POST['change_password'])) {
     // Verify current password
     if (!password_verify($current_password, $user['password'])) {
         $error = "Current password is incorrect!";
-    } elseif (strlen($new_password) < 12) {
-        $error = "New password must be at least 12 characters!";
+    } elseif (strlen($new_password) < 6) {
+        $error = "New password must be at least 6 characters!";
     } elseif ($new_password !== $confirm_password) {
         $error = "New passwords do not match!";
     } else {
@@ -70,116 +68,6 @@ if (isset($_POST['change_password'])) {
         } else {
             $error = "Failed to update password!";
         }
-    }
-}
-
-try {
-    $mfaHelper = new MfaHelper((string) panel_config('PANEL_DATA_KEY', ''));
-} catch (Throwable $throwable) {
-    $mfaHelper = null;
-    error_log('Panel MFA settings unavailable: ' . $throwable->getMessage());
-}
-
-if (isset($_POST['start_mfa'])) {
-    $password = (string) ($_POST['mfa_password'] ?? '');
-    if (!$mfaHelper) {
-        $error = 'Two-factor authentication is not configured on this server.';
-    } elseif (!password_verify($password, (string) $user['password'])) {
-        $error = 'Current password is incorrect.';
-    } elseif ((int) ($user['mfa_enabled'] ?? 0) === 1) {
-        $error = 'Two-factor authentication is already enabled.';
-    } else {
-        $mfaSetupSecret = $mfaHelper->generateSecret();
-        $_SESSION['pending_mfa_setup_secret'] = $mfaSetupSecret;
-        $_SESSION['pending_mfa_setup_expires'] = time() + 600;
-        $message = 'Add the secret to your authenticator, then confirm the current code.';
-    }
-}
-
-if (isset($_POST['confirm_mfa'])) {
-    $secret = (string) ($_SESSION['pending_mfa_setup_secret'] ?? '');
-    $expires = (int) ($_SESSION['pending_mfa_setup_expires'] ?? 0);
-    $code = (string) ($_POST['mfa_code'] ?? '');
-    if (!$mfaHelper || $secret === '' || $expires < time()) {
-        unset($_SESSION['pending_mfa_setup_secret'], $_SESSION['pending_mfa_setup_expires']);
-        $mfaSetupSecret = '';
-        $error = 'The MFA setup expired. Start again.';
-    } elseif (!$mfaHelper->verifyTotp($secret, $code)) {
-        $error = 'The authenticator code is invalid.';
-    } else {
-        $encryptedSecret = $mfaHelper->encryptSecret($secret);
-        $recoveryCodes = $mfaHelper->generateRecoveryCodes();
-        $conn->begin_transaction();
-        try {
-            $enable = $conn->prepare(
-                'UPDATE users SET mfa_enabled = 1, mfa_secret_enc = ?, mfa_confirmed_at = UTC_TIMESTAMP()
-                 WHERE id = ?'
-            );
-            $enable->bind_param('si', $encryptedSecret, $user_id);
-            $enable->execute();
-            $enable->close();
-            $deleteCodes = $conn->prepare('DELETE FROM user_recovery_codes WHERE user_id = ?');
-            $deleteCodes->bind_param('i', $user_id);
-            $deleteCodes->execute();
-            $deleteCodes->close();
-            $insertCode = $conn->prepare(
-                'INSERT INTO user_recovery_codes (user_id, code_hash) VALUES (?, ?)'
-            );
-            foreach ($recoveryCodes as $recoveryCode) {
-                $normalized = MfaHelper::normalizeRecoveryCode($recoveryCode);
-                $hash = password_hash($normalized, PASSWORD_DEFAULT);
-                $insertCode->bind_param('is', $user_id, $hash);
-                $insertCode->execute();
-            }
-            $insertCode->close();
-            $conn->commit();
-            unset($_SESSION['pending_mfa_setup_secret'], $_SESSION['pending_mfa_setup_expires']);
-            $_SESSION['mfa_verified_at'] = time();
-            $mfaSetupSecret = '';
-            $user['mfa_enabled'] = 1;
-            $message = 'Two-factor authentication is enabled. Save the recovery codes now.';
-            panel_audit($conn, 'panel_mfa', 'enabled', '', ['user_id' => (int) $user_id]);
-        } catch (Throwable $throwable) {
-            $conn->rollback();
-            error_log('Could not enable panel MFA: ' . $throwable->getMessage());
-            $recoveryCodes = [];
-            $error = 'Could not enable two-factor authentication.';
-        }
-    }
-}
-
-if (isset($_POST['disable_mfa'])) {
-    $password = (string) ($_POST['mfa_password'] ?? '');
-    $code = (string) ($_POST['mfa_code'] ?? '');
-    $verified = false;
-    if ($mfaHelper && password_verify($password, (string) $user['password'])
-        && (int) ($user['mfa_enabled'] ?? 0) === 1) {
-        try {
-            $secret = $mfaHelper->decryptSecret((string) $user['mfa_secret_enc']);
-            $verified = $mfaHelper->verifyTotp($secret, $code);
-        } catch (Throwable $throwable) {
-            error_log('Could not verify MFA disable request: ' . $throwable->getMessage());
-        }
-    }
-    if (!$verified) {
-        $error = 'Password or authenticator code is invalid.';
-    } else {
-        $conn->begin_transaction();
-        $disable = $conn->prepare(
-            'UPDATE users SET mfa_enabled = 0, mfa_secret_enc = NULL, mfa_confirmed_at = NULL WHERE id = ?'
-        );
-        $disable->bind_param('i', $user_id);
-        $disable->execute();
-        $disable->close();
-        $deleteCodes = $conn->prepare('DELETE FROM user_recovery_codes WHERE user_id = ?');
-        $deleteCodes->bind_param('i', $user_id);
-        $deleteCodes->execute();
-        $deleteCodes->close();
-        $conn->commit();
-        $user['mfa_enabled'] = 0;
-        $_SESSION['mfa_verified_at'] = null;
-        $message = 'Two-factor authentication was disabled.';
-        panel_audit($conn, 'panel_mfa', 'disabled', '', ['user_id' => (int) $user_id]);
     }
 }
 
@@ -599,50 +487,6 @@ header {
         </div>
     </div>
 
-    <div class="settings-section glass" style="border-color:rgba(79,142,247,.3)">
-        <div class="settings-section-title"><i class="fas fa-shield-halved"></i> Two-Factor Authentication</div>
-        <?php if ($recoveryCodes !== []): ?>
-            <div class="alert alert-warning">
-                <strong>Save these one-time recovery codes now.</strong>
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-top:14px">
-                    <?php foreach ($recoveryCodes as $recoveryCode): ?>
-                        <code style="padding:9px;border-radius:9px;background:rgba(0,0,0,.35);color:#fde68a"><?= htmlspecialchars($recoveryCode) ?></code>
-                    <?php endforeach; ?>
-                </div>
-            </div>
-        <?php endif; ?>
-
-        <?php if ((int) ($user['mfa_enabled'] ?? 0) === 1): ?>
-            <p style="color:#86efac;margin-bottom:18px"><i class="fas fa-circle-check"></i> MFA is enabled for this account.</p>
-            <form method="POST">
-                <label class="form-label">CURRENT PASSWORD</label>
-                <input type="password" name="mfa_password" class="glass-input" autocomplete="current-password" required>
-                <label class="form-label">AUTHENTICATOR CODE</label>
-                <input type="text" name="mfa_code" class="glass-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required>
-                <button type="submit" name="disable_mfa" class="btn-back"><i class="fas fa-shield-xmark"></i> Disable MFA</button>
-            </form>
-        <?php elseif ($mfaSetupSecret !== ''): ?>
-            <?php $provisioningUri = MfaHelper::provisioningUri($mfaSetupSecret, (string) $user['username'], (string) ($P['panel_name'] ?? 'Parallax SDK')); ?>
-            <p class="mb-2">Enter this secret in Google Authenticator, Microsoft Authenticator, 1Password, or another TOTP app:</p>
-            <code style="display:block;padding:14px;border-radius:12px;background:rgba(0,0,0,.35);color:#fde68a;word-break:break-all;margin-bottom:14px"><?= htmlspecialchars($mfaSetupSecret) ?></code>
-            <details style="margin-bottom:18px"><summary style="cursor:pointer;color:#93c5fd">Show provisioning URI</summary><code style="display:block;word-break:break-all;margin-top:10px"><?= htmlspecialchars($provisioningUri) ?></code></details>
-            <form method="POST">
-                <label class="form-label">CURRENT 6-DIGIT CODE</label>
-                <input type="text" name="mfa_code" class="glass-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required autofocus>
-                <button type="submit" name="confirm_mfa" class="btn-save"><i class="fas fa-shield-check"></i> Confirm &amp; Enable</button>
-            </form>
-        <?php else: ?>
-            <p style="color:rgba(255,255,255,.65);margin-bottom:18px">Protect panel changes with a password plus a rotating authenticator code.</p>
-            <form method="POST">
-                <label class="form-label">CURRENT PASSWORD</label>
-                <input type="password" name="mfa_password" class="glass-input" autocomplete="current-password" required>
-                <button type="submit" name="start_mfa" class="btn-save"><i class="fas fa-shield-halved"></i> Set Up MFA</button>
-            </form>
-        <?php endif; ?>
-    </div>
-
-    <div class="divider"></div>
-
     <div class="settings-section glass">
         <div class="settings-section-title"><i class="fas fa-user-edit"></i> Change Username</div>
         <form method="POST">
@@ -663,10 +507,10 @@ header {
             <input type="password" name="current_password" class="glass-input" placeholder="Enter current password" required>
 
             <label class="form-label">NEW PASSWORD</label>
-            <input type="password" name="new_password" class="glass-input" placeholder="Enter new password (min 12 chars)" required minlength="12">
+            <input type="password" name="new_password" class="glass-input" placeholder="Enter new password (min 6 chars)" required minlength="6">
 
             <label class="form-label">CONFIRM NEW PASSWORD</label>
-            <input type="password" name="confirm_password" class="glass-input" placeholder="Confirm new password" required minlength="12">
+            <input type="password" name="confirm_password" class="glass-input" placeholder="Confirm new password" required minlength="6">
 
             <button type="submit" name="change_password" class="btn-save">
                 <i class="fas fa-key me-2"></i> Update Password

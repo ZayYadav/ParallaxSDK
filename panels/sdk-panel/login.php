@@ -1,7 +1,9 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 include 'conn.php';
 include 'panel_helper.php';
-require_once __DIR__ . '/MfaHelper.php';
 $schemaProblems = sdk_panel_schema_problems($conn);
 if ($schemaProblems !== []) {
     error_log(
@@ -12,105 +14,6 @@ if ($schemaProblems !== []) {
     exit('SERVER_DATABASE_SCHEMA_ERROR');
 }
 $P = get_panel_settings($conn);
-
-function complete_panel_login(mysqli $conn, array $user, bool $mfaVerified): never
-{
-    $userId = (int) $user['id'];
-    $update = $conn->prepare('UPDATE users SET is_online = 1 WHERE id = ?');
-    if (!$update) {
-        throw new RuntimeException('Could not update panel login state.');
-    }
-    $update->bind_param('i', $userId);
-    $update->execute();
-    $update->close();
-
-    session_regenerate_id(true);
-    unset($_SESSION['pending_mfa_user_id'], $_SESSION['pending_mfa_expires']);
-    $_SESSION['user_id'] = $userId;
-    $_SESSION['username'] = (string) $user['username'];
-    $_SESSION['logged_in'] = true;
-    $_SESSION['auth_v3'] = true;
-    $_SESSION['mfa_verified_at'] = $mfaVerified ? time() : null;
-    $_SESSION['last_activity'] = time();
-    $_SESSION['session_started_at'] = time();
-    $_SESSION['last_regenerated_at'] = time();
-    $_SESSION['agent_hash'] = hash('sha256', (string) ($_SERVER['HTTP_USER_AGENT'] ?? 'unknown'));
-    panel_audit($conn, 'panel_login', 'success', '', [
-        'user_id' => $userId,
-        'mfa' => $mfaVerified,
-    ]);
-    header('Location: dashboard.php');
-    exit;
-}
-
-if (isset($_POST['cancel_mfa'])) {
-    unset($_SESSION['pending_mfa_user_id'], $_SESSION['pending_mfa_expires']);
-    session_regenerate_id(true);
-}
-
-if (isset($_POST['verify_mfa'])) {
-    $pendingUserId = (int) ($_SESSION['pending_mfa_user_id'] ?? 0);
-    $pendingExpiry = (int) ($_SESSION['pending_mfa_expires'] ?? 0);
-    $code = trim((string) ($_POST['mfa_code'] ?? ''));
-    if ($pendingUserId < 1 || $pendingExpiry < time()) {
-        unset($_SESSION['pending_mfa_user_id'], $_SESSION['pending_mfa_expires']);
-        $error = 'Your sign-in challenge expired. Enter your password again.';
-    } elseif (!panel_rate_limit($conn, 'mfa|' . panel_client_ip() . '|' . $pendingUserId, 8)) {
-        $error = 'Too many verification attempts. Wait one minute and try again.';
-    } else {
-        $stmt = $conn->prepare(
-            'SELECT id, username, status, mfa_enabled, mfa_secret_enc FROM users WHERE id = ? LIMIT 1'
-        );
-        $stmt->bind_param('i', $pendingUserId);
-        $stmt->execute();
-        $user = $stmt->get_result()->fetch_assoc();
-        $stmt->close();
-        $verified = false;
-        if ($user && (int) ($user['status'] ?? 0) === 1 && (int) ($user['mfa_enabled'] ?? 0) === 1) {
-            try {
-                $mfa = new MfaHelper((string) panel_config('PANEL_DATA_KEY', ''));
-                $secret = $mfa->decryptSecret((string) $user['mfa_secret_enc']);
-                $verified = $mfa->verifyTotp($secret, $code);
-            } catch (Throwable $throwable) {
-                error_log('Panel MFA verification configuration error: ' . $throwable->getMessage());
-            }
-
-            if (!$verified) {
-                $normalized = MfaHelper::normalizeRecoveryCode($code);
-                if (strlen($normalized) === 12) {
-                    $recovery = $conn->prepare(
-                        'SELECT id, code_hash FROM user_recovery_codes
-                         WHERE user_id = ? AND used_at IS NULL ORDER BY id ASC'
-                    );
-                    $recovery->bind_param('i', $pendingUserId);
-                    $recovery->execute();
-                    $rows = $recovery->get_result();
-                    while ($row = $rows->fetch_assoc()) {
-                        if (password_verify($normalized, (string) $row['code_hash'])) {
-                            $codeId = (int) $row['id'];
-                            $consume = $conn->prepare(
-                                'UPDATE user_recovery_codes SET used_at = UTC_TIMESTAMP()
-                                 WHERE id = ? AND user_id = ? AND used_at IS NULL'
-                            );
-                            $consume->bind_param('ii', $codeId, $pendingUserId);
-                            $consume->execute();
-                            $verified = $consume->affected_rows === 1;
-                            $consume->close();
-                            break;
-                        }
-                    }
-                    $recovery->close();
-                }
-            }
-        }
-
-        if ($verified) {
-            complete_panel_login($conn, $user, true);
-        }
-        panel_audit($conn, 'panel_mfa', 'failed', '', ['user_id' => $pendingUserId]);
-        $error = 'Invalid authenticator or recovery code.';
-    }
-}
 
 if (isset($_POST['login'])) {
     $username = trim((string) ($_POST['username'] ?? ''));
@@ -137,28 +40,25 @@ if (isset($_POST['login'])) {
         if (!isset($error)) {
             if ($user && (!isset($user['status']) || (int) $user['status'] === 1)
                 && password_verify($password, (string) $user['password'])) {
-                if (password_needs_rehash((string) $user['password'], PASSWORD_DEFAULT)) {
-                    $newHash = password_hash($password, PASSWORD_DEFAULT);
-                    $rehashUserId = (int) $user['id'];
-                    $rehash = $conn->prepare('UPDATE users SET password = ? WHERE id = ?');
-                    $rehash->bind_param('si', $newHash, $rehashUserId);
-                    $rehash->execute();
-                    $rehash->close();
-                }
-                if ((int) ($user['mfa_enabled'] ?? 0) === 1) {
-                    session_regenerate_id(true);
-                    $_SESSION = [
-                        'pending_mfa_user_id' => (int) $user['id'],
-                        'pending_mfa_expires' => time() + 300,
-                        'csrf_token' => bin2hex(random_bytes(32)),
-                        'last_activity' => time(),
-                        'session_started_at' => time(),
-                        'last_regenerated_at' => time(),
-                        'agent_hash' => hash('sha256', (string) ($_SERVER['HTTP_USER_AGENT'] ?? 'unknown')),
-                    ];
-                    panel_audit($conn, 'panel_login', 'mfa_challenge', '', ['user_id' => (int) $user['id']]);
+                $userId = (int) $user['id'];
+                $update = $conn->prepare('UPDATE users SET is_online = 1 WHERE id = ?');
+                if (!$update) {
+                    error_log('SDK Panel online-state statement failed: ' . $conn->error);
+                    http_response_code(503);
+                    $error = 'Panel database is not initialized correctly. Contact the administrator.';
                 } else {
-                    complete_panel_login($conn, $user, false);
+                    $update->bind_param('i', $userId);
+                    $update->execute();
+                    $update->close();
+                    session_regenerate_id(true);
+                    $_SESSION['user_id'] = $userId;
+                    $_SESSION['username'] = $user['username'];
+                    $_SESSION['logged_in'] = true;
+                    $_SESSION['last_activity'] = time();
+                    $_SESSION['agent_hash'] = hash('sha256', (string) ($_SERVER['HTTP_USER_AGENT'] ?? 'unknown'));
+                    panel_audit($conn, 'panel_login', 'success', '', ['user_id' => $userId]);
+                    header("Location: dashboard.php");
+                    exit();
                 }
             } else {
                 panel_audit($conn, 'panel_login', 'failed', '', ['username_hash' => hash('sha256', strtolower($username))]);
@@ -167,8 +67,6 @@ if (isset($_POST['login'])) {
         }
     }
 }
-$mfaChallengeActive = !empty($_SESSION['pending_mfa_user_id'])
-    && (int) ($_SESSION['pending_mfa_expires'] ?? 0) >= time();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -793,7 +691,7 @@ $mfaChallengeActive = !empty($_SESSION['pending_mfa_user_id'])
             <div class="brand-sub"><?= htmlspecialchars($P['panel_tagline']) ?></div>
         </div>
 
-        <div class="divider"><?= $mfaChallengeActive ? 'Two-factor verification' : htmlspecialchars($P['login_subtitle']) ?></div>
+        <div class="divider"><?= htmlspecialchars($P['login_subtitle']) ?></div>
 
         <!-- Error -->
         <?php if (isset($error)): ?>
@@ -804,26 +702,6 @@ $mfaChallengeActive = !empty($_SESSION['pending_mfa_user_id'])
         <?php endif; ?>
 
         <!-- Form -->
-        <?php if ($mfaChallengeActive): ?>
-        <form method="POST" action="" autocomplete="one-time-code">
-            <div class="field">
-                <i class="fa-solid fa-shield-halved field-icon"></i>
-                <input type="text" name="mfa_code" class="input" inputmode="numeric"
-                       autocomplete="one-time-code" maxlength="16"
-                       placeholder="6-digit code or recovery code" required autofocus>
-            </div>
-            <p class="remember-label" style="margin:0 0 20px;line-height:1.6;text-align:center">
-                Open your authenticator app. You can also use one unused recovery code.
-            </p>
-            <button type="submit" name="verify_mfa" class="btn-login">
-                <i class="fa-solid fa-shield-check btn-icon"></i>
-                Verify &amp; Sign In
-            </button>
-            <button type="submit" name="cancel_mfa" class="btn-back" style="width:100%;margin-top:12px;justify-content:center">
-                Use another account
-            </button>
-        </form>
-        <?php else: ?>
         <form method="POST" action="" autocomplete="on">
 
             <div class="field">
@@ -862,7 +740,6 @@ $mfaChallengeActive = !empty($_SESSION['pending_mfa_user_id'])
             </div>
 
         </form>
-        <?php endif; ?>
     </div>
 </div>
 
@@ -872,14 +749,14 @@ $mfaChallengeActive = !empty($_SESSION['pending_mfa_user_id'])
     const pwField = document.getElementById('pwField');
     const eyeIcon = document.getElementById('eyeIcon');
 
-    document.getElementById('eyeBtn')?.addEventListener('click', () => {
+    document.getElementById('eyeBtn').addEventListener('click', () => {
         const show = pwField.type === 'password';
         pwField.type = show ? 'text' : 'password';
         eyeIcon.className = show ? 'fa-regular fa-eye-slash' : 'fa-regular fa-eye';
     });
 
     // Remember toggle label sync
-    document.getElementById('rememberChk')?.addEventListener('change', function() {
+    document.getElementById('rememberChk').addEventListener('change', function() {
         document.querySelector('.remember-label').textContent =
             this.checked ? 'Keep me signed in (15 min)' : 'Session only (5 min)';
     });

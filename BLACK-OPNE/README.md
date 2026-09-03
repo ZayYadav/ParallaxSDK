@@ -58,29 +58,6 @@ Install JDK 17, Android SDK Platform 36, Build Tools 36.0.0, and NDK
 The release AAR is written to
 `RIYAZ-VIP/build/outputs/aar/ParallaxCore-release.aar`.
 
-For encrypted storage or client delivery, generate a fresh 32-byte key per
-client, Base64-encode it, keep it outside Git, and run:
-
-```bash
-export PARALLAX_AAR_ENCRYPTION_KEY="<base64-32-byte-client-key>"
-./gradlew :ParallaxCore:encryptReleaseAar
-```
-
-The authenticated AES-256-GCM envelope is written to
-`RIYAZ-VIP/build/outputs/encrypted-aar/ParallaxCore-v3-release.aar.pxa`.
-Before Gradle can consume it, the authorized client must decrypt it locally:
-
-```bash
-export PARALLAX_AAR_ENCRYPTION_KEY="<same-client-key>"
-./gradlew :ParallaxCore:decryptReleaseAar \
-  -PparallaxEncryptedAar=/secure/path/ParallaxCore-v3-release.aar.pxa
-```
-
-Never reuse the panel encryption/signing private keys as an AAR delivery key.
-The decrypted AAR must be treated as a temporary build input: a usable AAR
-cannot remain encrypted because Android Gradle Plugin must read its manifest,
-classes, resources, and native libraries.
-
 ## Release hardening
 
 Release AAR builds use LSParanoid 0.6.0 to transform string constants only in
@@ -90,26 +67,6 @@ are deliberately left structurally unchanged to avoid the historical startup
 and verification failures caused by broad transforms. The consuming Loader then
 applies R8/resource shrinking and its first-party BlackObfuscator pass to the
 final release APK.
-
-The panel endpoint is not emitted as a plain `BuildConfig` or Kotlin string. It
-is reconstructed from masked native bytes, checked in native code, and then
-checked again against an independent Java SHA-256 trust value before use. This
-prevents casual static string extraction, while HTTPS plus signed responses—not
-endpoint secrecy—remains the actual panel-swap security boundary.
-
-### Rotate the panel endpoint
-
-Open `tools/panel-endpoint-generator.html` locally, enter the complete HTTPS API
-endpoint, and select **Generate secure config**. The offline tool creates both
-required replacements: the masked byte/mask/FNV block for `BoxCore.cpp` and the
-independent SHA-256 byte array for `SecureSdkApiClient.kt`. Replace both blocks,
-then rebuild and test the SDK. Updating only the native URL intentionally causes
-Java trust verification to fail closed.
-
-The downloaded rotation record contains the endpoint in plain text for the
-operator's private audit trail. Do not commit that record or package it in an
-AAR/APK. The generator performs no network requests and includes no server
-private key, signing key, license key, or reusable AAR encryption key.
 
 This protects high-value constants at rest and raises reverse-engineering cost;
 it does not make client-side code or Android resources impossible to inspect.

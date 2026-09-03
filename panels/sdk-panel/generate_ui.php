@@ -1,4 +1,5 @@
 <?php
+session_start();
 include("conn.php");
 include 'desktop_only.php';
 include("panel_helper.php");
@@ -24,18 +25,10 @@ $role_dash = $urow_dash['role'] ?? 'user';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $package_lock = isset($_POST['package_lock']) ? 1 : 0;
-    $package_mode = $package_lock ? 'SPECIFIC' : 'ANY';
     $package      = $package_lock ? trim($_POST['package_name'] ?? '') : '';
-    $client_name  = trim((string) ($_POST['client_name'] ?? ''));
     $key_type     = $_POST['key_type'] ?? 'auto';
     $custom_key   = trim($_POST['custom_key'] ?? '');
     $max_devices  = max(1, min(100, (int) ($_POST['max_devices'] ?? 1)));
-    $signing_mode = strtolower(trim((string) ($_POST['signing_mode'] ?? 'auto')));
-    $signing_cert = strtoupper((string) preg_replace(
-        '/[^A-Fa-f0-9]/',
-        '',
-        (string) ($_POST['signing_cert_sha256'] ?? '')
-    ));
 
     // Validate: if package lock ON, package name is required
     if ($package_lock && preg_match('/^[A-Za-z][A-Za-z0-9_.]{2,190}$/D', $package) !== 1) {
@@ -43,61 +36,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: generate_ui.php');
         exit();
     }
-    if (!in_array($signing_mode, ['pinned', 'auto', 'any'], true)) {
-        $_SESSION['gen_error'] = 'Choose a valid APK signing policy.';
-        header('Location: generate_ui.php');
-        exit();
-    }
-    if ($signing_mode === 'pinned' && preg_match('/^[A-F0-9]{64}$/D', $signing_cert) !== 1) {
-        $_SESSION['gen_error'] = 'Exact signing mode requires a 64-character SHA-256 certificate fingerprint.';
-        header('Location: generate_ui.php');
-        exit();
-    }
-    $signing_lock = $signing_mode === 'any' ? 0 : 1;
-    $signing_cert_value = $signing_mode === 'pinned' ? $signing_cert : null;
-    $signing_mode_db = $signing_mode === 'pinned' ? 'SPECIFIC' : strtoupper($signing_mode);
-    $license_status = isset($_POST['license_status']) && (string) $_POST['license_status'] === '0' ? 0 : 1;
-    $device_mode = strtoupper(trim((string) ($_POST['device_mode'] ?? 'SINGLE')));
-    $java_native_auth = isset($_POST['java_native_auth']) ? 1 : 0;
-    $minimum_sdk_version = max(1, min(1000000, (int) ($_POST['minimum_sdk_version'] ?? 3)));
-    $latest_sdk_version = max($minimum_sdk_version, min(1000000, (int) ($_POST['latest_sdk_version'] ?? 3)));
-    $force_update = isset($_POST['force_update']) ? 1 : 0;
-    $session_lifetime = max(600, min(1800, (int) ($_POST['session_lifetime_seconds'] ?? 600)));
-    $kill_switch = isset($_POST['kill_switch']) ? 1 : 0;
-    $featuresInput = trim((string) ($_POST['feature_policy'] ?? ''));
-    $featurePolicy = $featuresInput === '' ? [] : json_decode($featuresInput, true);
-    $blockedVersions = array_values(array_unique(array_filter(array_map(
-        'intval',
-        preg_split('/[\s,]+/', trim((string) ($_POST['blocked_versions'] ?? ''))) ?: []
-    ), static fn(int $version): bool => $version > 0 && $version <= 1000000)));
-
-    if ($client_name === '' || mb_strlen($client_name) > 120) {
-        $_SESSION['gen_error'] = 'Client / App Name is required (maximum 120 characters).';
-        header('Location: generate_ui.php');
-        exit();
-    }
-    if (!in_array($device_mode, ['DISABLED', 'SINGLE', 'LIMITED', 'UNLIMITED'], true)) {
-        $_SESSION['gen_error'] = 'Choose a valid device binding policy.';
-        header('Location: generate_ui.php');
-        exit();
-    }
-    if (!is_array($featurePolicy)) {
-        $_SESSION['gen_error'] = 'Feature Policy must be a valid JSON object.';
-        header('Location: generate_ui.php');
-        exit();
-    }
-    foreach ($featurePolicy as $feature => $value) {
-        if (!is_string($feature) || preg_match('/^[A-Za-z0-9_.-]{1,64}$/D', $feature) !== 1
-            || !(is_bool($value) || is_int($value) || is_string($value))) {
-            $_SESSION['gen_error'] = 'Feature Policy supports simple named boolean, number or string values only.';
-            header('Location: generate_ui.php');
-            exit();
-        }
-    }
-    $featurePolicyJson = $featurePolicy === []
-        ? '{}'
-        : json_encode($featurePolicy, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
-    $blockedVersionsJson = json_encode($blockedVersions, JSON_THROW_ON_ERROR);
 
     // Handle expiry based on key type
     if ($key_type === 'custom' && !empty($_POST['custom_date'])) {
@@ -132,38 +70,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt = mysqli_prepare(
             $conn,
             "INSERT INTO licenses
-                (license_key, client_name, expiry_date, status, package_name, package_lock,
-                 package_mode, signing_lock, signing_mode, signing_cert_sha256,
-                 device_mode, max_devices, java_native_auth, feature_policy,
-                 minimum_sdk_version, latest_sdk_version, force_update, blocked_versions,
-                 session_lifetime_seconds, kill_switch, generated_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                (license_key, expiry_date, status, package_name, package_lock, max_devices, generated_by)
+             VALUES (?, ?, 1, ?, ?, ?, ?)"
         );
-        mysqli_stmt_bind_param(
-            $stmt,
-            str_repeat('s', 21),
-            $license,
-            $client_name,
-            $expiry,
-            $license_status,
-            $pkg_value,
-            $package_lock,
-            $package_mode,
-            $signing_lock,
-            $signing_mode_db,
-            $signing_cert_value,
-            $device_mode,
-            $max_devices,
-            $java_native_auth,
-            $featurePolicyJson,
-            $minimum_sdk_version,
-            $latest_sdk_version,
-            $force_update,
-            $blockedVersionsJson,
-            $session_lifetime,
-            $kill_switch,
-            $current_user
-        );
+        mysqli_stmt_bind_param($stmt, 'sssiis', $license, $expiry, $pkg_value, $package_lock, $max_devices, $current_user);
         if (!mysqli_stmt_execute($stmt)) {
             $_SESSION['gen_error'] = mysqli_errno($conn) === 1062
                 ? 'That license key already exists.'
@@ -174,16 +84,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $_SESSION['success_license'] = [
             'package'      => $package_lock ? $package : '— Universal Key —',
-            'client_name'  => $client_name,
             'package_lock' => $package_lock,
             'license'      => $license,
             'expiry'       => $expiry,
             'days'         => $days,
             'max_devices'  => $max_devices,
-            'signing_mode' => $signing_mode,
-            'signing_cert' => $signing_cert_value,
             'key_type'     => $key_type,
-            'status'       => $license_status === 1 ? 'ACTIVE' : 'INACTIVE'
+            'status'       => 'ACTIVE'
         ];
 
         header('Location: generate_ui.php');
@@ -671,12 +578,6 @@ label { margin-bottom: 8px; font-weight: 600; font-size: 0.9rem; }
 
         <form method="POST" id="licenseForm">
 
-            <div class="mb-3">
-                <label><i class="fas fa-building me-2" style="color:var(--p-primary);"></i>Client / App Name</label>
-                <input name="client_name" class="form-control" maxlength="120" required
-                       placeholder="e.g., Client A — Production App">
-            </div>
-
             <!-- ── PACKAGE LOCK TOGGLE ── -->
             <div class="pkg-lock-bar locked" id="pkgLockBar">
                 <label class="toggle-switch">
@@ -697,33 +598,6 @@ label { margin-bottom: 8px; font-weight: 600; font-size: 0.9rem; }
                 <label><i class="fas fa-box me-2" style="color:var(--p-primary);"></i>Package Name</label>
                 <input name="package_name" id="packageNameInput" class="form-control" placeholder="e.g., com.example.app">
                 <small style="color:rgba(255,255,255,.4);font-size:.72rem;margin-top:4px;display:block;"><i class="fas fa-info-circle me-1"></i>This key will ONLY work for this package</small>
-            </div>
-
-            <div class="mb-3">
-                <label><i class="fas fa-certificate me-2" style="color:var(--p-primary);"></i>APK Signing Policy</label>
-                <select name="signing_mode" id="signingMode" class="form-select" onchange="onSigningModeChange(this.value)" required>
-                    <option value="pinned">Exact signing SHA-256 — strongest</option>
-                    <option value="auto" selected>Auto-bind first valid activation</option>
-                    <option value="any">Any signing key — compatibility mode</option>
-                </select>
-                <small id="signingModeHelp" style="color:rgba(255,255,255,.48);font-size:.72rem;margin-top:5px;display:block;line-height:1.5;">
-                    The first successful v3 activation permanently binds this license to that APK certificate.
-                </small>
-            </div>
-
-            <div class="mb-3" id="signingCertWrap" style="display:none;">
-                <label><i class="fas fa-fingerprint me-2" style="color:var(--p-primary);"></i>Signing Certificate SHA-256</label>
-                <input name="signing_cert_sha256" id="signingCertInput" class="form-control"
-                       maxlength="95" autocomplete="off"
-                       placeholder="AA:BB:CC:... or 64 hex characters">
-                <small style="color:rgba(255,255,255,.4);font-size:.72rem;margin-top:4px;display:block;">
-                    Paste the APK signing certificate fingerprint; colons and spaces are accepted.
-                </small>
-            </div>
-
-            <div id="anySigningWarning" style="display:none;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.35);border-radius:12px;padding:12px 14px;margin-bottom:16px;color:#fde68a;font-size:.78rem;line-height:1.5;">
-                <i class="fas fa-triangle-exclamation me-2"></i>
-                Any signing key disables repackaged-APK protection for this license. Panel signatures, device proof, package lock and short leases remain enabled.
             </div>
 
             <div class="toggle-container">
@@ -751,71 +625,9 @@ label { margin-bottom: 8px; font-weight: 600; font-size: 0.9rem; }
             </div>
 
             <div class="mb-3">
-                <label><i class="fas fa-shield-halved me-2" style="color:var(--p-primary);"></i>Device Binding</label>
-                <select name="device_mode" id="deviceMode" class="form-select" onchange="onDeviceModeChange(this.value)" required>
-                    <option value="DISABLED">Disabled</option>
-                    <option value="SINGLE" selected>Single Device</option>
-                    <option value="LIMITED">Limited Devices</option>
-                    <option value="UNLIMITED">Unlimited Devices</option>
-                </select>
-            </div>
-
-            <div class="mb-3" id="maxDevicesWrap">
                 <label><i class="fas fa-mobile-alt me-2" style="color:var(--p-primary);"></i>Maximum Devices</label>
-                <input type="number" name="max_devices" id="maxDevices" class="form-control" min="1" max="100" value="1" required>
+                <input type="number" name="max_devices" class="form-control" min="1" max="100" value="1" required>
                 <small style="color:rgba(255,255,255,.4);font-size:.72rem;margin-top:4px;display:block;">The API rejects additional devices after this limit.</small>
-            </div>
-
-            <div class="mb-3">
-                <label><i class="fas fa-sliders me-2" style="color:var(--p-primary);"></i>Feature Policy (JSON)</label>
-                <textarea name="feature_policy" class="form-control" rows="3"
-                          placeholder='{"feature_a":true,"feature_b":false}'></textarea>
-            </div>
-
-            <div class="row g-3 mb-3">
-                <div class="col-md-6">
-                    <label>Minimum SDK Version</label>
-                    <input type="number" name="minimum_sdk_version" class="form-control" min="1" value="3" required>
-                </div>
-                <div class="col-md-6">
-                    <label>Latest SDK Version</label>
-                    <input type="number" name="latest_sdk_version" class="form-control" min="1" value="3" required>
-                </div>
-            </div>
-
-            <div class="mb-3">
-                <label>Blocked SDK Versions</label>
-                <input name="blocked_versions" class="form-control" placeholder="e.g., 1, 2, 7">
-            </div>
-
-            <div class="mb-3">
-                <label>Authorization Session Lifetime</label>
-                <select name="session_lifetime_seconds" class="form-select">
-                    <option value="600" selected>10 minutes</option>
-                    <option value="900">15 minutes</option>
-                    <option value="1800">30 minutes</option>
-                </select>
-            </div>
-
-            <div class="form-check mb-2">
-                <input class="form-check-input" type="checkbox" name="java_native_auth" value="1" id="javaNativeAuth" checked>
-                <label class="form-check-label" for="javaNativeAuth">Require Java + Native cross-authentication</label>
-            </div>
-            <div class="form-check mb-2">
-                <input class="form-check-input" type="checkbox" name="force_update" value="1" id="forceUpdate">
-                <label class="form-check-label" for="forceUpdate">Force update below latest version</label>
-            </div>
-            <div class="form-check mb-3">
-                <input class="form-check-input" type="checkbox" name="kill_switch" value="1" id="killSwitch">
-                <label class="form-check-label" for="killSwitch">Create with kill switch enabled</label>
-            </div>
-
-            <div class="mb-3">
-                <label>Initial License Status</label>
-                <select name="license_status" class="form-select">
-                    <option value="1" selected>Active</option>
-                    <option value="0">Inactive</option>
-                </select>
             </div>
 
             <div class="duration-container" id="durationContainer">
@@ -870,15 +682,6 @@ $s=$_SESSION['success_license']; ?>
         <?php if($s['package_lock']): ?>
         <div class="success-row"><span>Package</span><strong><?=htmlspecialchars($s['package'])?></strong></div>
         <?php endif; ?>
-        <div class="success-row"><span>APK Signing</span><strong>
-            <?php if (($s['signing_mode'] ?? 'auto') === 'pinned'): ?>
-                Exact: <?= htmlspecialchars(substr((string) $s['signing_cert'], 0, 12)) ?>…
-            <?php elseif (($s['signing_mode'] ?? 'auto') === 'any'): ?>
-                Any signing key
-            <?php else: ?>
-                Auto-bind first activation
-            <?php endif; ?>
-        </strong></div>
         <div class="success-row"><span>Expiry</span><strong><?=htmlspecialchars($s['expiry'])?></strong></div>
         <div class="success-row"><span>Duration</span><strong><?=($s['days'] == 'custom' ? 'Custom' : $s['days'].' Days')?></strong></div>
         <div class="success-row"><span>Status</span><strong style="color:#10b981;"><?=$s['status']?></strong></div>
@@ -918,31 +721,6 @@ function closeSidebar() {
     sidebar.classList.remove('active');
     overlay.classList.remove('active');
     menuIcon.style.transform = '';
-}
-
-function onSigningModeChange(mode) {
-    const certWrap = document.getElementById('signingCertWrap');
-    const certInput = document.getElementById('signingCertInput');
-    const warning = document.getElementById('anySigningWarning');
-    const help = document.getElementById('signingModeHelp');
-    certWrap.style.display = mode === 'pinned' ? 'block' : 'none';
-    certInput.required = mode === 'pinned';
-    warning.style.display = mode === 'any' ? 'block' : 'none';
-    if (mode !== 'pinned') certInput.value = '';
-    help.textContent = mode === 'pinned'
-        ? 'Only an APK signed by this exact certificate can activate the license.'
-        : mode === 'any'
-            ? 'All APK signing certificates are accepted for this license.'
-            : 'The first successful v3 activation permanently binds this license to that APK certificate.';
-}
-
-function onDeviceModeChange(mode) {
-    const wrap = document.getElementById('maxDevicesWrap');
-    const input = document.getElementById('maxDevices');
-    const limited = mode === 'LIMITED';
-    wrap.style.display = (mode === 'SINGLE' || limited) ? 'block' : 'none';
-    input.required = mode === 'SINGLE' || limited;
-    if (mode === 'SINGLE') input.value = '1';
 }
 
 /* KEY TYPE TOGGLE */
@@ -1046,8 +824,6 @@ window.onload = function() {
     // init lock bar to correct state
     const cb = document.getElementById('pkgLockToggle');
     if (cb) onLockToggle(cb);
-    onSigningModeChange(document.getElementById('signingMode').value);
-    onDeviceModeChange(document.getElementById('deviceMode').value);
 };
 </script>
 

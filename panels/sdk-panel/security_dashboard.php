@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 
+session_start();
 require_once __DIR__ . '/conn.php';
 require_once __DIR__ . '/panel_helper.php';
 $currentUser = panel_require_roles($conn, ['owner', 'admin']);
@@ -17,8 +18,7 @@ $metricsResult = $conn->query(
 );
 $metrics = $metricsResult ? ($metricsResult->fetch_assoc() ?: []) : [];
 $recent = $conn->query(
-    'SELECT event_type, result, device_id, ip_address, client_name, package_name,
-            signing_sha256, sdk_version, request_id, details, created_at
+    'SELECT event_type, result, device_id, ip_address, details, created_at
      FROM api_audit_logs ORDER BY id DESC LIMIT 100'
 );
 $encryptedReady = false;
@@ -27,17 +27,6 @@ try {
     $encryptedReady = $key !== false && strlen($key) === 32;
 } catch (Throwable $ignored) {
 }
-$v3Keys = (array) panel_config('API_V3_KEYS', []);
-$v3KeysReady = $v3Keys !== [];
-foreach ($v3Keys as $keyId => $keyConfig) {
-    $v3KeysReady = $v3KeysReady
-        && preg_match('/^[A-Za-z0-9._-]{1,64}$/D', (string) $keyId) === 1
-        && is_array($keyConfig)
-        && is_readable((string) ($keyConfig['ecdh_private_key_file'] ?? ''))
-        && is_readable((string) ($keyConfig['signing_private_key_file'] ?? ''));
-}
-$mfaResult = $conn->query('SELECT COUNT(*) AS total FROM users WHERE mfa_enabled = 1 AND status = 1');
-$mfaUsers = (int) (($mfaResult ? $mfaResult->fetch_assoc() : [])['total'] ?? 0);
 ?>
 <!doctype html>
 <html lang="en">
@@ -67,30 +56,16 @@ $mfaUsers = (int) (($mfaResult ? $mfaResult->fetch_assoc() : [])['total'] ?? 0);
     </section>
 
     <section class="cardx table-card">
-        <div class="head"><div><div class="eyebrow">Configuration</div><strong>Signed API v3</strong></div><span class="badge2 <?= $v3KeysReady ? 'ok' : 'bad' ?>"><?= $v3KeysReady ? 'ECDH + SIGNING READY' : 'V3 PRIVATE KEYS INVALID' ?></span></div>
-        <div class="p-4 muted small">
-            Legacy v1: <strong class="text-white"><?= panel_config('LEGACY_API_ENABLED', false) ? 'Enabled' : 'Disabled' ?></strong>
-            &nbsp; - &nbsp; API v2: <strong class="text-white"><?= panel_config('API_V2_ENABLED', false) ? 'Enabled' : 'Disabled' ?></strong>
-            &nbsp; - &nbsp; API v3 keys: <strong class="text-white"><?= count($v3Keys) ?></strong>
-            &nbsp; - &nbsp; MFA users: <strong class="text-white"><?= $mfaUsers ?></strong>
-            &nbsp; - &nbsp; Rate limit: <strong class="text-white"><?= (int)panel_config('RATE_LIMIT_PER_MINUTE', 30) ?>/minute</strong>.
-            <?php if ($encryptedReady): ?>Legacy AES key is configured; it is not used by v3.<?php endif; ?>
-        </div>
+        <div class="head"><div><div class="eyebrow">Configuration</div><strong>Transport status</strong></div><span class="badge2 <?= $encryptedReady ? 'ok' : 'bad' ?>"><?= $encryptedReady ? 'AES-256-GCM READY' : 'ENCRYPTION KEY INVALID' ?></span></div>
+        <div class="p-4 muted small">Legacy compatibility: <strong class="text-white"><?= panel_config('LEGACY_API_ENABLED', true) ? 'Enabled' : 'Disabled' ?></strong> &nbsp; - &nbsp; Rate limit: <strong class="text-white"><?= (int)panel_config('RATE_LIMIT_PER_MINUTE', 30) ?>/minute</strong>. Disable legacy mode only after every installed SDK uses API v2.</div>
     </section>
 
     <section class="cardx table-card">
         <div class="head"><div><div class="eyebrow">Audit log</div><strong>Recent activation events</strong></div><span class="muted small">UTC</span></div>
         <div class="table-responsive">
-        <table class="table align-middle"><thead><tr><th>Time</th><th>Client / Package</th><th>Result</th><th>Device / SDK</th><th>Signing SHA-256</th><th>IP / Request</th></tr></thead><tbody>
-        <?php if (!$recent || $recent->num_rows === 0): ?><tr><td colspan="6" class="text-center muted py-5">No API events recorded yet.</td></tr><?php else: while ($row = $recent->fetch_assoc()): ?>
-            <tr>
-                <td class="text-nowrap"><?= htmlspecialchars($row['created_at'], ENT_QUOTES, 'UTF-8') ?></td>
-                <td><strong><?= htmlspecialchars($row['client_name'] ?: '-', ENT_QUOTES, 'UTF-8') ?></strong><br><code><?= htmlspecialchars($row['package_name'] ?: '-', ENT_QUOTES, 'UTF-8') ?></code></td>
-                <td><span class="badge2 <?= $row['result']==='success'?'ok':'bad' ?>"><?= htmlspecialchars(strtoupper($row['result']), ENT_QUOTES, 'UTF-8') ?></span><br><span class="muted small"><?= htmlspecialchars($row['event_type'], ENT_QUOTES, 'UTF-8') ?></span></td>
-                <td><code><?= htmlspecialchars($row['device_id'] ?: '-', ENT_QUOTES, 'UTF-8') ?></code><br><span class="muted small">v<?= (int) ($row['sdk_version'] ?? 0) ?></span></td>
-                <td><code><?= htmlspecialchars($row['signing_sha256'] ? substr($row['signing_sha256'], 0, 16) . '…' : '-', ENT_QUOTES, 'UTF-8') ?></code></td>
-                <td><?= htmlspecialchars($row['ip_address'], ENT_QUOTES, 'UTF-8') ?><br><code><?= htmlspecialchars($row['request_id'] ? substr($row['request_id'], 0, 14) . '…' : '-', ENT_QUOTES, 'UTF-8') ?></code></td>
-            </tr>
+        <table class="table align-middle"><thead><tr><th>Time</th><th>Event</th><th>Result</th><th>Device</th><th>IP</th></tr></thead><tbody>
+        <?php if (!$recent || $recent->num_rows === 0): ?><tr><td colspan="5" class="text-center muted py-5">No API events recorded yet.</td></tr><?php else: while ($row = $recent->fetch_assoc()): ?>
+            <tr><td class="text-nowrap"><?= htmlspecialchars($row['created_at'], ENT_QUOTES, 'UTF-8') ?></td><td><?= htmlspecialchars($row['event_type'], ENT_QUOTES, 'UTF-8') ?></td><td><span class="badge2 <?= $row['result']==='success'?'ok':'bad' ?>"><?= htmlspecialchars(strtoupper($row['result']), ENT_QUOTES, 'UTF-8') ?></span></td><td><code><?= htmlspecialchars($row['device_id'] ?: '-', ENT_QUOTES, 'UTF-8') ?></code></td><td><?= htmlspecialchars($row['ip_address'], ENT_QUOTES, 'UTF-8') ?></td></tr>
         <?php endwhile; endif; ?>
         </tbody></table></div>
     </section>

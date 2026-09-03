@@ -1,6 +1,7 @@
 <?php
 include 'conn.php';
 include 'panel_helper.php';
+session_start();
 
 // ============================================
 // OWNER ACCESS ONLY - Check if logged in user is MANISH

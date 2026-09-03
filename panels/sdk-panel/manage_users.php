@@ -1,4 +1,5 @@
 <?php
+session_start();
 include('conn.php');
 include 'desktop_only.php';
 include('panel_helper.php');
@@ -508,7 +509,6 @@ header {
                     <th><i class="fas fa-envelope"></i> Email</th>
                     <th><i class="fas fa-tag"></i> Role</th>
                     <th><i class="fas fa-circle"></i> Status</th>
-                    <th><i class="fas fa-shield-halved"></i> MFA</th>
                     <?php if($is_owner): ?>
                     <th><i class="fas fa-cog"></i> Actions</th>
                     <?php endif; ?>
@@ -550,13 +550,6 @@ header {
                             <span class="status-badge status-blocked">
                                 <i class="fas fa-ban"></i> BLOCKED
                             </span>
-                        <?php endif; ?>
-                    </td>
-                    <td>
-                        <?php if((int)($user['mfa_enabled'] ?? 0) === 1): ?>
-                            <span class="status-badge status-active"><i class="fas fa-shield-check"></i> ON</span>
-                        <?php else: ?>
-                            <span class="status-badge status-blocked"><i class="fas fa-shield-xmark"></i> OFF</span>
                         <?php endif; ?>
                     </td>
 

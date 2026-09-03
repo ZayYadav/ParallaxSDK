@@ -1,4 +1,5 @@
 <?php
+session_start();
 include('conn.php');
 include('panel_helper.php');
 $P = get_panel_settings($conn);
@@ -13,8 +14,8 @@ if (isset($_POST['register'])) {
         $reg_error = 'Too many attempts. Wait one minute and try again.';
     } elseif (preg_match('/^[A-Za-z0-9_.-]{3,32}$/D', $username) !== 1) {
         $reg_error = 'Username must be 3-32 safe characters.';
-    } elseif (strlen($password) < 12 || strlen($password) > 128) {
-        $reg_error = 'Password must be 12-128 characters.';
+    } elseif (strlen($password) < 10 || strlen($password) > 128) {
+        $reg_error = 'Password must be 10-128 characters.';
     } elseif (preg_match('/^[A-Z0-9-]{4,64}$/D', $referral) !== 1) {
         $reg_error = "Invalid or already used referral code!";
     } else {
@@ -241,7 +242,7 @@ html, body { height:100%; font-family:'Montserrat', -apple-system, BlinkMacSyste
             </div>
 
             <div class="input-group-wrap">
-                <input type="password" name="password" id="passwordField" class="form-input" placeholder="Password (12+ characters)" required minlength="12" maxlength="128" autocomplete="new-password">
+                <input type="password" name="password" id="passwordField" class="form-input" placeholder="Password" required autocomplete="new-password">
                 <i class="fas fa-lock input-icon"></i>
                 <button type="button" class="eye-btn" id="eyeBtn" onclick="togglePwd()" aria-label="Toggle password">
                     <i class="fas fa-eye" id="eyeIcon"></i>

@@ -67,26 +67,13 @@ if (!function_exists('sdk_panel_schema_problems')) {
     function sdk_panel_schema_problems(mysqli $connection): array
     {
         $requiredSchema = [
-            'users' => ['id', 'username', 'password', 'role', 'status', 'is_online', 'mfa_enabled', 'mfa_secret_enc'],
-            'licenses' => [
-                'id', 'license_key', 'client_name', 'expiry_date', 'status', 'package_name',
-                'package_mode', 'signing_mode', 'signing_cert_sha256', 'device_mode',
-                'feature_policy', 'minimum_sdk_version', 'latest_sdk_version',
-                'blocked_versions', 'session_lifetime_seconds', 'kill_switch',
-            ],
-            'devices' => [
-                'device_id', 'license_key', 'status', 'client_public_key', 'client_key_fingerprint',
-            ],
-            'user_recovery_codes' => ['user_id', 'code_hash', 'used_at'],
+            'users' => ['id', 'username', 'password', 'role', 'status', 'is_online'],
+            'licenses' => ['id', 'license_key', 'expiry_date', 'status', 'package_name'],
+            'devices' => ['device_id', 'license_key', 'status'],
             'panel_settings' => ['setting_key', 'setting_value'],
             'server_settings' => ['setting_key', 'setting_value', 'broadcast_version'],
             'api_rate_limits' => ['bucket_hash', 'window_start', 'request_count'],
-            'api_request_ids' => ['request_id_hash', 'device_id', 'expires_at'],
-            'api_sessions' => ['session_id', 'token_hash', 'license_id', 'device_id', 'expires_at'],
-            'api_audit_logs' => [
-                'event_type', 'result', 'ip_address', 'license_id', 'client_name',
-                'package_name', 'signing_sha256', 'sdk_version', 'request_id',
-            ],
+            'api_audit_logs' => ['event_type', 'result', 'ip_address'],
         ];
         $problems = [];
         foreach ($requiredSchema as $table => $columns) {
