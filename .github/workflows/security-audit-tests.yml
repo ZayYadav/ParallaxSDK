@@ -10,6 +10,7 @@ on:
       - 'BLACK-OPNE/build.gradle'
       - 'One-Core-Engine/build.gradle'
       - 'One-Core-Engine/app/build.gradle'
+      - 'One-Core-Engine/app/src/main/java/com/onecore/loader/security/HostedLicenseClient.java'
       - 'One-Core-Engine/app/src/main/jni/backends/ModsLoader.h'
       - '.github/workflows/build-hardened-safe.yml'
       - '.github/workflows/security-audit-tests.yml'
@@ -24,6 +25,7 @@ on:
       - 'BLACK-OPNE/build.gradle'
       - 'One-Core-Engine/build.gradle'
       - 'One-Core-Engine/app/build.gradle'
+      - 'One-Core-Engine/app/src/main/java/com/onecore/loader/security/HostedLicenseClient.java'
       - 'One-Core-Engine/app/src/main/jni/backends/ModsLoader.h'
       - '.github/workflows/build-hardened-safe.yml'
       - '.github/workflows/security-audit-tests.yml'
@@ -68,32 +70,24 @@ jobs:
             exit 1
           fi
 
-      - name: Enforce offline TLS pin trust
+      - name: Enforce Loader platform TLS trust policy
         shell: bash
         run: |
           set -euo pipefail
-          FILE='One-Core-Engine/app/build.gradle'
-          CURRENT_PIN='sha256/Ina/GY9COYngSpB7Ht+asGkJ5LV99jpBHYz11jXRSWM='
-          KNOWN_BAD_PIN='sha256/Ina/GY9CQYngSpB7Ht+asGkJ5LV99jpBHYz11jXRsWM='
+          BUILD='One-Core-Engine/app/build.gradle'
+          CLIENT='One-Core-Engine/app/src/main/java/com/onecore/loader/security/HostedLicenseClient.java'
+          NATIVE='One-Core-Engine/app/src/main/jni/main.cpp'
 
-          if grep -F -- 'resolveVerifiedLeafTlsPin' "$FILE"; then
-            echo 'Release builds must not auto-enroll a live TLS certificate.' >&2
+          # Loader TLS must use the Android/OkHttp platform CA chain and hostname
+          # verifier. Certificate/SPKI pin configuration is intentionally forbidden.
+          if grep -E -- 'PARALLAX_TLS_PINS|parallaxTlsPins|parallaxBuiltInTlsPins|CertificatePinner' "$BUILD" "$CLIENT" "$NATIVE"; then
+            echo 'Loader certificate/SPKI pinning must remain disabled.' >&2
             exit 1
           fi
-          if grep -F -- 'pins.add(livePin)' "$FILE"; then
-            echo 'Release builds must not append a network-observed TLS pin.' >&2
-            exit 1
-          fi
-
-          # The approved production pin must be source-controlled and merged with optional
-          # repository rotation pins. This prevents a syntactically-valid typo in a GitHub
-          # variable from producing an APK that can never reach the licensing API.
-          grep -F -- "$CURRENT_PIN" "$FILE" >/dev/null
-          grep -F -- 'parallaxBuiltInTlsPins + parallaxConfiguredTlsPinList' "$FILE" >/dev/null
-          if grep -F -- "$KNOWN_BAD_PIN" "$FILE"; then
-            echo 'Known mistyped production TLS pin must never be source-controlled.' >&2
-            exit 1
-          fi
+          grep -F -- 'ConnectionSpec.MODERN_TLS' "$CLIENT" >/dev/null
+          grep -F -- '.followRedirects(false)' "$CLIENT" >/dev/null
+          grep -F -- '.followSslRedirects(false)' "$CLIENT" >/dev/null
+          grep -F -- 'PARALLAX_API_PUBLIC_KEY_B64' "$BUILD" >/dev/null
 
       - name: Enforce immutable DPT trust chain
         shell: bash
