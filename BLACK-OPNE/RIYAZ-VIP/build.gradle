@@ -279,7 +279,7 @@ tasks.register('decryptReleaseAar') {
 }
 
 dependencies {
-    implementation 'androidx.appcompat:appcompat:1.7.1'
+    implementation 'androidx.appcompat:appcompat:1.8.0'
     implementation 'com.github.tiann:FreeReflection:3.2.2'
     implementation 'com.github.CodingGay.BlackReflection:core:1.1.2'
     annotationProcessor 'com.github.CodingGay.BlackReflection:compiler:1.1.2'
