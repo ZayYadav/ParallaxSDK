@@ -7,6 +7,8 @@ on:
       - main
     paths:
       - 'panels/sdk-panel/**'
+      - 'BLACK-OPNE/build.gradle'
+      - 'One-Core-Engine/build.gradle'
       - 'One-Core-Engine/app/build.gradle'
       - 'One-Core-Engine/app/src/main/jni/backends/ModsLoader.h'
       - '.github/workflows/build-hardened-safe.yml'
@@ -18,6 +20,8 @@ on:
       - 'security/**'
     paths:
       - 'panels/sdk-panel/**'
+      - 'BLACK-OPNE/build.gradle'
+      - 'One-Core-Engine/build.gradle'
       - 'One-Core-Engine/app/build.gradle'
       - 'One-Core-Engine/app/src/main/jni/backends/ModsLoader.h'
       - '.github/workflows/build-hardened-safe.yml'
@@ -91,3 +95,16 @@ jobs:
             exit 1
           fi
           grep -F -- '7d72080525c22f2987cd46636730ee42a2056054' "$FILE" >/dev/null
+
+      - name: Enforce scoped JitPack resolution
+        shell: bash
+        run: |
+          set -euo pipefail
+          for FILE in BLACK-OPNE/build.gradle One-Core-Engine/build.gradle; do
+            grep -F -- "url 'https://jitpack.io'" "$FILE" >/dev/null
+            grep -F -- 'includeGroupByRegex' "$FILE" >/dev/null
+            if grep -F -- "maven { url 'https://jitpack.io' }" "$FILE"; then
+              echo "Unrestricted JitPack repository found in ${FILE}." >&2
+              exit 1
+            fi
+          done
