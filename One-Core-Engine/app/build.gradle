@@ -319,7 +319,7 @@ dependencies {
     implementation "androidx.work:work-runtime:2.11.2"
     implementation 'androidx.profileinstaller:profileinstaller:1.4.1'
     implementation "com.github.topjohnwu.libsu:core:3.1.1"
-    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'com.squareup.okhttp3:okhttp:5.5.0'
     implementation 'com.squareup.okio:okio:3.9.0'
     implementation 'com.github.tiann:FreeReflection:3.2.2'
     implementation 'com.github.CodingGay.BlackReflection:core:1.1.4'
