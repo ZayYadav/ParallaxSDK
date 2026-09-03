@@ -3,6 +3,7 @@ package top.niunaijun.blackbox.compat.auth;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.IntentSender;
+import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
@@ -30,27 +31,11 @@ import top.niunaijun.blackbox.utils.compat.IntentRedirectCompat;
  * provider app installed on the phone while keeping the activity-result target
  * inside the virtual process.
  *
- * Package/signature identity is never spoofed. Explicit provider intents are
- * accepted directly; implicit intents are resolved with Android's real package
- * manager and accepted only when the resolved app is on the trusted allowlist.
- * IntentSenders are accepted only when Android reports an allow-listed creator
- * package, so a cloned app cannot use this bridge for arbitrary external flows.
- *
- * Twitter/X OAuth is real-app-first. This includes the GCloud/IMSDK
- * `com.itop.twitterwrapper.TwitterWebActivity` observed in stock BGMI: when its
- * launch extras already contain a Twitter/X OAuth URL, the URL is extracted
- * without logging it and offered to the installed official Twitter/X app first.
- * A host callback trampoline preserves the guest's original Activity result for
- * supported legacy custom-scheme redirects. If safe app routing is unavailable,
- * the existing Auth Tab/web flow remains the compatibility fallback.
- *
- * No package identity, signatures, cookies, passwords, or tokens are spoofed.
- *
- * Android 16 compatibility note: provider UI is launched from the host-main
- * bridge rather than from the guest :pN process. A normal startActivityForResult
- * bridge remains attached to Android's original resultTo token, so the host
- * trampoline returns exactly one system-delivered result. Detached IntentSender
- * and Twitter custom-scheme callbacks use the private :pN provider relay.
+ * Twitter/X OAuth is real-app-first. For the official current X package we prefer
+ * the manifest-verified exported deep-link entry point
+ * com.x.android.deeplink.XUrlInterpreterActivity for trusted twitter.com/x.com
+ * authorization URLs. No provider identity, tokens, cookies, passwords, consumer
+ * secrets or provider results are fabricated.
  */
 @Obfuscate
 public final class ExternalAuthRouter {
@@ -98,6 +83,9 @@ public final class ExternalAuthRouter {
 
     private static final String GCLOUD_TWITTER_WEB_ACTIVITY =
             "com.itop.twitterwrapper.TwitterWebActivity";
+    private static final String OFFICIAL_TWITTER_PACKAGE = "com.twitter.android";
+    private static final String X_URL_INTERPRETER_ACTIVITY =
+            "com.x.android.deeplink.XUrlInterpreterActivity";
 
     private static final Set<String> TRUSTED_PROVIDER_PACKAGES = new HashSet<>(Arrays.asList(
             "com.google.android.gms",
@@ -130,9 +118,7 @@ public final class ExternalAuthRouter {
     }
 
     public static void clearDirectProviderDispatch(Intent intent) {
-        if (intent != null) {
-            intent.removeExtra(EXTRA_DIRECT_PROVIDER_DISPATCH);
-        }
+        if (intent != null) intent.removeExtra(EXTRA_DIRECT_PROVIDER_DISPATCH);
     }
 
     public static boolean isTrustedProviderPackage(String packageName) {
@@ -152,34 +138,27 @@ public final class ExternalAuthRouter {
     }
 
     public static boolean isTrustedProviderIntentSender(IntentSender sender) {
-        if (sender == null) {
-            return false;
-        }
+        if (sender == null) return false;
         try {
             return isTrustedProviderPackage(sender.getCreatorPackage());
         } catch (Throwable ignored) {
+            return false;
         }
-        return false;
     }
 
     public static IntentSender wrapIntentSender(Object target) {
-        if (target == null) {
-            return null;
-        }
-        if (target instanceof IntentSender) {
-            return (IntentSender) target;
-        }
+        if (target == null) return null;
+        if (target instanceof IntentSender) return (IntentSender) target;
         try {
             for (Constructor<?> constructor : IntentSender.class.getDeclaredConstructors()) {
-                Class<?>[] parameterTypes = constructor.getParameterTypes();
-                if (parameterTypes.length != 1
-                        || !"android.content.IIntentSender".equals(parameterTypes[0].getName())
-                        || !parameterTypes[0].isInstance(target)) {
-                    continue;
+                Class<?>[] types = constructor.getParameterTypes();
+                if (types.length == 1
+                        && "android.content.IIntentSender".equals(types[0].getName())
+                        && types[0].isInstance(target)) {
+                    constructor.setAccessible(true);
+                    Object wrapped = constructor.newInstance(target);
+                    return wrapped instanceof IntentSender ? (IntentSender) wrapped : null;
                 }
-                constructor.setAccessible(true);
-                Object wrapped = constructor.newInstance(target);
-                return wrapped instanceof IntentSender ? (IntentSender) wrapped : null;
             }
         } catch (Throwable ignored) {
         }
@@ -193,43 +172,28 @@ public final class ExternalAuthRouter {
             int requestCode,
             String virtualPackage) {
         if (source == null || resultTo == null || requestCode < 0
-                || virtualPackage == null || virtualPackage.trim().isEmpty()) {
-            return null;
-        }
+                || virtualPackage == null || virtualPackage.trim().isEmpty()) return null;
 
-        // Stock BGMI/GCloud starts TwitterWebActivity explicitly rather than
-        // dispatching the OAuth URL with ACTION_VIEW. If its launch extras already
-        // carry that URL, convert only that one URL to a real-provider ACTION_VIEW.
-        // Failure is intentionally non-destructive: returning null below lets the
-        // original TwitterWebActivity continue exactly as before.
         Intent embeddedTwitterAuth = extractGCloudTwitterAuthIntent(source);
         if (embeddedTwitterAuth != null) {
             Intent nativeBridge = createTwitterNativeResultBridgeIntent(
                     embeddedTwitterAuth, resultTo, resultWho, requestCode, virtualPackage);
-            if (nativeBridge != null) {
-                return nativeBridge;
-            }
+            if (nativeBridge != null) return nativeBridge;
         }
 
         if (isTwitterWebAuthIntent(source)) {
             Intent nativeBridge = createTwitterNativeResultBridgeIntent(
                     source, resultTo, resultWho, requestCode, virtualPackage);
-            if (nativeBridge != null) {
-                return nativeBridge;
-            }
+            if (nativeBridge != null) return nativeBridge;
             return createTwitterWebResultBridgeIntent(
                     source, resultTo, resultWho, requestCode, virtualPackage);
         }
 
         String providerPackage = trustedProviderPackage(source);
-        if (providerPackage == null) {
-            return null;
-        }
+        if (providerPackage == null) return null;
 
         int bpid = BActivityThread.getAppPid();
-        if (bpid < 0 || bpid > 24) {
-            return null;
-        }
+        if (bpid < 0 || bpid > 24) return null;
 
         Intent providerIntent = new Intent(source);
         if (providerIntent.getComponent() == null && providerIntent.getPackage() == null) {
@@ -237,13 +201,10 @@ public final class ExternalAuthRouter {
         }
         providerIntent.putExtra(EXTRA_DIRECT_PROVIDER_DISPATCH, true);
 
-        Intent bridge = createBaseBridge(
-                resultTo, resultWho, requestCode, virtualPackage, bpid);
+        Intent bridge = createBaseBridge(resultTo, resultWho, requestCode, virtualPackage, bpid);
         bridge.putExtra(EXTRA_PROVIDER_INTENT, providerIntent);
-        bridge.addFlags(source.getFlags() & (
-                Intent.FLAG_ACTIVITY_NO_ANIMATION
-                        | Intent.FLAG_ACTIVITY_CLEAR_TOP
-                        | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+        bridge.addFlags(source.getFlags() & (Intent.FLAG_ACTIVITY_NO_ANIMATION
+                | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
         return prepareBridgeForLaunch(bridge);
     }
 
@@ -257,21 +218,13 @@ public final class ExternalAuthRouter {
             String resultWho,
             int requestCode,
             String virtualPackage) {
-        if (!isTrustedProviderIntentSender(sender)
-                || resultTo == null
-                || requestCode < 0
-                || virtualPackage == null
-                || virtualPackage.trim().isEmpty()) {
-            return null;
-        }
+        if (!isTrustedProviderIntentSender(sender) || resultTo == null || requestCode < 0
+                || virtualPackage == null || virtualPackage.trim().isEmpty()) return null;
 
         int bpid = BActivityThread.getAppPid();
-        if (bpid < 0 || bpid > 24) {
-            return null;
-        }
+        if (bpid < 0 || bpid > 24) return null;
 
-        Intent bridge = createBaseBridge(
-                resultTo, resultWho, requestCode, virtualPackage, bpid);
+        Intent bridge = createBaseBridge(resultTo, resultWho, requestCode, virtualPackage, bpid);
         bridge.putExtra(EXTRA_MANUAL_RESULT_RELAY, true);
         bridge.putExtra(EXTRA_PROVIDER_INTENT_SENDER, sender);
         if (fillInIntent != null) {
@@ -279,23 +232,17 @@ public final class ExternalAuthRouter {
         }
         bridge.putExtra(EXTRA_PROVIDER_FLAGS_MASK, flagsMask);
         bridge.putExtra(EXTRA_PROVIDER_FLAGS_VALUES, flagsValues);
-        if (options != null) {
-            bridge.putExtra(EXTRA_PROVIDER_OPTIONS, new Bundle(options));
-        }
+        if (options != null) bridge.putExtra(EXTRA_PROVIDER_OPTIONS, new Bundle(options));
         bridge.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         return prepareBridgeForLaunch(bridge);
     }
 
     private static Intent createBaseBridge(
-            IBinder resultTo,
-            String resultWho,
-            int requestCode,
-            String virtualPackage,
-            int bpid) {
+            IBinder resultTo, String resultWho, int requestCode,
+            String virtualPackage, int bpid) {
         Intent bridge = new Intent();
         bridge.setComponent(new ComponentName(
-                BlackBoxCore.getHostPkg(),
-                VirtualOAuthBridgeActivity.class.getName()));
+                BlackBoxCore.getHostPkg(), VirtualOAuthBridgeActivity.class.getName()));
         bridge.putExtra(EXTRA_EXTERNAL_AUTH, true);
         bridge.putExtra(EXTRA_BPID, bpid);
         bridge.putExtra(EXTRA_USER_ID, BActivityThread.getUserId());
@@ -303,11 +250,6 @@ public final class ExternalAuthRouter {
         return bridge;
     }
 
-    /**
-     * Prefer the real Twitter/X application only when Android's real PackageManager
-     * confirms that the installed provider advertises support for this exact OAuth
-     * URL and the host can safely capture the guest's declared callback scheme.
-     */
     private static Intent createTwitterNativeResultBridgeIntent(
             Intent source,
             IBinder resultTo,
@@ -315,70 +257,81 @@ public final class ExternalAuthRouter {
             int requestCode,
             String virtualPackage) {
         Uri authUri = source == null ? null : source.getData();
-        if (!isTrustedTwitterOAuthUri(authUri)) {
-            return null;
-        }
+        if (!isTrustedTwitterOAuthUri(authUri)) return null;
 
         int userId = BActivityThread.getUserId();
         Uri redirectUri = VirtualOAuthRouter.resolveTwitterRedirectUri(
                 authUri, userId, virtualPackage);
-        if (redirectUri == null
-                || !TwitterOAuthSessionStore.isHostCaptureSupported(redirectUri)) {
+        if (redirectUri == null || !TwitterOAuthSessionStore.isHostCaptureSupported(redirectUri)) {
             return null;
         }
 
-        String providerPackage = resolveNativeTwitterProvider(source);
-        if (providerPackage == null) {
-            return null;
-        }
+        ComponentName providerComponent = resolveNativeTwitterProviderComponent(source);
+        if (providerComponent == null) return null;
 
         int bpid = BActivityThread.getAppPid();
-        if (bpid < 0 || bpid > 24) {
-            return null;
-        }
+        if (bpid < 0 || bpid > 24) return null;
 
-        Intent providerIntent = new Intent(source);
-        // The source may have been explicitly aimed at a browser. Resolve again
-        // against the official provider without retaining that browser component.
-        providerIntent.setComponent(null);
-        providerIntent.setPackage(providerPackage);
+        Intent providerIntent = new Intent(Intent.ACTION_VIEW, authUri);
+        providerIntent.addCategory(Intent.CATEGORY_BROWSABLE);
+        providerIntent.addCategory(Intent.CATEGORY_DEFAULT);
+        providerIntent.setComponent(providerComponent);
+        providerIntent.setFlags(source.getFlags());
         providerIntent.putExtra(EXTRA_DIRECT_PROVIDER_DISPATCH, true);
 
         Intent bridge = new Intent();
         bridge.setComponent(new ComponentName(
-                BlackBoxCore.getHostPkg(),
-                TwitterNativeAuthBridgeActivity.class.getName()));
+                BlackBoxCore.getHostPkg(), TwitterNativeAuthBridgeActivity.class.getName()));
         bridge.putExtra(EXTRA_BPID, bpid);
         bridge.putExtra(EXTRA_USER_ID, userId);
         bridge.putExtra(EXTRA_PROVIDER_INTENT, providerIntent);
         bridge.putExtra(VirtualOAuthRouter.EXTRA_AUTH_URL, authUri.toString());
         bridge.putExtra(VirtualOAuthRouter.EXTRA_REDIRECT_URI, redirectUri.toString());
         putResultTarget(bridge, resultTo, resultWho, requestCode, virtualPackage);
-        bridge.addFlags(source.getFlags() & (
-                Intent.FLAG_ACTIVITY_NO_ANIMATION
-                        | Intent.FLAG_ACTIVITY_CLEAR_TOP
-                        | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+        bridge.addFlags(source.getFlags() & (Intent.FLAG_ACTIVITY_NO_ANIMATION
+                | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
         return prepareBridgeForLaunch(bridge);
     }
 
-    private static String resolveNativeTwitterProvider(Intent source) {
-        if (source == null) return null;
+    private static ComponentName resolveNativeTwitterProviderComponent(Intent source) {
+        if (source == null || BlackBoxCore.getContext() == null) return null;
+        PackageManager pm = BlackBoxCore.getContext().getPackageManager();
+
+        // Prefer the exact current X component verified from the installed manifest
+        // and manually launch-tested on the device.
         try {
-            PackageManager packageManager = BlackBoxCore.getContext().getPackageManager();
+            ComponentName exact = new ComponentName(
+                    OFFICIAL_TWITTER_PACKAGE, X_URL_INTERPRETER_ACTIVITY);
+            ActivityInfo info = pm.getActivityInfo(exact, 0);
+            if (info != null
+                    && OFFICIAL_TWITTER_PACKAGE.equals(info.packageName)
+                    && X_URL_INTERPRETER_ACTIVITY.equals(info.name)
+                    && info.enabled
+                    && info.exported
+                    && (info.applicationInfo == null || info.applicationInfo.enabled)) {
+                Intent probe = new Intent(Intent.ACTION_VIEW, source.getData());
+                probe.addCategory(Intent.CATEGORY_BROWSABLE);
+                probe.addCategory(Intent.CATEGORY_DEFAULT);
+                probe.setComponent(exact);
+                ResolveInfo resolved = pm.resolveActivity(probe, PackageManager.MATCH_DEFAULT_ONLY);
+                if (resolved != null && resolved.activityInfo != null) return exact;
+            }
+        } catch (Throwable ignored) {
+        }
+
+        // Fallback for alternate official package variants/builds.
+        try {
             for (String packageName : TWITTER_NATIVE_PROVIDER_PACKAGES) {
                 Intent candidate = new Intent(source);
                 candidate.setComponent(null);
                 candidate.setPackage(packageName);
-                ResolveInfo resolved = packageManager.resolveActivity(
-                        candidate, PackageManager.MATCH_DEFAULT_ONLY);
-                if (resolved == null || resolved.activityInfo == null) {
-                    continue;
-                }
-                if (packageName.equals(resolved.activityInfo.packageName)
+                ResolveInfo resolved = pm.resolveActivity(candidate, PackageManager.MATCH_DEFAULT_ONLY);
+                if (resolved == null || resolved.activityInfo == null) continue;
+                ActivityInfo info = resolved.activityInfo;
+                if (packageName.equals(info.packageName)
                         && isTwitterProviderPackage(packageName)
-                        && resolved.activityInfo.enabled
-                        && resolved.activityInfo.exported) {
-                    return packageName;
+                        && info.enabled && info.exported) {
+                    return new ComponentName(info.packageName, info.name);
                 }
             }
         } catch (Throwable ignored) {
@@ -387,15 +340,9 @@ public final class ExternalAuthRouter {
     }
 
     private static Intent extractGCloudTwitterAuthIntent(Intent source) {
-        if (!isGCloudTwitterWebActivity(source)) {
-            return null;
-        }
-
+        if (!isGCloudTwitterWebActivity(source)) return null;
         Uri uri = findTwitterOAuthUri(source.getData(), source.getExtras(), 0);
-        if (uri == null) {
-            return null;
-        }
-
+        if (uri == null) return null;
         Intent auth = new Intent(Intent.ACTION_VIEW, uri);
         auth.addCategory(Intent.CATEGORY_BROWSABLE);
         auth.addCategory(Intent.CATEGORY_DEFAULT);
@@ -406,36 +353,18 @@ public final class ExternalAuthRouter {
     private static boolean isGCloudTwitterWebActivity(Intent source) {
         if (source == null) return false;
         ComponentName component = source.getComponent();
-        return component != null
-                && GCLOUD_TWITTER_WEB_ACTIVITY.equals(component.getClassName());
+        return component != null && GCLOUD_TWITTER_WEB_ACTIVITY.equals(component.getClassName());
     }
 
-    /**
-     * Search only the GCloud launch payload for an already-created Twitter/X OAuth
-     * URL. The value is never persisted or logged. Recursion is intentionally
-     * shallow to avoid walking arbitrary app object graphs.
-     */
     private static Uri findTwitterOAuthUri(Uri direct, Bundle extras, int depth) {
-        if (isTrustedTwitterOAuthUri(direct)) {
-            return direct;
-        }
-        if (extras == null || depth > 3) {
-            return null;
-        }
-
+        if (isTrustedTwitterOAuthUri(direct)) return direct;
+        if (extras == null || depth > 3) return null;
         try {
             for (String key : extras.keySet()) {
                 Object value;
-                try {
-                    value = extras.get(key);
-                } catch (Throwable ignored) {
-                    continue;
-                }
-
+                try { value = extras.get(key); } catch (Throwable ignored) { continue; }
                 Uri found = twitterOAuthUriFromValue(value, depth + 1);
-                if (found != null) {
-                    return found;
-                }
+                if (found != null) return found;
             }
         } catch (Throwable ignored) {
         }
@@ -443,176 +372,91 @@ public final class ExternalAuthRouter {
     }
 
     private static Uri twitterOAuthUriFromValue(Object value, int depth) {
-        if (value == null || depth > 4) return null;
-
+        if (value == null || depth > 3) return null;
         if (value instanceof Uri) {
             Uri uri = (Uri) value;
             return isTrustedTwitterOAuthUri(uri) ? uri : null;
         }
-
         if (value instanceof CharSequence) {
             try {
-                Uri uri = Uri.parse(value.toString().trim());
+                Uri uri = Uri.parse(value.toString());
                 return isTrustedTwitterOAuthUri(uri) ? uri : null;
-            } catch (Throwable ignored) {
-                return null;
-            }
+            } catch (Throwable ignored) { return null; }
         }
-
-        if (value instanceof Bundle) {
-            return findTwitterOAuthUri(null, (Bundle) value, depth);
-        }
-
         if (value instanceof Intent) {
             Intent nested = (Intent) value;
-            return findTwitterOAuthUri(nested.getData(), nested.getExtras(), depth);
+            return findTwitterOAuthUri(nested.getData(), nested.getExtras(), depth + 1);
         }
-
-        if (value instanceof String[]) {
-            for (String item : (String[]) value) {
-                Uri found = twitterOAuthUriFromValue(item, depth + 1);
-                if (found != null) return found;
-            }
+        if (value instanceof Bundle) {
+            return findTwitterOAuthUri(null, (Bundle) value, depth + 1);
         }
-
-        if (value instanceof CharSequence[]) {
-            for (CharSequence item : (CharSequence[]) value) {
-                Uri found = twitterOAuthUriFromValue(item, depth + 1);
-                if (found != null) return found;
-            }
-        }
-
         return null;
     }
 
-    private static Intent createTwitterWebResultBridgeIntent(
-            Intent source,
-            IBinder resultTo,
-            String resultWho,
-            int requestCode,
-            String virtualPackage) {
-        try {
-            Intent template = VirtualOAuthRouter.createBridgeIntent(
-                    source, BActivityThread.getUserId(), virtualPackage);
-            if (template == null) {
-                return null;
-            }
-
-            int bpid = BActivityThread.getAppPid();
-            if (bpid < 0 || bpid > 24) {
-                return null;
-            }
-
-            String authUrl = template.getStringExtra(VirtualOAuthRouter.EXTRA_AUTH_URL);
-            String redirectUri = template.getStringExtra(VirtualOAuthRouter.EXTRA_REDIRECT_URI);
-            String authProvider = template.getStringExtra(VirtualOAuthRouter.EXTRA_AUTH_PROVIDER);
-            int userId = template.getIntExtra(VirtualOAuthRouter.EXTRA_USER_ID, -1);
-            if (authUrl == null || redirectUri == null || authProvider == null || userId < 0) {
-                return null;
-            }
-
-            Intent bridge = new Intent();
-            bridge.setComponent(new ComponentName(
-                    BlackBoxCore.getHostPkg(),
-                    VirtualOAuthBridgeActivity.class.getName()));
-            bridge.putExtra(EXTRA_BROWSER_AUTH, true);
-            bridge.putExtra(EXTRA_BPID, bpid);
-            bridge.putExtra(EXTRA_USER_ID, userId);
-            bridge.putExtra(VirtualOAuthRouter.EXTRA_AUTH_URL, authUrl);
-            bridge.putExtra(VirtualOAuthRouter.EXTRA_REDIRECT_URI, redirectUri);
-            bridge.putExtra(VirtualOAuthRouter.EXTRA_AUTH_PROVIDER, authProvider);
-            bridge.putExtra(VirtualOAuthRouter.EXTRA_VIRTUAL_PACKAGE, virtualPackage);
-            bridge.putExtra(VirtualOAuthRouter.EXTRA_USER_ID, userId);
-            putResultTarget(bridge, resultTo, resultWho, requestCode, virtualPackage);
-            bridge.addFlags(source.getFlags() & (
-                    Intent.FLAG_ACTIVITY_NO_ANIMATION
-                            | Intent.FLAG_ACTIVITY_CLEAR_TOP
-                            | Intent.FLAG_ACTIVITY_SINGLE_TOP));
-            return prepareBridgeForLaunch(bridge);
-        } catch (Throwable ignored) {
-            return null;
-        }
+    private static boolean isTwitterWebAuthIntent(Intent source) {
+        return source != null && isTrustedTwitterOAuthUri(source.getData());
     }
 
-    private static Intent prepareBridgeForLaunch(Intent bridge) {
-        IntentRedirectCompat.collectNestedIntentKeys(bridge);
-        return bridge;
-    }
-
-    private static void putResultTarget(
-            Intent bridge,
-            IBinder resultTo,
-            String resultWho,
-            int requestCode,
-            String virtualPackage) {
-        bridge.putExtra(EXTRA_RESULT_WHO, resultWho);
-        bridge.putExtra(EXTRA_REQUEST_CODE, requestCode);
-        bridge.putExtra(EXTRA_VIRTUAL_PACKAGE, virtualPackage);
-        Bundle binderBundle = new Bundle();
-        binderBundle.putBinder(EXTRA_RESULT_BINDER, resultTo);
-        bridge.putExtras(binderBundle);
-    }
-
-    private static boolean isTwitterWebAuthIntent(Intent intent) {
-        if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction())) {
-            return false;
-        }
-        Uri uri = intent.getData();
-        return isTwitterHttpsUri(uri);
-    }
-
-    public static boolean isTrustedTwitterOAuthUri(Uri uri) {
-        return isTwitterHttpsUri(uri) && isLikelyTwitterOAuthUri(uri);
-    }
-
-    private static boolean isTwitterHttpsUri(Uri uri) {
-        if (uri == null || !"https".equalsIgnoreCase(uri.getScheme())) {
-            return false;
-        }
-        String host = uri.getHost();
-        host = host == null ? "" : host.toLowerCase(Locale.US);
-        return "twitter.com".equals(host)
-                || "x.com".equals(host)
-                || host.endsWith(".twitter.com")
-                || host.endsWith(".x.com");
-    }
-
-    private static boolean isLikelyTwitterOAuthUri(Uri uri) {
+    private static boolean isTrustedTwitterOAuthUri(Uri uri) {
         if (uri == null) return false;
-        String path = uri.getPath();
-        String query = uri.getQuery();
-        path = path == null ? "" : path.toLowerCase(Locale.US);
-        query = query == null ? "" : query.toLowerCase(Locale.US);
-        return path.contains("oauth")
-                || path.contains("authorize")
-                || path.contains("authenticate")
-                || query.contains("oauth_token=")
-                || query.contains("client_id=");
+        String scheme = lower(uri.getScheme());
+        if (!"https".equals(scheme) && !"http".equals(scheme)) return false;
+        String host = lower(uri.getHost());
+        if (!("twitter.com".equals(host) || "www.twitter.com".equals(host)
+                || "mobile.twitter.com".equals(host) || "api.twitter.com".equals(host)
+                || "x.com".equals(host) || "www.x.com".equals(host)
+                || "mobile.x.com".equals(host))) return false;
+        String path = lower(uri.getPath());
+        return path.contains("oauth") || path.contains("authorize") || path.contains("authenticate");
+    }
+
+    private static Intent createTwitterWebResultBridgeIntent(
+            Intent source, IBinder resultTo, String resultWho,
+            int requestCode, String virtualPackage) {
+        int bpid = BActivityThread.getAppPid();
+        if (bpid < 0 || bpid > 24) return null;
+        Intent bridge = createBaseBridge(resultTo, resultWho, requestCode, virtualPackage, bpid);
+        bridge.putExtra(EXTRA_BROWSER_AUTH, true);
+        bridge.putExtra(VirtualOAuthRouter.EXTRA_AUTH_URL, source.getDataString());
+        return prepareBridgeForLaunch(bridge);
     }
 
     private static String trustedProviderPackage(Intent intent) {
-        if (intent == null) {
-            return null;
-        }
-
+        if (intent == null || BlackBoxCore.getContext() == null) return null;
         ComponentName component = intent.getComponent();
-        String explicitPackage = component != null
-                ? component.getPackageName() : intent.getPackage();
-        if (explicitPackage != null) {
-            return isTrustedProviderPackage(explicitPackage) ? explicitPackage : null;
+        if (component != null && isTrustedProviderPackage(component.getPackageName())) {
+            return component.getPackageName();
         }
-
+        String packageName = intent.getPackage();
+        if (isTrustedProviderPackage(packageName)) return packageName;
         try {
-            PackageManager packageManager = BlackBoxCore.getContext().getPackageManager();
-            ResolveInfo resolved = packageManager.resolveActivity(
-                    new Intent(intent), PackageManager.MATCH_DEFAULT_ONLY);
-            if (resolved == null || resolved.activityInfo == null) {
-                return null;
+            ResolveInfo resolved = BlackBoxCore.getContext().getPackageManager().resolveActivity(
+                    intent, PackageManager.MATCH_DEFAULT_ONLY);
+            if (resolved != null && resolved.activityInfo != null
+                    && isTrustedProviderPackage(resolved.activityInfo.packageName)) {
+                return resolved.activityInfo.packageName;
             }
-            String resolvedPackage = resolved.activityInfo.packageName;
-            return isTrustedProviderPackage(resolvedPackage) ? resolvedPackage : null;
         } catch (Throwable ignored) {
-            return null;
         }
+        return null;
+    }
+
+    private static void putResultTarget(
+            Intent bridge, IBinder resultTo, String resultWho,
+            int requestCode, String virtualPackage) {
+        bridge.putExtra(EXTRA_RESULT_BINDER, resultTo);
+        bridge.putExtra(EXTRA_RESULT_WHO, resultWho);
+        bridge.putExtra(EXTRA_REQUEST_CODE, requestCode);
+        bridge.putExtra(EXTRA_VIRTUAL_PACKAGE, virtualPackage);
+    }
+
+    private static Intent prepareBridgeForLaunch(Intent bridge) {
+        if (bridge == null) return null;
+        bridge.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        return IntentRedirectCompat.sanitizeForHost(bridge);
+    }
+
+    private static String lower(String value) {
+        return value == null ? "" : value.toLowerCase(Locale.US);
     }
 }
