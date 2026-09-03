@@ -33,8 +33,8 @@ android {
         // keys exist only in the panel's private server configuration. The
         // exact endpoint is reconstructed and integrity-checked in native code.
         buildConfigField 'String', 'SDK_PANEL_KEY_ID', '"parallax-2026-09"'
-        buildConfigField 'String', 'SDK_PANEL_ECDH_PUBLIC_KEY', '"MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAElrvz2zaAUxXd1l5uKxTHRp1hIJpnhRjM+Pb0obVyC2VTh2K0VnTdme107RV4q+u2Dnt868k5hQzeum6pD4oAuw=="'
-        buildConfigField 'String', 'SDK_PANEL_SIGNING_PUBLIC_KEY', '"MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAErC1NBisuPTumG0YqsRPMHIbC8YkOwg1Nk6a5GVDqN52sxFknJKl5aT/gx6IbOUIEpX29xL2ODE9gBWisLbIeMQ=="'
+        buildConfigField 'String', 'SDK_PANEL_ECDH_PUBLIC_KEY', '"MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE8FaLLJyEs4s6PwotLl/4QPo4u/e7BykS9N9x6Vmay/BDtVHgorPldGxAlET4rJXGuckHzWuZ6oBHpYIVY9nsvA=="'
+        buildConfigField 'String', 'SDK_PANEL_SIGNING_PUBLIC_KEY', '"MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEn2ZzqmASjb6P3QoSqafVYzXCtuo54BkVitVeNEv9Pm6+vptUJy2YNAafjIVeSonL/VXOjNpxBjOWnd3zLnXLjw=="'
 
         ndk {
             // Ship every ABI supported by current Android devices and emulators.
