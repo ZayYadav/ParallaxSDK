@@ -264,7 +264,7 @@ public class SplashActivity extends Activity {
             label = "VERIFYING SECURE RUNTIME";
         } else if (value < 90) {
             phase = 2;
-            label = "PREPARING PARALLAX CORE";
+            label = "PREPARING KESHAVXOWNER CORE";
         } else {
             phase = 3;
             label = "SECURE WORKSPACE READY";

@@ -63,7 +63,7 @@ DWORD NewBase = 0;
 
 DWORD libanogsEnd = 0;//
 
-__int64 ParallaxCoreReturnZero()
+__int64 KESHAVXOWNERCoreReturnZero()
 {
   return 0LL;
 }
@@ -78,9 +78,9 @@ void *anogs_thread(void *){
     while (!isLibraryLoaded(oxorany("libanogs.so"))){
         sleep(1);
     }
-    LOGI("ParallaxCore runtime initialized");
+    LOGI("KESHAVXOWNERCore runtime initialized");
     
-HOOK_LIB_NO_ORIG("libanogs.so", "0x51FA80", ParallaxCoreReturnZero);
+HOOK_LIB_NO_ORIG("libanogs.so", "0x51FA80", KESHAVXOWNERCoreReturnZero);
 
 return NULL;
 }

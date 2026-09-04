@@ -9,5 +9,5 @@
  */
 bool onecore_verify_installed_apk(const char *apk_path);
 
-/** Returns true only when libParallaxLoader executable PT_LOAD bytes match the on-disk ELF. */
+/** Returns true only when libKESHAVXOWNERLoader executable PT_LOAD bytes match the on-disk ELF. */
 bool onecore_verify_native_text_integrity();

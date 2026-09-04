@@ -55,8 +55,8 @@ $newBalance = $accounts->adjustBalance(
 );
 integrationAssert($newBalance === 14, 'Owner balance adjustment failed');
 
-$ownerLicense = $accounts->createLicense($owner, 'Branded Customer', 'PARALLAX', 1, 7);
-integrationAssert(str_starts_with($ownerLicense['key'], 'PARALLAX-'), 'Custom key prefix failed');
+$ownerLicense = $accounts->createLicense($owner, 'Branded Customer', 'KESHAVXOWNER', 1, 7);
+integrationAssert(str_starts_with($ownerLicense['key'], 'KESHAVXOWNER-'), 'Custom key prefix failed');
 integrationAssert($ownerLicense['cost'] === 0, 'Owner key generation consumed balance');
 
 $userLicenseId = (int) ($database->fetchOne(

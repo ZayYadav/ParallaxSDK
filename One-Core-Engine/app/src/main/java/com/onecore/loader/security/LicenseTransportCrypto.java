@@ -20,8 +20,8 @@ import okio.ByteString;
 @Obfuscate
 final class LicenseTransportCrypto {
     static final int VERSION = 2;
-    static final String REQUEST_AAD = "parallax-license-v2-request";
-    static final String RESPONSE_AAD_PREFIX = "parallax-license-v2-response:";
+    static final String REQUEST_AAD = "keshavxowner-license-v2-request";
+    static final String RESPONSE_AAD_PREFIX = "keshavxowner-license-v2-response:";
     private static final int GCM_TAG_BYTES = 16;
     private static final SecureRandom RANDOM = new SecureRandom();
 

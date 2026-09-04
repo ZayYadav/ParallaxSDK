@@ -32,7 +32,7 @@ android {
         // These are public trust anchors, not secrets. The matching private
         // keys exist only in the panel's private server configuration. The
         // exact endpoint is reconstructed and integrity-checked in native code.
-        buildConfigField 'String', 'SDK_PANEL_KEY_ID', '"parallax-2026-09"'
+        buildConfigField 'String', 'SDK_PANEL_KEY_ID', '"keshavxowner-2026-09"'
         buildConfigField 'String', 'SDK_PANEL_ECDH_PUBLIC_KEY', '"MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAElrvz2zaAUxXd1l5uKxTHRp1hIJpnhRjM+Pb0obVyC2VTh2K0VnTdme107RV4q+u2Dnt868k5hQzeum6pD4oAuw=="'
         buildConfigField 'String', 'SDK_PANEL_SIGNING_PUBLIC_KEY', '"MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAErC1NBisuPTumG0YqsRPMHIbC8YkOwg1Nk6a5GVDqN52sxFknJKl5aT/gx6IbOUIEpX29xL2ODE9gBWisLbIeMQ=="'
 
@@ -109,32 +109,32 @@ tasks.register('encryptReleaseAar') {
     description = 'Builds release AAR and wraps it in an AES-256-GCM .aar.pxa envelope.'
     dependsOn 'assembleRelease'
 
-    def releaseAar = layout.buildDirectory.file('outputs/aar/ParallaxCore-release.aar')
-    def encryptedAar = layout.buildDirectory.file('outputs/encrypted-aar/ParallaxCore-v3-release.aar.pxa')
+    def releaseAar = layout.buildDirectory.file('outputs/aar/KESHAVXOWNERCore-release.aar')
+    def encryptedAar = layout.buildDirectory.file('outputs/encrypted-aar/KESHAVXOWNERCore-v3-release.aar.pxa')
     inputs.file(releaseAar)
     outputs.file(encryptedAar)
 
     doLast {
-        def encodedKey = System.getenv('PARALLAX_AAR_ENCRYPTION_KEY')
+        def encodedKey = System.getenv('KESHAVXOWNER_AAR_ENCRYPTION_KEY')
         if (!encodedKey) {
-            throw new GradleException('Set PARALLAX_AAR_ENCRYPTION_KEY to a Base64-encoded 32-byte per-client key.')
+            throw new GradleException('Set KESHAVXOWNER_AAR_ENCRYPTION_KEY to a Base64-encoded 32-byte per-client key.')
         }
 
         byte[] keyBytes
         try {
             keyBytes = java.util.Base64.decoder.decode(encodedKey.trim())
         } catch (IllegalArgumentException ignored) {
-            throw new GradleException('PARALLAX_AAR_ENCRYPTION_KEY must be valid Base64.')
+            throw new GradleException('KESHAVXOWNER_AAR_ENCRYPTION_KEY must be valid Base64.')
         }
         if (keyBytes.length != 32) {
             java.util.Arrays.fill(keyBytes, (byte) 0)
-            throw new GradleException('PARALLAX_AAR_ENCRYPTION_KEY must decode to exactly 32 bytes.')
+            throw new GradleException('KESHAVXOWNER_AAR_ENCRYPTION_KEY must decode to exactly 32 bytes.')
         }
 
         byte[] plaintext = releaseAar.get().asFile.bytes
         byte[] nonce = new byte[12]
         new java.security.SecureRandom().nextBytes(nonce)
-        byte[] aad = 'ParallaxSDK-AAR-v1'.getBytes(java.nio.charset.StandardCharsets.US_ASCII)
+        byte[] aad = 'KESHAVXOWNERSDK-AAR-v1'.getBytes(java.nio.charset.StandardCharsets.US_ASCII)
         def cipher = javax.crypto.Cipher.getInstance('AES/GCM/NoPadding')
         cipher.init(javax.crypto.Cipher.ENCRYPT_MODE,
                 new javax.crypto.spec.SecretKeySpec(keyBytes, 'AES'),
@@ -159,28 +159,28 @@ tasks.register('encryptReleaseAar') {
 
 tasks.register('decryptReleaseAar') {
     group = 'distribution'
-    description = 'Authenticates and decrypts a Parallax .aar.pxa envelope for local Gradle consumption.'
+    description = 'Authenticates and decrypts a KESHAVXOWNER .aar.pxa envelope for local Gradle consumption.'
 
     doLast {
-        def encodedKey = System.getenv('PARALLAX_AAR_ENCRYPTION_KEY')
+        def encodedKey = System.getenv('KESHAVXOWNER_AAR_ENCRYPTION_KEY')
         if (!encodedKey) {
-            throw new GradleException('Set PARALLAX_AAR_ENCRYPTION_KEY to the client-specific Base64 key.')
+            throw new GradleException('Set KESHAVXOWNER_AAR_ENCRYPTION_KEY to the client-specific Base64 key.')
         }
 
         byte[] keyBytes
         try {
             keyBytes = java.util.Base64.decoder.decode(encodedKey.trim())
         } catch (IllegalArgumentException ignored) {
-            throw new GradleException('PARALLAX_AAR_ENCRYPTION_KEY must be valid Base64.')
+            throw new GradleException('KESHAVXOWNER_AAR_ENCRYPTION_KEY must be valid Base64.')
         }
         if (keyBytes.length != 32) {
             java.util.Arrays.fill(keyBytes, (byte) 0)
-            throw new GradleException('PARALLAX_AAR_ENCRYPTION_KEY must decode to exactly 32 bytes.')
+            throw new GradleException('KESHAVXOWNER_AAR_ENCRYPTION_KEY must decode to exactly 32 bytes.')
         }
 
-        def input = project.findProperty('parallaxEncryptedAar')
-                ? file(project.property('parallaxEncryptedAar'))
-                : layout.buildDirectory.file('outputs/encrypted-aar/ParallaxCore-v3-release.aar.pxa').get().asFile
+        def input = project.findProperty('keshavxownerEncryptedAar')
+                ? file(project.property('keshavxownerEncryptedAar'))
+                : layout.buildDirectory.file('outputs/encrypted-aar/KESHAVXOWNERCore-v3-release.aar.pxa').get().asFile
         if (!input.isFile()) {
             java.util.Arrays.fill(keyBytes, (byte) 0)
             throw new GradleException("Encrypted AAR not found: ${input}")
@@ -201,7 +201,7 @@ tasks.register('decryptReleaseAar') {
         int payloadOffset = magic.length + 1 + nonceLength
         byte[] nonce = java.util.Arrays.copyOfRange(envelope, magic.length + 1, payloadOffset)
         byte[] ciphertext = java.util.Arrays.copyOfRange(envelope, payloadOffset, envelope.length)
-        byte[] aad = 'ParallaxSDK-AAR-v1'.getBytes(java.nio.charset.StandardCharsets.US_ASCII)
+        byte[] aad = 'KESHAVXOWNERSDK-AAR-v1'.getBytes(java.nio.charset.StandardCharsets.US_ASCII)
         def cipher = javax.crypto.Cipher.getInstance('AES/GCM/NoPadding')
         cipher.init(javax.crypto.Cipher.DECRYPT_MODE,
                 new javax.crypto.spec.SecretKeySpec(keyBytes, 'AES'),
@@ -215,9 +215,9 @@ tasks.register('decryptReleaseAar') {
             throw new GradleException('Encrypted AAR authentication failed: wrong key or modified file.')
         }
 
-        def output = project.findProperty('parallaxDecryptedAarOutput')
-                ? file(project.property('parallaxDecryptedAarOutput'))
-                : layout.buildDirectory.file('outputs/decrypted-aar/ParallaxCore-v3-release.aar').get().asFile
+        def output = project.findProperty('keshavxownerDecryptedAarOutput')
+                ? file(project.property('keshavxownerDecryptedAarOutput'))
+                : layout.buildDirectory.file('outputs/decrypted-aar/KESHAVXOWNERCore-v3-release.aar').get().asFile
         output.parentFile.mkdirs()
         output.bytes = plaintext
         java.util.Arrays.fill(keyBytes, (byte) 0)
