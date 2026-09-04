@@ -63,9 +63,9 @@ jobs:
         run: |
           set -euo pipefail
           FILE='One-Core-Engine/app/src/main/jni/backends/ModsLoader.h'
-          PINNED='https://raw.githubusercontent.com/ZayYadav/Parallaxapp/c31b43f515e5af248ce575520dfe80d139ac2f8d/JANGAM.zip'
+          PINNED='https://raw.githubusercontent.com/ZayYadav/KESHAVXOWNERapp/c31b43f515e5af248ce575520dfe80d139ac2f8d/JANGAM.zip'
           grep -F -- "$PINNED" "$FILE" >/dev/null
-          if grep -F -- 'Parallaxapp/raw/refs/heads/main/JANGAM.zip' "$FILE"; then
+          if grep -F -- 'KESHAVXOWNERapp/raw/refs/heads/main/JANGAM.zip' "$FILE"; then
             echo 'Mutable runtime artifact URL is forbidden.' >&2
             exit 1
           fi
@@ -80,21 +80,21 @@ jobs:
 
           # Loader TLS must use the Android/OkHttp platform CA chain and hostname
           # verifier. Certificate/SPKI pin configuration is intentionally forbidden.
-          if grep -E -- 'PARALLAX_TLS_PINS|parallaxTlsPins|parallaxBuiltInTlsPins|CertificatePinner' "$BUILD" "$CLIENT" "$NATIVE"; then
+          if grep -E -- 'KESHAVXOWNER_TLS_PINS|keshavxownerTlsPins|keshavxownerBuiltInTlsPins|CertificatePinner' "$BUILD" "$CLIENT" "$NATIVE"; then
             echo 'Loader certificate/SPKI pinning must remain disabled.' >&2
             exit 1
           fi
           grep -F -- 'ConnectionSpec.MODERN_TLS' "$CLIENT" >/dev/null
           grep -F -- '.followRedirects(false)' "$CLIENT" >/dev/null
           grep -F -- '.followSslRedirects(false)' "$CLIENT" >/dev/null
-          grep -F -- 'PARALLAX_API_PUBLIC_KEY_B64' "$BUILD" >/dev/null
+          grep -F -- 'KESHAVXOWNER_API_PUBLIC_KEY_B64' "$BUILD" >/dev/null
 
       - name: Enforce immutable DPT trust chain
         shell: bash
         run: |
           set -euo pipefail
           FILE='.github/workflows/build-hardened-safe.yml'
-          if grep -F -- 'ParallaxDPT/.github/workflows/protect-apk.yml@main' "$FILE"; then
+          if grep -F -- 'KESHAVXOWNERDPT/.github/workflows/protect-apk.yml@main' "$FILE"; then
             echo 'DPT reusable workflow must be pinned to an immutable commit.' >&2
             exit 1
           fi

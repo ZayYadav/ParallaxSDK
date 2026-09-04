@@ -70,26 +70,26 @@ jobs:
         env:
           DB_HOST: 127.0.0.1
           DB_PORT: 3306
-          DB_NAME: parallax_panel_ci
+          DB_NAME: keshavxowner_panel_ci
           DB_USER: root
           DB_PASSWORD: onecore_ci_root
         run: |
-          mysql -h 127.0.0.1 -uroot -ponecore_ci_root -e 'CREATE DATABASE parallax_panel_ci CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'
+          mysql -h 127.0.0.1 -uroot -ponecore_ci_root -e 'CREATE DATABASE keshavxowner_panel_ci CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'
           php ../panels/key-panel/tests/integration.php
 
       - name: Test fresh SDK panel schema with MySQL
         run: |
-          mysql -h 127.0.0.1 -uroot -ponecore_ci_root -e 'CREATE DATABASE parallax_sdk_panel_ci CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'
-          mysql -h 127.0.0.1 -uroot -ponecore_ci_root parallax_sdk_panel_ci < ../panels/sdk-panel/database/fresh-install.sql
-          mysql -h 127.0.0.1 -uroot -ponecore_ci_root parallax_sdk_panel_ci -e \
+          mysql -h 127.0.0.1 -uroot -ponecore_ci_root -e 'CREATE DATABASE keshavxowner_sdk_panel_ci CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'
+          mysql -h 127.0.0.1 -uroot -ponecore_ci_root keshavxowner_sdk_panel_ci < ../panels/sdk-panel/database/fresh-install.sql
+          mysql -h 127.0.0.1 -uroot -ponecore_ci_root keshavxowner_sdk_panel_ci -e \
             "SELECT username,password,role,status,is_online FROM users LIMIT 0; SELECT license_key,expiry_date,status,package_name FROM licenses LIMIT 0; SELECT setting_key,setting_value FROM panel_settings LIMIT 1; SELECT setting_key,setting_value,broadcast_version FROM server_settings LIMIT 1;"
-          mysql -h 127.0.0.1 -uroot -ponecore_ci_root parallax_sdk_panel_ci -e \
+          mysql -h 127.0.0.1 -uroot -ponecore_ci_root keshavxowner_sdk_panel_ci -e \
             "ALTER TABLE server_settings DROP COLUMN broadcast_version;"
-          mysql -h 127.0.0.1 -uroot -ponecore_ci_root parallax_sdk_panel_ci < ../panels/sdk-panel/database/fresh-install.sql
-          mysql -h 127.0.0.1 -uroot -ponecore_ci_root parallax_sdk_panel_ci -e \
+          mysql -h 127.0.0.1 -uroot -ponecore_ci_root keshavxowner_sdk_panel_ci < ../panels/sdk-panel/database/fresh-install.sql
+          mysql -h 127.0.0.1 -uroot -ponecore_ci_root keshavxowner_sdk_panel_ci -e \
             "SELECT broadcast_version FROM server_settings LIMIT 1;"
-          mysql -h 127.0.0.1 -uroot -ponecore_ci_root parallax_sdk_panel_ci < ../panels/sdk-panel/secure_api_migration.sql
-          mysql -h 127.0.0.1 -uroot -ponecore_ci_root parallax_sdk_panel_ci < ../panels/sdk-panel/secure_api_migration.sql
+          mysql -h 127.0.0.1 -uroot -ponecore_ci_root keshavxowner_sdk_panel_ci < ../panels/sdk-panel/secure_api_migration.sql
+          mysql -h 127.0.0.1 -uroot -ponecore_ci_root keshavxowner_sdk_panel_ci < ../panels/sdk-panel/secure_api_migration.sql
 
       - name: Test crypto, JWT, and request binding
         run: php tests/run.php
@@ -120,14 +120,14 @@ jobs:
       - name: Package standalone key panel
         working-directory: panels/key-panel
         run: |
-          zip -r ../../parallax-standalone-key-panel.zip . \
+          zip -r ../../keshavxowner-standalone-key-panel.zip . \
             -x '.env' 'runtime/*' 'tests/*' '.gitignore'
 
       - name: Upload standalone key panel
         uses: actions/upload-artifact@v6
         with:
-          name: parallax-standalone-key-panel
-          path: parallax-standalone-key-panel.zip
+          name: keshavxowner-standalone-key-panel
+          path: keshavxowner-standalone-key-panel.zip
           if-no-files-found: error
 
   build:
@@ -136,14 +136,14 @@ jobs:
 
     env:
       SDK_PROJECT_DIR: BLACK-OPNE
-      SDK_MODULE: ParallaxCore
+      SDK_MODULE: KESHAVXOWNERCore
       SDK_MODULE_DIR: RIYAZ-VIP
       LOADER_PROJECT_DIR: One-Core-Engine
-      LOADER_AAR_PATH: One-Core-Engine/app/libs/ParallaxCore-release.aar
+      LOADER_AAR_PATH: One-Core-Engine/app/libs/KESHAVXOWNERCore-release.aar
       NDK_VERSION: 27.2.12479018
       BUILD_LOG_DIR: build-logs
-      PARALLAX_API_PUBLIC_KEY_B64: ${{ vars.PARALLAX_API_PUBLIC_KEY_B64 }}
-      PARALLAX_TLS_PINS: ${{ vars.PARALLAX_TLS_PINS }}
+      KESHAVXOWNER_API_PUBLIC_KEY_B64: ${{ vars.KESHAVXOWNER_API_PUBLIC_KEY_B64 }}
+      KESHAVXOWNER_TLS_PINS: ${{ vars.KESHAVXOWNER_TLS_PINS }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -187,35 +187,35 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -n "${PARALLAX_API_PUBLIC_KEY_B64:-}" ] && [ -n "${PARALLAX_TLS_PINS:-}" ]; then
-            echo "PARALLAX_HAS_RELEASE_TRANSPORT=true" >> "$GITHUB_ENV"
+          if [ -n "${KESHAVXOWNER_API_PUBLIC_KEY_B64:-}" ] && [ -n "${KESHAVXOWNER_TLS_PINS:-}" ]; then
+            echo "KESHAVXOWNER_HAS_RELEASE_TRANSPORT=true" >> "$GITHUB_ENV"
           else
-            openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/parallax-ci-private.pem 2>/dev/null
-            PUBLIC_KEY=$(openssl pkey -in /tmp/parallax-ci-private.pem -pubout -outform DER 2>/dev/null | base64 -w0)
-            rm -f /tmp/parallax-ci-private.pem
-            echo "PARALLAX_API_PUBLIC_KEY_B64=${PUBLIC_KEY}" >> "$GITHUB_ENV"
-            echo "PARALLAX_TLS_PINS=sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" >> "$GITHUB_ENV"
-            echo "PARALLAX_HAS_RELEASE_TRANSPORT=false" >> "$GITHUB_ENV"
+            openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/keshavxowner-ci-private.pem 2>/dev/null
+            PUBLIC_KEY=$(openssl pkey -in /tmp/keshavxowner-ci-private.pem -pubout -outform DER 2>/dev/null | base64 -w0)
+            rm -f /tmp/keshavxowner-ci-private.pem
+            echo "KESHAVXOWNER_API_PUBLIC_KEY_B64=${PUBLIC_KEY}" >> "$GITHUB_ENV"
+            echo "KESHAVXOWNER_TLS_PINS=sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" >> "$GITHUB_ENV"
+            echo "KESHAVXOWNER_HAS_RELEASE_TRANSPORT=false" >> "$GITHUB_ENV"
             echo "WARNING: using non-production transport configuration for this CI build."
           fi
           if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ] \
             && [ -n "${STORE_PASSWORD:-}" ] \
             && [ -n "${KEY_ALIAS:-}" ] \
             && [ -n "${KEY_PASSWORD:-}" ]; then
-            echo "PARALLAX_HAS_RELEASE_SIGNING=true" >> "$GITHUB_ENV"
+            echo "KESHAVXOWNER_HAS_RELEASE_SIGNING=true" >> "$GITHUB_ENV"
           else
-            echo "PARALLAX_HAS_RELEASE_SIGNING=false" >> "$GITHUB_ENV"
+            echo "KESHAVXOWNER_HAS_RELEASE_SIGNING=false" >> "$GITHUB_ENV"
             echo "WARNING: using the throwaway CI signing certificate for this build."
           fi
-          if [ -n "${PARALLAX_API_PUBLIC_KEY_B64:-}" ] \
-            && [ -n "${PARALLAX_TLS_PINS:-}" ] \
+          if [ -n "${KESHAVXOWNER_API_PUBLIC_KEY_B64:-}" ] \
+            && [ -n "${KESHAVXOWNER_TLS_PINS:-}" ] \
             && [ -n "${ANDROID_KEYSTORE_BASE64:-}" ] \
             && [ -n "${STORE_PASSWORD:-}" ] \
             && [ -n "${KEY_ALIAS:-}" ] \
             && [ -n "${KEY_PASSWORD:-}" ]; then
-            echo "PARALLAX_ARTIFACT_TIER=production" >> "$GITHUB_ENV"
+            echo "KESHAVXOWNER_ARTIFACT_TIER=production" >> "$GITHUB_ENV"
           else
-            echo "PARALLAX_ARTIFACT_TIER=ci-nonproduction" >> "$GITHUB_ENV"
+            echo "KESHAVXOWNER_ARTIFACT_TIER=ci-nonproduction" >> "$GITHUB_ENV"
           fi
 
       - name: Validate encrypted loader transport
@@ -227,16 +227,16 @@ jobs:
 
           try:
               public_key = base64.b64decode(
-                  os.environ.get("PARALLAX_API_PUBLIC_KEY_B64", ""), validate=True
+                  os.environ.get("KESHAVXOWNER_API_PUBLIC_KEY_B64", ""), validate=True
               )
           except Exception as error:
-              raise SystemExit("PARALLAX_API_PUBLIC_KEY_B64 is invalid") from error
+              raise SystemExit("KESHAVXOWNER_API_PUBLIC_KEY_B64 is invalid") from error
           if len(public_key) < 256 or len(public_key) > 1024:
-              raise SystemExit("PARALLAX_API_PUBLIC_KEY_B64 has an invalid DER size")
-          pins = [item.strip() for item in os.environ.get("PARALLAX_TLS_PINS", "").split(",") if item.strip()]
+              raise SystemExit("KESHAVXOWNER_API_PUBLIC_KEY_B64 has an invalid DER size")
+          pins = [item.strip() for item in os.environ.get("KESHAVXOWNER_TLS_PINS", "").split(",") if item.strip()]
           if not pins or any(not re.fullmatch(r"sha256/[A-Za-z0-9+/]{43}=", item) for item in pins):
-              raise SystemExit("PARALLAX_TLS_PINS must contain valid OkHttp SHA-256 pins")
-          print("Encrypted and pinned Parallax transport configuration is valid")
+              raise SystemExit("KESHAVXOWNER_TLS_PINS must contain valid OkHttp SHA-256 pins")
+          print("Encrypted and pinned KESHAVXOWNER transport configuration is valid")
 
       - name: Build SDK release AAR
         working-directory: ${{ env.SDK_PROJECT_DIR }}
@@ -244,7 +244,7 @@ jobs:
           set -o pipefail
           ./gradlew :${{ env.SDK_MODULE }}:assembleRelease --stacktrace 2>&1 | tee "../${BUILD_LOG_DIR}/sdk-release-aar.log"
 
-      - name: Replace loader ParallaxCore AAR with freshly built SDK AAR
+      - name: Replace loader KESHAVXOWNERCore AAR with freshly built SDK AAR
         run: |
           set -euo pipefail
           SDK_AAR="${SDK_PROJECT_DIR}/${SDK_MODULE_DIR}/build/outputs/aar/${SDK_MODULE}-release.aar"
@@ -302,9 +302,9 @@ jobs:
           done
           test "$DEX_COUNT" -gt 0
           for plaintext in \
-            'https://parallaxloader.parallaxserver.online/api/v2/connect' \
-            'parallax-license-v2-request' \
-            'parallax-license-v2-response:' \
+            'https://keshavxownerloader.keshavxownerserver.online/api/v2/connect' \
+            'keshavxowner-license-v2-request' \
+            'keshavxowner-license-v2-response:' \
             'Licensing TLS pins are not configured' \
             'accounts.google.com' \
             'www.facebook.com' \
@@ -351,12 +351,12 @@ jobs:
           RELEASE_APK=$(find "${LOADER_PROJECT_DIR}/app/build/outputs/apk/release" -name '*.apk' -print -quit)
           DEBUG_APK=$(find "${LOADER_PROJECT_DIR}/app/build/outputs/apk/debug" -name '*.apk' -print -quit)
           {
-            printf 'artifact_tier=%s\n' "${PARALLAX_ARTIFACT_TIER}"
-            printf 'production_transport=%s\n' "${PARALLAX_HAS_RELEASE_TRANSPORT}"
-            printf 'production_signing=%s\n' "${PARALLAX_HAS_RELEASE_SIGNING}"
+            printf 'artifact_tier=%s\n' "${KESHAVXOWNER_ARTIFACT_TIER}"
+            printf 'production_transport=%s\n' "${KESHAVXOWNER_HAS_RELEASE_TRANSPORT}"
+            printf 'production_signing=%s\n' "${KESHAVXOWNER_HAS_RELEASE_SIGNING}"
             printf 'loader_obfuscation=r8+lsparanoid\n'
             printf 'commit=%s\n' "${GITHUB_SHA}"
-            if [ "${PARALLAX_ARTIFACT_TIER}" != 'production' ]; then
+            if [ "${KESHAVXOWNER_ARTIFACT_TIER}" != 'production' ]; then
               printf 'warning=CI verification build only; configure production transport and signing before distribution.\n'
             fi
             sha256sum "$RELEASE_APK" "$DEBUG_APK"
@@ -372,14 +372,14 @@ jobs:
       - name: Upload loader release APK
         uses: actions/upload-artifact@v6
         with:
-          name: loader-${{ env.PARALLAX_ARTIFACT_TIER }}-release-apk
+          name: loader-${{ env.KESHAVXOWNER_ARTIFACT_TIER }}-release-apk
           path: ${{ env.LOADER_PROJECT_DIR }}/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
 
       - name: Upload loader debug APK
         uses: actions/upload-artifact@v6
         with:
-          name: loader-${{ env.PARALLAX_ARTIFACT_TIER }}-debug-apk
+          name: loader-${{ env.KESHAVXOWNER_ARTIFACT_TIER }}-debug-apk
           path: ${{ env.LOADER_PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 

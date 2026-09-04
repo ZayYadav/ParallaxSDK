@@ -44,7 +44,7 @@ public class FloatLogo extends Service {
 
     static {
         try {
-            System.loadLibrary("ParallaxLoader");
+            System.loadLibrary("KESHAVXOWNERLoader");
         } catch(UnsatisfiedLinkError w) {
             FLog.error(w.getMessage());
         }

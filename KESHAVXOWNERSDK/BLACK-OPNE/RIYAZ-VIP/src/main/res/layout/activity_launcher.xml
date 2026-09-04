@@ -2,14 +2,14 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/parallax_runtime_background">
+    android:background="@drawable/keshavxowner_runtime_background">
 
     <View
         android:id="@+id/runtime_glow"
         android:layout_width="420dp"
         android:layout_height="420dp"
         android:layout_gravity="center"
-        android:background="@drawable/parallax_runtime_glow"
+        android:background="@drawable/keshavxowner_runtime_glow"
         android:importantForAccessibility="no" />
 
     <LinearLayout
@@ -25,13 +25,13 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="32dp"
-            android:background="@drawable/parallax_runtime_chip"
+            android:background="@drawable/keshavxowner_runtime_chip"
             android:fontFamily="sans-serif-medium"
             android:gravity="center"
             android:letterSpacing="0.12"
             android:paddingStart="15dp"
             android:paddingEnd="15dp"
-            android:text="PARALLAX  /  SECURE RUNTIME"
+            android:text="KESHAVXOWNER  /  SECURE RUNTIME"
             android:textColor="#FFD5A94F"
             android:textSize="10sp" />
 
@@ -44,16 +44,16 @@
             android:id="@+id/brand_panel"
             android:layout_width="210dp"
             android:layout_height="210dp"
-            android:background="@drawable/parallax_runtime_card"
+            android:background="@drawable/keshavxowner_runtime_card"
             android:elevation="16dp">
 
             <ImageView
                 android:id="@+id/iv_brand"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:contentDescription="Parallax Labs"
+                android:contentDescription="KESHAVXOWNER Labs"
                 android:scaleType="centerCrop"
-                android:src="@drawable/parallax_labs_brand" />
+                android:src="@drawable/onecore_edge_brand_mark" />
         </FrameLayout>
 
         <ImageView
@@ -63,7 +63,7 @@
             android:layout_marginTop="-220dp"
             android:contentDescription="@null"
             android:importantForAccessibility="no"
-            android:src="@drawable/parallax_runtime_ring" />
+            android:src="@drawable/keshavxowner_runtime_ring" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -71,7 +71,7 @@
             android:layout_marginTop="18dp"
             android:fontFamily="sans-serif-black"
             android:letterSpacing="0.08"
-            android:text="PARALLAX CORE"
+            android:text="KESHAVXOWNER CORE"
             android:textColor="#FFFFFFFF"
             android:textSize="23sp" />
 
@@ -94,7 +94,7 @@
             android:id="@+id/app_identity_card"
             android:layout_width="match_parent"
             android:layout_height="72dp"
-            android:background="@drawable/parallax_runtime_chip"
+            android:background="@drawable/keshavxowner_runtime_chip"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingStart="12dp"
@@ -147,7 +147,7 @@
                 android:id="@+id/runtime_status_dot"
                 android:layout_width="7dp"
                 android:layout_height="7dp"
-                android:background="@drawable/parallax_runtime_status_dot" />
+                android:background="@drawable/keshavxowner_runtime_status_dot" />
 
             <TextView
                 android:id="@+id/launch_status"
@@ -157,7 +157,7 @@
                 android:layout_weight="1"
                 android:fontFamily="sans-serif-medium"
                 android:letterSpacing="0.07"
-                android:text="STARTING PARALLAX CORE"
+                android:text="STARTING KESHAVXOWNER CORE"
                 android:textColor="#FFE5E8EE"
                 android:textSize="10sp" />
         </LinearLayout>
