@@ -557,8 +557,7 @@ public final class ExternalAuthRouter {
         if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction())) {
             return false;
         }
-        Uri uri = intent.getData();
-        return isTwitterHttpsUri(uri);
+        return isTrustedTwitterOAuthUri(intent.getData());
     }
 
     public static boolean isTrustedTwitterOAuthUri(Uri uri) {
@@ -579,15 +578,31 @@ public final class ExternalAuthRouter {
 
     private static boolean isLikelyTwitterOAuthUri(Uri uri) {
         if (uri == null) return false;
-        String path = uri.getPath();
-        String query = uri.getQuery();
-        path = path == null ? "" : path.toLowerCase(Locale.US);
-        query = query == null ? "" : query.toLowerCase(Locale.US);
-        return path.contains("oauth")
-                || path.contains("authorize")
-                || path.contains("authenticate")
-                || query.contains("oauth_token=")
-                || query.contains("client_id=");
+        return isInteractiveTwitterOAuthRequest(uri.getPath(), uri.getQuery());
+    }
+
+    /**
+     * Only user-facing authorization endpoints may be opened in the Twitter/X app.
+     * GCloud payloads can also contain request-token and access-token API URLs;
+     * launching either of those as an Activity produces Twitter's generic 9999
+     * error and discards the original wrapper flow.
+     */
+    static boolean isInteractiveTwitterOAuthRequest(String path, String query) {
+        String safePath = path == null ? "" : path.toLowerCase(Locale.US);
+        String safeQuery = query == null ? "" : query.toLowerCase(Locale.US);
+
+        boolean interactiveEndpoint = safePath.endsWith("/oauth/authenticate")
+                || safePath.endsWith("/oauth/authenticate/")
+                || safePath.endsWith("/oauth/authorize")
+                || safePath.endsWith("/oauth/authorize/")
+                || safePath.endsWith("/oauth2/authorize")
+                || safePath.endsWith("/oauth2/authorize/");
+        if (!interactiveEndpoint) {
+            return false;
+        }
+
+        return safeQuery.contains("oauth_token=")
+                || safeQuery.contains("client_id=");
     }
 
     private static String trustedProviderPackage(Intent intent) {
