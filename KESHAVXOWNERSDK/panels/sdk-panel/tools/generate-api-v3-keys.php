@@ -7,7 +7,7 @@ if (PHP_SAPI !== 'cli') {
 }
 
 $target = $argv[1] ?? '';
-$keyId = $argv[2] ?? ('parallax-' . gmdate('Y-m'));
+$keyId = $argv[2] ?? ('keshavxowner-' . gmdate('Y-m'));
 if ($target === '' || preg_match('/^[A-Za-z0-9._-]{1,64}$/D', $keyId) !== 1) {
     fwrite(STDERR, "Usage: php tools/generate-api-v3-keys.php /absolute/private/directory [key-id]\n");
     exit(2);

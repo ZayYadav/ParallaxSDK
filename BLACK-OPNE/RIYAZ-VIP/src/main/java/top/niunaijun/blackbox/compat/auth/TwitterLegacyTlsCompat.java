@@ -25,7 +25,7 @@ import java.util.Set;
  * enabled.</p>
  */
 public final class TwitterLegacyTlsCompat {
-    private static final String TAG = "ParallaxTwitterCompat";
+    private static final String TAG = "KESHAVXOWNERTwitterCompat";
     private static final String TWITTER_OAUTH_ACTIVITY =
             "com.twitter.sdk.android.core.identity.OAuthActivity";
     private static final String TWITTER_OAUTH_CONTROLLER_SUFFIX = ".OAuthController";
@@ -72,7 +72,7 @@ public final class TwitterLegacyTlsCompat {
                     SystemClock.sleep(4L);
                 }
             }
-        }, "Parallax-TwitterTlsCompat");
+        }, "KESHAVXOWNER-TwitterTlsCompat");
         patchThread.setDaemon(true);
         patchThread.start();
     }

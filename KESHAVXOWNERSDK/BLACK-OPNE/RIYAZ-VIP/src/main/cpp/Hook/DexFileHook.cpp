@@ -8,7 +8,7 @@
 HOOK_JNI(jobject, openDexFileNative, JNIEnv *env, jobject obj,jstring sourceName, jstring outputName, jint flags,jobject loader, jobject elements) {
     const char *sourceNameC = env->GetStringUTFChars(sourceName, JNI_FALSE);
     ALOGD("openDexFileNative: %s", sourceNameC);
-    if(strstr(sourceNameC,"/PARALLAX_CORE/") != nullptr){
+    if(strstr(sourceNameC,"/KESHAVXOWNER_CORE/") != nullptr){
         DexFileHook::setFileReadonly(sourceNameC);
     }
     jobject orig = orig_openDexFileNative(env, obj,sourceName,outputName,flags,loader,elements);

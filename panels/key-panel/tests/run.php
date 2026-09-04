@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace ParallaxPanel;
+namespace KESHAVXOWNERPanel;
 
 define('PANEL_ROOT', dirname(__DIR__));
 require PANEL_ROOT . '/src/Support.php';

@@ -8,7 +8,7 @@ import java.lang.reflect.Method;
 /**
  * Android 16 intent-redirection compatibility helper.
  *
- * Parallax sometimes creates a replacement/shadow Intent below the normal
+ * KESHAVXOWNER sometimes creates a replacement/shadow Intent below the normal
  * Instrumentation preparation layer and then sends that new Intent to the
  * platform. Android 16 expects top-level outgoing Intents to have their nested
  * Intent keys collected so system_server can attach creator tokens to those

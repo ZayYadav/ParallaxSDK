@@ -3,14 +3,14 @@
     android:id="@+id/background"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/parallax_splash_background">
+    android:background="@drawable/keshavxowner_splash_background">
 
     <View
         android:id="@+id/ambientGlow"
         android:layout_width="440dp"
         android:layout_height="440dp"
         android:layout_gravity="center"
-        android:background="@drawable/parallax_splash_glow"
+        android:background="@drawable/keshavxowner_splash_glow"
         android:importantForAccessibility="no" />
 
     <FrameLayout
@@ -32,7 +32,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="32dp"
-            android:background="@drawable/parallax_status_chip"
+            android:background="@drawable/keshavxowner_status_chip"
             android:fontFamily="sans-serif-medium"
             android:gravity="center"
             android:letterSpacing="0.12"
@@ -49,7 +49,7 @@
             android:id="@+id/brandCard"
             android:layout_width="248dp"
             android:layout_height="248dp"
-            android:background="@drawable/parallax_logo_card"
+            android:background="@drawable/keshavxowner_logo_card"
             android:elevation="18dp">
 
             <ImageView
@@ -69,7 +69,7 @@
             android:layout_marginTop="-258dp"
             android:contentDescription="@null"
             android:importantForAccessibility="no"
-            android:src="@drawable/parallax_orbit_ring" />
+            android:src="@drawable/keshavxowner_orbit_ring" />
 
         <TextView
             android:id="@+id/brandTitle"
@@ -108,7 +108,7 @@
                 android:id="@+id/statusDot"
                 android:layout_width="7dp"
                 android:layout_height="7dp"
-                android:background="@drawable/parallax_status_dot" />
+                android:background="@drawable/keshavxowner_status_dot" />
 
             <TextView
                 android:id="@+id/progressText"
@@ -141,7 +141,7 @@
             android:indeterminate="false"
             android:max="100"
             android:progress="0"
-            android:progressDrawable="@drawable/parallax_progress_bar" />
+            android:progressDrawable="@drawable/keshavxowner_progress_bar" />
 
         <TextView
             android:layout_width="wrap_content"
