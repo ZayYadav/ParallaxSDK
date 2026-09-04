@@ -91,8 +91,16 @@ public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
                 return successor;
             }
 
+            Object pinCompat = createHostPinCompatResult(method);
+            if (pinCompat != null) {
+                Log.i(TAG,
+                        "legacy SSO removed; OAuth1 PIN compatibility available"
+                                + processSuffix());
+                return pinCompat;
+            }
+
             Log.w(TAG,
-                    "native SSO unavailable; no wire-compatible X authorization activity"
+                    "native SSO unavailable; no safe compatibility activity"
                             + processSuffix());
             return emptyResult(method);
         }
@@ -140,6 +148,42 @@ public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
             return ParceledListSliceCompat.create(resolves);
         }
         return resolves;
+    }
+
+    private static Object createHostPinCompatResult(Method queryMethod) {
+        try {
+            if (BlackBoxCore.getContext() == null) {
+                return null;
+            }
+            ComponentName component = new ComponentName(
+                    BlackBoxCore.getHostPkg(),
+                    TwitterLegacyPinAuthActivity.class.getName());
+            ActivityInfo activityInfo = BlackBoxCore.getContext()
+                    .getPackageManager()
+                    .getActivityInfo(component, 0);
+            if (activityInfo == null
+                    || !BlackBoxCore.getHostPkg().equals(activityInfo.packageName)
+                    || !TwitterLegacyPinAuthActivity.class.getName().equals(activityInfo.name)
+                    || !activityInfo.enabled
+                    || (activityInfo.applicationInfo != null
+                    && !activityInfo.applicationInfo.enabled)) {
+                return null;
+            }
+
+            ResolveInfo resolveInfo = new ResolveInfo();
+            resolveInfo.activityInfo = activityInfo;
+            resolveInfo.resolvePackageName = activityInfo.packageName;
+            resolveInfo.isDefault = true;
+            List<ResolveInfo> resolves = Collections.singletonList(resolveInfo);
+            if (ParceledListSliceCompat.isReturnParceledListSlice(queryMethod)) {
+                return ParceledListSliceCompat.create(resolves);
+            }
+            return resolves;
+        } catch (Throwable error) {
+            Log.w(TAG, "OAuth1 PIN compatibility lookup failed ("
+                    + rootType(error) + ")" + processSuffix());
+            return null;
+        }
     }
 
     private static ActivityInfo resolveRealActivityInfo(
