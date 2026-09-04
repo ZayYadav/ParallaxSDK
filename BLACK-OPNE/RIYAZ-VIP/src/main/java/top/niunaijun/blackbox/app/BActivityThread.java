@@ -199,7 +199,7 @@ public class BActivityThread extends IBActivityThread.Stub {
         if (!isInit()) bindApplication(serviceInfo.packageName, serviceInfo.processName);
         try {
             Service service = (Service) BRLoadedApk.get(this.mBoundApplication.info).getClassLoader().loadClass(serviceInfo.name).newInstance();
-            Context context = BlackBoxCore.getContext().createPackageContext(serviceInfo.packageName, Context.CONTEXT_INCLUDE_CODE | Context.CONTEXT_IGNORE_SECURITY);
+            Context context = resolveComponentContext(serviceInfo.packageName);
             BRContextImpl.get(context).setOuterContext(service);
             BRService.get(service).attach(context, BlackBoxCore.mainThread(), serviceInfo.name,token, this.mInitialApplication, BRActivityManagerNative.get().getDefault());
             ContextCompat.fix(context);
@@ -215,7 +215,7 @@ public class BActivityThread extends IBActivityThread.Stub {
         if (!isInit()) bindApplication(serviceInfo.packageName, serviceInfo.processName);
         try {
             JobService service = (JobService) BRLoadedApk.get(this.mBoundApplication.info).getClassLoader().loadClass(serviceInfo.name).newInstance();
-            Context context = BlackBoxCore.getContext().createPackageContext(serviceInfo.packageName, Context.CONTEXT_INCLUDE_CODE | Context.CONTEXT_IGNORE_SECURITY);
+            Context context = resolveComponentContext(serviceInfo.packageName);
             BRContextImpl.get(context).setOuterContext(service);
             BRService.get(service).attach(context, BlackBoxCore.mainThread(), serviceInfo.name,getActivityThread(), this.mInitialApplication, BRActivityManagerNative.get().getDefault());
             ContextCompat.fix(context);
@@ -226,6 +226,43 @@ public class BActivityThread extends IBActivityThread.Stub {
             Log.e(TAG, "error", e);
             throw new RuntimeException("Unable to create JobService " + serviceInfo.name, e);
         }
+    }
+
+    /**
+     * Components that belong to the currently bound virtual package must reuse
+     * the guest ContextImpl created during bindApplication(). Asking Android's
+     * host PackageManager to create that context again is incorrect: on Android
+     * 11+ package visibility (and especially OEM Android 16 builds) can make a
+     * perfectly valid virtual package invisible to the Loader and throw
+     * NameNotFoundException. The already-bound base context is backed by the
+     * guest LoadedApk and is the authoritative context for its services/jobs.
+     */
+    private Context resolveComponentContext(String componentPackage)
+            throws PackageManager.NameNotFoundException {
+        String boundPackage = mBoundApplication != null
+                && mBoundApplication.appInfo != null
+                ? mBoundApplication.appInfo.packageName : null;
+
+        if (isBoundComponentPackage(componentPackage, boundPackage)) {
+            Application application = mInitialApplication;
+            Context context = application == null ? null : application.getBaseContext();
+            if (context == null) {
+                throw new IllegalStateException(
+                        "Bound application context unavailable for " + componentPackage);
+            }
+            return context;
+        }
+
+        // Cross-package components should normally have been routed to the real
+        // provider before reaching the virtual dispatcher. Keep the historical
+        // system-package fallback for that exceptional case only.
+        return BlackBoxCore.getContext().createPackageContext(
+                componentPackage,
+                Context.CONTEXT_INCLUDE_CODE | Context.CONTEXT_IGNORE_SECURITY);
+    }
+
+    static boolean isBoundComponentPackage(String componentPackage, String boundPackage) {
+        return componentPackage != null && componentPackage.equals(boundPackage);
     }
 
     public void bindApplication(final String packageName, final String processName) {
