@@ -1,11 +1,13 @@
 package top.niunaijun.blackbox.compat.auth;
 
+import android.app.PendingIntent;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 
@@ -14,6 +16,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.lsposed.lsparanoid.Obfuscate;
 
@@ -92,6 +95,10 @@ public final class ExternalAuthRouter {
             "top.niunaijun.blackbox.auth.RESULT_DELIVERED";
     public static final String EXTRA_MANUAL_RESULT_RELAY =
             "top.niunaijun.blackbox.auth.MANUAL_RESULT_RELAY";
+    public static final String EXTRA_INTERNAL_OPAQUE_PROVIDER_SENDER =
+            "top.niunaijun.blackbox.auth.INTERNAL_OPAQUE_PROVIDER_SENDER";
+    public static final String EXTRA_VALIDATED_PROVIDER_PACKAGE =
+            "top.niunaijun.blackbox.auth.VALIDATED_PROVIDER_PACKAGE";
 
     public static final String METHOD_DELIVER_ACTIVITY_RESULT =
             "_Black_|_auth_activity_result_";
@@ -121,6 +128,8 @@ public final class ExternalAuthRouter {
             "com.x.android",
             "com.twitter.android.lite"
     };
+
+    private static final AtomicInteger NEXT_PENDING_REQUEST = new AtomicInteger(0x4300);
 
     private ExternalAuthRouter() {
     }
@@ -235,16 +244,66 @@ public final class ExternalAuthRouter {
         if (providerIntent.getComponent() == null && providerIntent.getPackage() == null) {
             providerIntent.setPackage(providerPackage);
         }
-        providerIntent.putExtra(EXTRA_DIRECT_PROVIDER_DISPATCH, true);
+        final boolean googleNative = isGoogleNativeProvider(providerPackage);
+        Intent bridge = googleNative
+                ? createGoogleNativeBridge(resultTo, resultWho, requestCode, virtualPackage, bpid)
+                : createBaseBridge(resultTo, resultWho, requestCode, virtualPackage, bpid);
 
-        Intent bridge = createBaseBridge(
-                resultTo, resultWho, requestCode, virtualPackage, bpid);
-        bridge.putExtra(EXTRA_PROVIDER_INTENT, providerIntent);
+        IntentSender opaqueSender = googleNative ? createOpaqueProviderSender(providerIntent) : null;
+        if (opaqueSender != null) {
+            bridge.putExtra(EXTRA_PROVIDER_INTENT_SENDER, opaqueSender);
+            bridge.putExtra(EXTRA_INTERNAL_OPAQUE_PROVIDER_SENDER, true);
+            bridge.putExtra(EXTRA_VALIDATED_PROVIDER_PACKAGE, providerPackage);
+        } else {
+            providerIntent.putExtra(EXTRA_DIRECT_PROVIDER_DISPATCH, true);
+            bridge.putExtra(EXTRA_PROVIDER_INTENT, providerIntent);
+        }
         bridge.addFlags(source.getFlags() & (
                 Intent.FLAG_ACTIVITY_NO_ANIMATION
                         | Intent.FLAG_ACTIVITY_CLEAR_TOP
                         | Intent.FLAG_ACTIVITY_SINGLE_TOP));
         return prepareBridgeForLaunch(bridge);
+    }
+
+    private static boolean isGoogleNativeProvider(String packageName) {
+        return "com.google.android.gms".equals(packageName)
+                || "com.google.android.play.games".equals(packageName);
+    }
+
+    private static IntentSender createOpaqueProviderSender(Intent providerIntent) {
+        try {
+            if (providerIntent == null || BlackBoxCore.getContext() == null) return null;
+            int request = NEXT_PENDING_REQUEST.getAndIncrement();
+            if (request <= 0) {
+                NEXT_PENDING_REQUEST.set(0x4300);
+                request = NEXT_PENDING_REQUEST.getAndIncrement();
+            }
+            int flags = PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_CANCEL_CURRENT;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                flags |= PendingIntent.FLAG_IMMUTABLE;
+            }
+            PendingIntent pendingIntent = PendingIntent.getActivity(
+                    BlackBoxCore.getContext(), request, providerIntent, flags);
+            return pendingIntent == null ? null : pendingIntent.getIntentSender();
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static Intent createGoogleNativeBridge(
+            IBinder resultTo,
+            String resultWho,
+            int requestCode,
+            String virtualPackage,
+            int bpid) {
+        Intent bridge = new Intent();
+        bridge.setComponent(new ComponentName(
+                BlackBoxCore.getHostPkg(), NativeAuthBridgeActivity.class.getName()));
+        bridge.putExtra(EXTRA_EXTERNAL_AUTH, true);
+        bridge.putExtra(EXTRA_BPID, bpid);
+        bridge.putExtra(EXTRA_USER_ID, BActivityThread.getUserId());
+        putResultTarget(bridge, resultTo, resultWho, requestCode, virtualPackage);
+        return bridge;
     }
 
     public static Intent createIntentSenderBridgeIntent(
