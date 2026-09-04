@@ -1,6 +1,6 @@
-# Parallax Loader
+# KESHAVXOWNER Loader
 
-Android loader application for the ParallaxCore SDK.
+Android loader application for the KESHAVXOWNERCore SDK.
 
 ## Compatibility
 
@@ -12,13 +12,13 @@ Android loader application for the ParallaxCore SDK.
 | Native page sizes | 4 KB and 16 KB |
 | Build toolchain | AGP 8.11.1, Gradle 8.13, JDK 17, NDK 27.2 |
 
-Parallax Loader intentionally produces a single 64-bit ARM APK. Its
+KESHAVXOWNER Loader intentionally produces a single 64-bit ARM APK. Its
 SDK AAR can still contain additional architectures, but the installable loader
 does not package 32-bit ARM, x86, or x86_64 native libraries.
 
 ## Native artifact contract
 
-The primary downloaded artifact is named `Parallax.so`. Downloads must use
+The primary downloaded artifact is named `KESHAVXOWNER.so`. Downloads must use
 HTTPS and contain a valid ELF file with that exact name. The app stages accepted
 artifacts in its private no-backup directory, applies owner-only permissions,
 and commits copies atomically. Debug logs also remain in private app storage.
@@ -29,7 +29,7 @@ project does not attempt to tamper with linker or process inspection APIs.
 ## Build
 
 Install JDK 17, Android SDK Platform 36, and NDK 27.2.12479018. Build the SDK
-AAR first, copy it to `app/libs/ParallaxCore-release.aar`, and then run:
+AAR first, copy it to `app/libs/KESHAVXOWNERCore-release.aar`, and then run:
 
 ```bash
 ./gradlew :app:assembleRelease
@@ -44,7 +44,7 @@ The CI workflow performs both stages automatically.
 - Runtime status shows the Android API level and the device ABI list.
 - License values are encrypted with AES-GCM using an app-scoped Android
   Keystore key. Existing plaintext values are migrated after the first launch.
-- Login is pinned to `https://parallaxloader.parallaxserver.online/api/v2/connect` and the `PUBG`
+- Login is pinned to `https://keshavxownerloader.keshavxownerserver.online/api/v2/connect` and the `PUBG`
   game identifier used by the panel's `keys_code` inventory. The
   endpoint and game cannot be replaced through Gradle properties or runtime
   configuration.
@@ -59,7 +59,7 @@ The CI workflow performs both stages automatically.
   download, launch, and floating-service actions fail closed when the key
   expires, after a reboot, or when protected state cannot be decrypted.
 - Release CI and direct release tasks require valid
-  `PARALLAX_API_PUBLIC_KEY_B64` and `PARALLAX_TLS_PINS` configuration. No shared
+  `KESHAVXOWNER_API_PUBLIC_KEY_B64` and `KESHAVXOWNER_TLS_PINS` configuration. No shared
   licensing token is compiled into the Loader.
 - Release builds validate the exact active signing-certificate set across three
   independent paths: PackageManager metadata, a raw-file cryptographic APK

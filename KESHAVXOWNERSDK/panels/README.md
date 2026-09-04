@@ -1,6 +1,6 @@
-# Parallax Panel Sources
+# KESHAVXOWNER Panel Sources
 
-This directory contains the sanitized source packages for the two Parallax
+This directory contains the sanitized source packages for the two KESHAVXOWNER
 licensing panels. Live credentials, runtime sessions, generated exports, and
 uploaded files are intentionally excluded from version control.
 

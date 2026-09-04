@@ -184,7 +184,7 @@ public class LoginActivity extends AppCompatActivity {
 
     static {
         try {
-            System.loadLibrary("ParallaxLoader");
+            System.loadLibrary("KESHAVXOWNERLoader");
         } catch (UnsatisfiedLinkError e) {
             FLog.error("Native library not loaded: " + e.getMessage());
         }
@@ -415,7 +415,7 @@ public class LoginActivity extends AppCompatActivity {
                 return;
             }
             if (!HostedLicenseClient.isSupportedActivationKey(key)) {
-                inputKey.setError("Use a key created in Parallax Control");
+                inputKey.setError("Use a key created in KESHAVXOWNER Control");
                 inputKey.requestFocus();
                 return;
             }

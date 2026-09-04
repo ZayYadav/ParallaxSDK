@@ -27,7 +27,7 @@ import top.niunaijun.blackbox.proxy.record.ProxyActivityRecord;
 public class ProxyActivity extends Activity {
 
     public static final String TAG = "ProxyActivity";
-    private static final String OAUTH_TAG = "ParallaxOAuth";
+    private static final String OAUTH_TAG = "KESHAVXOWNEROAuth";
     private static final int REQUEST_EXTERNAL_AUTH = 0x5042;
     private static final int REQUEST_BROWSER_AUTH = 0x5043;
 

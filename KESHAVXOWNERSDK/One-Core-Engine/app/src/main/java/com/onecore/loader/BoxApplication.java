@@ -54,9 +54,9 @@ public class BoxApplication extends Application {
 
     static {
         try {
-            System.loadLibrary("ParallaxLoader");
+            System.loadLibrary("KESHAVXOWNERLoader");
         } catch (UnsatisfiedLinkError error) {
-            FLog.error("ParallaxLoader native library could not be loaded: " + error.getMessage());
+            FLog.error("KESHAVXOWNERLoader native library could not be loaded: " + error.getMessage());
         }
     }
 
