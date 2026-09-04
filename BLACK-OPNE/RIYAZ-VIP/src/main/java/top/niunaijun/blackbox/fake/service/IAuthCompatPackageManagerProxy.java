@@ -44,6 +44,7 @@ import top.niunaijun.blackbox.utils.compat.ParceledListSliceCompat;
 public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
 
     private static final String TAG = "TwitterSSOCompat";
+    private static final String BGMI_PACKAGE = "com.pubg.imobile";
     private static final String TWITTER_PACKAGE = "com.twitter.android";
     private static final String TWITTER_SSO_ACTIVITY =
             "com.twitter.android.SingleSignOnActivity";
@@ -70,6 +71,16 @@ public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             Intent intent = findIntent(args);
             final boolean legacyTwitterProbe = isExactTwitterSsoProbe(intent);
+
+            // BGMI already contains a bundled Twitter OAuth WebView fallback.
+            // Do not expose or synthesize a native X SSO activity for its legacy
+            // Twitter Kit probe; an empty result makes Twitter Kit continue through
+            // its own in-app OAuth activity without changing any provider result.
+            if (legacyTwitterProbe && isBgmiGuest()) {
+                Log.i(TAG, "BGMI native Twitter SSO suppressed; using bundled WebView fallback"
+                        + processSuffix());
+                return emptyResult(method);
+            }
 
             // Preserve all already-shipped Facebook/Twitter compatibility behavior.
             Object result = existingCompat.hook(who, method, args);
@@ -265,6 +276,14 @@ public final class IAuthCompatPackageManagerProxy extends IPackageManagerProxy {
             }
         }
         return null;
+    }
+
+    private static boolean isBgmiGuest() {
+        try {
+            return BGMI_PACKAGE.equals(BActivityThread.getAppPackageName());
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private static boolean isExactTwitterSsoProbe(Intent intent) {
