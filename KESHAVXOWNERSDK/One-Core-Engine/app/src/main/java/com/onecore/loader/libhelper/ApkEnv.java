@@ -14,7 +14,7 @@ import org.lsposed.lsparanoid.Obfuscate;
 @Obfuscate
 public class ApkEnv {
 
-    private static final String PRIMARY_ARTIFACT_NAME = "Parallax.so";
+    private static final String PRIMARY_ARTIFACT_NAME = "KESHAVXOWNER.so";
     private static final String PRIVATE_ARTIFACT_DIRECTORY = "native";
     private static final ApkEnv INSTANCE = new ApkEnv();
 

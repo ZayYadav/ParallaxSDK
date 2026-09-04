@@ -622,7 +622,7 @@ header {
                 <button type="submit" name="disable_mfa" class="btn-back"><i class="fas fa-shield-xmark"></i> Disable MFA</button>
             </form>
         <?php elseif ($mfaSetupSecret !== ''): ?>
-            <?php $provisioningUri = MfaHelper::provisioningUri($mfaSetupSecret, (string) $user['username'], (string) ($P['panel_name'] ?? 'Parallax SDK')); ?>
+            <?php $provisioningUri = MfaHelper::provisioningUri($mfaSetupSecret, (string) $user['username'], (string) ($P['panel_name'] ?? 'KESHAVXOWNER SDK')); ?>
             <p class="mb-2">Enter this secret in Google Authenticator, Microsoft Authenticator, 1Password, or another TOTP app:</p>
             <code style="display:block;padding:14px;border-radius:12px;background:rgba(0,0,0,.35);color:#fde68a;word-break:break-all;margin-bottom:14px"><?= htmlspecialchars($mfaSetupSecret) ?></code>
             <details style="margin-bottom:18px"><summary style="cursor:pointer;color:#93c5fd">Show provisioning URI</summary><code style="display:block;word-break:break-all;margin-top:10px"><?= htmlspecialchars($provisioningUri) ?></code></details>

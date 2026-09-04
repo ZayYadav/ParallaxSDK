@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace ParallaxPanel;
+namespace KESHAVXOWNERPanel;
 
 use JsonException;
 use RuntimeException;
@@ -10,8 +10,8 @@ use RuntimeException;
 final class ApiCrypto
 {
     public const VERSION = 2;
-    public const REQUEST_AAD = 'parallax-license-v2-request';
-    public const RESPONSE_AAD_PREFIX = 'parallax-license-v2-response:';
+    public const REQUEST_AAD = 'keshavxowner-license-v2-request';
+    public const RESPONSE_AAD_PREFIX = 'keshavxowner-license-v2-response:';
     private const TAG_BYTES = 16;
     private const MAX_ENVELOPE_BYTES = 32768;
 

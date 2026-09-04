@@ -17,7 +17,7 @@ include $(PREBUILT_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 
-LOCAL_MODULE := ParallaxLoader
+LOCAL_MODULE := KESHAVXOWNERLoader
 
 LOCAL_SRC_FILES := main.cpp \
     NativeApkAttestation.cpp \

@@ -647,7 +647,7 @@ bool onecore_verify_native_text_integrity() {
         return false;
     }
     std::string path(info.dli_fname);
-    if (path.find("libParallaxLoader.so") == std::string::npos || path.find('!') != std::string::npos) {
+    if (path.find("libKESHAVXOWNERLoader.so") == std::string::npos || path.find('!') != std::string::npos) {
         return false;
     }
 

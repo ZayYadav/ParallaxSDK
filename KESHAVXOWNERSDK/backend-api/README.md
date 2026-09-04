@@ -141,7 +141,7 @@ account, D-U-N-S number, or Play Console fee.
 The Android API URL is already configured as:
 
 ```text
-https://onintigirty.parallaxserver.online
+https://onintigirty.keshavxownerserver.online
 ```
 
 ## Dashboard roles, referrals, and balances
@@ -302,7 +302,7 @@ Policy fields supported without redeployment:
   `MEETS_DEVICE_INTEGRITY`, or `MEETS_STRONG_INTEGRITY`
 - `require_licensed`: boolean
 
-Dashboard: `https://onintigirty.parallaxserver.online/admin_dashboard.php`
+Dashboard: `https://onintigirty.keshavxownerserver.online/admin_dashboard.php`
 
 ## Curl test workflow
 

@@ -125,7 +125,7 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
                     }
                 }
             }
-            showNotificationSafe("Parallax SDK Activation Failed", lastFailure.take(96))
+            showNotificationSafe("KESHAVXOWNER SDK Activation Failed", lastFailure.take(96))
         }
     }
 
@@ -177,7 +177,7 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
             .putInt("toggle_feature2", data.optInt("feature2", 0))
             .apply()
         nk.setHidden("online")
-        nk.Msg = "Parallax SDK Activated - Your SDK Activated And Your Protected Parallax Server"
+        nk.Msg = "KESHAVXOWNER SDK Activated - Your SDK Activated And Your Protected KESHAVXOWNER Server"
         renewalTask?.cancel(false)
         val renewAfter = maxOf(60L, leaseExpiresAt - serverTime - 60L)
         renewalTask = renewalExecutor.schedule({ activateSdk(licenseKey) }, renewAfter, TimeUnit.SECONDS)
@@ -193,7 +193,7 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
                 )
             }
         }
-        showNotificationSafe("Parallax SDK Activated", "Your SDK activated , Thanks for using Parallax SDK")
+        showNotificationSafe("KESHAVXOWNER SDK Activated", "Your SDK activated , Thanks for using KESHAVXOWNER SDK")
     }
 
     private fun isRetryable(throwable: Throwable): Boolean {
@@ -287,7 +287,7 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
                         
                         // Don't retry on specific errors
                         if (rc == 404 || rc == 403 || rc == 400) {
-                            showNotificationSafe("Parallax SDK Activation Failed", "SERVER ERROR: $rc")
+                            showNotificationSafe("KESHAVXOWNER SDK Activation Failed", "SERVER ERROR: $rc")
                             success = true
                             return@execute
                         }
@@ -299,7 +299,7 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
                             Thread.sleep(3000)
                             continue
                         } else {
-                            showNotificationSafe("Parallax SDK Activation Failed", "SERVER ERROR: $rc")
+                            showNotificationSafe("KESHAVXOWNER SDK Activation Failed", "SERVER ERROR: $rc")
                             success = true
                             return@execute
                         }
@@ -337,7 +337,7 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
                         } else {
                             nk.setHidden("Offline")
                             nk.Msg = "Error: Empty response from server"
-                            showNotificationSafe("Parallax SDK Activation Failed", "EMPTY RESPONSE")
+                            showNotificationSafe("KESHAVXOWNER SDK Activation Failed", "EMPTY RESPONSE")
                             success = true
                             return@execute
                         }
@@ -400,7 +400,7 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
                     // ===== PROCEED WITH NORMAL LICENSE CHECK =====
                     if (data.getString("status") == "success") {
                         nk.setHidden("online")
-                        nk.Msg = "✅ Parallax SDK Activated Successfully"
+                        nk.Msg = "✅ KESHAVXOWNER SDK Activated Successfully"
 
                         val exp = data.optString("expiry", "")
                         val toggleExpiryValue = data.optInt("toggle_expiry", 0)
@@ -471,7 +471,7 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
                         }
 
                         if (toggleExpiryValue == 1 && exp.isNotEmpty()) {
-                            showNotificationSafe("✅ Parallax SDK Activated", "Expiry: $exp")
+                            showNotificationSafe("✅ KESHAVXOWNER SDK Activated", "Expiry: $exp")
                         }
 
                         if (feature1 == 1) isDaemon(true) else isDaemon(false)
@@ -554,7 +554,7 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
                     } else {
                         nk.setHidden("Offline")
                         nk.Msg = "Error: Connection timeout"
-                        showNotificationSafe("Parallax SDK Activation Failed", "CONNECTION TIMEOUT")
+                        showNotificationSafe("KESHAVXOWNER SDK Activation Failed", "CONNECTION TIMEOUT")
                         success = true
                         return@execute
                     }
@@ -568,7 +568,7 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
                     } else {
                         nk.setHidden("Offline")
                         nk.Msg = "Error: Cannot connect to server"
-                        showNotificationSafe("Parallax SDK Activation Failed", "NO CONNECTION")
+                        showNotificationSafe("KESHAVXOWNER SDK Activation Failed", "NO CONNECTION")
                         success = true
                         return@execute
                     }
@@ -576,7 +576,7 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
                     lastError = "Invalid server URL"
                     nk.setHidden("Offline")
                     nk.Msg = "Error: Invalid server URL"
-                    showNotificationSafe("Parallax SDK Activation Failed", "INVALID URL")
+                    showNotificationSafe("KESHAVXOWNER SDK Activation Failed", "INVALID URL")
                     success = true
                     return@execute
                 } catch (e: Exception) {
@@ -589,7 +589,7 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
                     } else {
                         nk.setHidden("Offline")
                         nk.Msg = "Unexpected Error: ${e.message}"
-                        showNotificationSafe("Parallax SDK Activation Failed", "ERROR")
+                        showNotificationSafe("KESHAVXOWNER SDK Activation Failed", "ERROR")
                         success = true
                         return@execute
                     }
@@ -607,7 +607,7 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
                 nk.setHidden("Offline")
                 val finalError = lastError ?: "Unknown error"
                 nk.Msg = "Failed after $MAX_RETRIES attempts: $finalError"
-                showNotificationSafe("Parallax SDK Activation Failed", "MAX RETRIES EXCEEDED")
+                showNotificationSafe("KESHAVXOWNER SDK Activation Failed", "MAX RETRIES EXCEEDED")
             }
         }
     }
