@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace KESHAVXOWNERPanel;
+namespace ParallaxPanel;
 
 use PDO;
 

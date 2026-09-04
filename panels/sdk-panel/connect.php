@@ -490,7 +490,7 @@ $response = [
     'feature1' => (int) ($license['daemon'] ?? 0),
     'feature2' => (int) ($license['hide_root'] ?? 0),
     'features' => (object) $featurePolicy,
-    'message' => 'KESHAVXOWNER Access Active',
+    'message' => 'PARALLAX Access Active',
 ];
 if ($apiVersion === 3) {
     $response['lease_expires_at'] = $leaseExpiresAt;

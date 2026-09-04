@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace KESHAVXOWNERPanel;
+namespace ParallaxPanel;
 
 final class View
 {
@@ -32,8 +32,8 @@ final class View
         $asset = url('assets/app.css');
         echo '<!doctype html><html lang="en"><head><meta charset="utf-8">'
             . '<meta name="viewport" content="width=device-width,initial-scale=1">'
-            . '<title>' . h($title) . ' · KESHAVXOWNER Panel</title><link rel="stylesheet" href="' . $asset . '"></head>'
-            . '<body><header><a class="brand" href="' . url('') . '">KESHAVXOWNER <b>CONTROL</b></a>'
+            . '<title>' . h($title) . ' · Parallax Panel</title><link rel="stylesheet" href="' . $asset . '"></head>'
+            . '<body><header><a class="brand" href="' . url('') . '">PARALLAX <b>CONTROL</b></a>'
             . $username . '</header>' . $nav . '<main>' . $notice . $body . '</main>'
             . '<footer>Standalone PHP control panel · UTC server time ' . h(gmdate('Y-m-d H:i:s')) . '</footer></body></html>';
         exit;

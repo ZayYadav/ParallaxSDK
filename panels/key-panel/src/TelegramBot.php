@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace KESHAVXOWNERPanel;
+namespace ParallaxPanel;
 
 use JsonException;
 use PDO;
@@ -221,7 +221,7 @@ final class TelegramBot
     /** @param array<string,mixed> $user */
     private function menuText(array $user): string
     {
-        return "KESHAVXOWNER Control\nSigned in: {$user['username']} ({$user['role']})\nChoose a secure action:";
+        return "Parallax Control\nSigned in: {$user['username']} ({$user['role']})\nChoose a secure action:";
     }
 
     /** @return array<string,mixed> */

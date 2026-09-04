@@ -1,4 +1,4 @@
-# KESHAVXOWNER Standalone PHP Control Panel
+# Parallax Standalone PHP Control Panel
 
 Complete shared-hosting control panel with no CodeIgniter, Composer, Laravel,
 Node.js, or vendor dependency.
@@ -64,7 +64,7 @@ both the `.env` allowlist and an active linked owner/admin account are accepted.
    APP_URL=https://panel.example.com
    APP_BASE_PATH=
    APP_TIMEZONE=UTC
-   SESSION_NAME=keshavxowner_panel
+   SESSION_NAME=parallax_panel
    SETUP_TOKEN=<generated value>
    TRUSTED_PROXY_IPS=
 
@@ -122,8 +122,8 @@ Open panel **Settings** and copy the displayed API public key. In GitHub open:
 
 Create:
 
-- `KESHAVXOWNER_API_PUBLIC_KEY_B64`: public key copied from panel Settings
-- `KESHAVXOWNER_TLS_PINS`: comma-separated OkHttp pins for the live licensing host
+- `PARALLAX_API_PUBLIC_KEY_B64`: public key copied from panel Settings
+- `PARALLAX_TLS_PINS`: comma-separated OkHttp pins for the live licensing host
 
 On hosting, `EXPECTED_ANDROID_PACKAGE` and
 `EXPECTED_ANDROID_CERT_SHA256` bind encrypted requests to the intended package
@@ -133,7 +133,7 @@ for a planned signing-key rotation.
 Get the current leaf-certificate pin from the hosting terminal:
 
 ```bash
-php tools/tls-pin.php keshavxownerloader.keshavxownerserver.online
+php tools/tls-pin.php parallaxloader.parallaxserver.online
 ```
 
 Example format:
@@ -196,8 +196,8 @@ only.
 The Actions workflow requires these repository variables for push/manual
 release builds:
 
-- `KESHAVXOWNER_API_PUBLIC_KEY_B64`
-- `KESHAVXOWNER_TLS_PINS`
+- `PARALLAX_API_PUBLIC_KEY_B64`
+- `PARALLAX_TLS_PINS`
 
 Existing Android signing secrets remain required for a stable production
 identity:

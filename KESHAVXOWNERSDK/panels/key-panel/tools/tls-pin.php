@@ -7,7 +7,7 @@ if (PHP_SAPI !== 'cli') {
     exit;
 }
 
-$host = $argv[1] ?? 'keshavxownerserver.online';
+$host = $argv[1] ?? 'parallaxserver.online';
 if (preg_match('/^[A-Za-z0-9.-]{1,253}$/D', $host) !== 1) {
     fwrite(STDERR, "Invalid hostname.\n");
     exit(1);

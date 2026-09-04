@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace KESHAVXOWNERPanel;
+namespace ParallaxPanel;
 
 use DateTimeImmutable;
 use DateTimeZone;
@@ -343,8 +343,8 @@ final class App
             }
             $maintenance = isset($_POST['maintenance']) ? 'on' : 'off';
             $message = substr(trim((string) ($_POST['message'] ?? 'Maintenance in progress')), 0, 255);
-            $modname = substr(trim((string) ($_POST['modname'] ?? 'KESHAVXOWNER')), 0, 100);
-            $credit = substr(trim((string) ($_POST['credit'] ?? 'KESHAVXOWNER')), 0, 255);
+            $modname = substr(trim((string) ($_POST['modname'] ?? 'Parallax')), 0, 100);
+            $credit = substr(trim((string) ($_POST['credit'] ?? 'Parallax')), 0, 255);
             $features = ['ESP','Item','AIM','SilentAim','BulletTrack','Floating','Memory','Setting'];
             $this->db->beginTransaction();
             $this->db->prepare('UPDATE onoff SET status=?,myinput=? WHERE id=1')->execute([$maintenance, $message]);
@@ -400,7 +400,7 @@ final class App
             . '<div class="grid">' . $checks . '</div><p><button type="submit">Save settings</button></p></fieldset></form></section>'
             . $generationOptions
             . '<section class="card"><h2>Encrypted loader API</h2><p>Copy this public key to the GitHub repository variable '
-            . '<code>KESHAVXOWNER_API_PUBLIC_KEY_B64</code>. The private key remains protected in <code>runtime/</code>.</p>'
+            . '<code>PARALLAX_API_PUBLIC_KEY_B64</code>. The private key remains protected in <code>runtime/</code>.</p>'
             . '<textarea class="mono" rows="6" readonly>' . h($publicKey) . '</textarea></section>'
             . '<section class="card"><h2>Telegram control bot</h2><p>Status: <span class="pill '
             . ($telegramReady ? 'active">configured' : 'blocked">not configured') . '</span></p>'

@@ -74,7 +74,7 @@ assertTrue(
 );
 assertTrue(
     SelfHostedVerifier::isActivationKeyFormat(
-        SelfHostedVerifier::generateActivationKey('KESHAVXOWNER')
+        SelfHostedVerifier::generateActivationKey('PARALLAX')
     ),
     'Custom activation-key prefix was rejected'
 );

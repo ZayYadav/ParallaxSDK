@@ -287,13 +287,13 @@ INSERT INTO server_settings (setting_key,setting_value,broadcast_version) VALUES
 ON DUPLICATE KEY UPDATE setting_key=VALUES(setting_key);
 
 INSERT INTO panel_settings (setting_key,setting_value) VALUES
-    ('panel_name','KESHAVXOWNER SDK Control'),
-    ('panel_tagline','KESHAVXOWNER SDK Access Portal'),
-    ('login_title','KESHAVXOWNER Login'),
+    ('panel_name','Parallax SDK Control'),
+    ('panel_tagline','Parallax SDK Access Portal'),
+    ('login_title','Parallax Login'),
     ('login_subtitle','Secure Sign In'),
-    ('login_badge_text','KESHAVXOWNER'),
-    ('dashboard_title','KESHAVXOWNER SDK DASHBOARD'),
-    ('watermark_text','KESHAVXOWNER SECURED'),
+    ('login_badge_text','Parallax'),
+    ('dashboard_title','PARALLAX SDK DASHBOARD'),
+    ('watermark_text','PARALLAX SECURED'),
     ('key_prefix','SDK'),
     ('theme_primary','#C9A84C'),
     ('theme_accent','#4F8EF7'),
@@ -302,5 +302,5 @@ INSERT INTO panel_settings (setting_key,setting_value) VALUES
     ('theme_bg3','#1e3a8a'),
     ('theme_bg4','#312e81'),
     ('sidebar_logo_url','logo.png'),
-    ('footer_text','KESHAVXOWNER')
+    ('footer_text','Parallax')
 ON DUPLICATE KEY UPDATE setting_key=VALUES(setting_key);

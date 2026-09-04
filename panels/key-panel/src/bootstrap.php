@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace KESHAVXOWNERPanel;
+namespace ParallaxPanel;
 
 define('PANEL_ROOT', dirname(__DIR__));
 
@@ -43,7 +43,7 @@ if ($production && !$secure) {
     exit('HTTPS is required.');
 }
 
-$sessionName = Env::get('SESSION_NAME', 'keshavxowner_panel');
+$sessionName = Env::get('SESSION_NAME', 'parallax_panel');
 if (preg_match('/^[A-Za-z0-9_-]{1,64}$/D', $sessionName) !== 1) {
     http_response_code(500);
     exit('SESSION_NAME is invalid.');

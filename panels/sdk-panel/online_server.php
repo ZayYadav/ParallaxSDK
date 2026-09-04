@@ -20,7 +20,7 @@ $role_dash = $user_data['role'] ?? 'user';
 $unread_ann_count = count_unread_announcements($conn, $user_id);
 
 // Check if user is the designated owner
-if ($current_user !== 'KESHAVXOWNEROwner') {
+if ($current_user !== 'ParallaxOwner') {
     // Not owner - show access denied page
     ?>
     <!DOCTYPE html>
