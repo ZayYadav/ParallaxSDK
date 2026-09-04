@@ -1,4 +1,4 @@
-# Parallax SDK Panel - secure API v3
+# KESHAVXOWNER SDK Panel - secure API v3
 
 This panel and `BLACK-OPNE/RIYAZ-VIP` now share one fail-closed activation
 contract. API v3 does not place a server secret in the APK.
@@ -6,7 +6,7 @@ contract. API v3 does not place a server secret in the APK.
 ## Security model
 
 - HTTPS is mandatory and the SDK accepts only
-  `https://parallaxloadersdk.parallaxserver.online/connect.php`.
+  `https://keshavxownerloadersdk.keshavxownerserver.online/connect.php`.
 - Each activation uses a fresh P-256 ECDH key and AES-256-GCM request key.
 - The panel signs every encrypted response with a separate P-256 key. A swapped
   panel cannot forge an accepted response.
@@ -40,7 +40,7 @@ Security decisions no longer depend on `strlen` or another hookable C helper.
 3. Generate keys outside `public_html`:
 
    ```text
-   php tools/generate-api-v3-keys.php /home/ACCOUNT/private parallax-2026-09
+   php tools/generate-api-v3-keys.php /home/ACCOUNT/private keshavxowner-2026-09
    ```
 
 4. Put the printed `PANEL_DATA_KEY` and `API_V3_KEYS` entries in the private
@@ -88,7 +88,7 @@ php panels/sdk-panel/tests/security-self-test.php
 Run the Android checks from `BLACK-OPNE`:
 
 ```text
-./gradlew :ParallaxCore:testDebugUnitTest :ParallaxCore:assembleRelease
+./gradlew :KESHAVXOWNERCore:testDebugUnitTest :KESHAVXOWNERCore:assembleRelease
 ```
 
 The panel requires PHP 8.1+ with `mysqli`, `openssl`, `json` and `mbstring`.

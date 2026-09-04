@@ -1,6 +1,6 @@
 # TLS pin rotation
 
-OneCore Loader keeps OkHttp certificate pinning enabled for `parallaxloader.parallaxserver.online`.
+OneCore Loader keeps OkHttp certificate pinning enabled for `keshavxownerloader.keshavxownerserver.online`.
 
 ## Effective trust set
 
@@ -10,14 +10,14 @@ The APK always contains the current source-controlled production SPKI pin:
 sha256/Ina/GY9COYngSpB7Ht+asGkJ5LV99jpBHYz11jXRSWM=
 ```
 
-`PARALLAX_TLS_PINS` from GitHub Actions/Gradle is **additive**. Any valid pins supplied there are merged with the source-controlled pin and de-duplicated before `BuildConfig.PARALLAX_TLS_PINS` is generated.
+`KESHAVXOWNER_TLS_PINS` from GitHub Actions/Gradle is **additive**. Any valid pins supplied there are merged with the source-controlled pin and de-duplicated before `BuildConfig.KESHAVXOWNER_TLS_PINS` is generated.
 
 This prevents a syntactically valid typo in a repository variable from removing the known-good production trust anchor from a release APK.
 
 ## Rotation procedure
 
 1. Before changing the server certificate, calculate the new certificate/intermediate SPKI pin using a trusted connection.
-2. Add the new pin to the repository variable `PARALLAX_TLS_PINS` while the old source-controlled pin is still valid.
+2. Add the new pin to the repository variable `KESHAVXOWNER_TLS_PINS` while the old source-controlled pin is still valid.
 3. Build and deploy a Loader containing both pins.
 4. Rotate the server certificate.
 5. Confirm Loader activation succeeds on the new certificate.

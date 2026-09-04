@@ -17,9 +17,9 @@ import top.niunaijun.blackbox.core.system.api.MetaActivationManager;
 
 public class BEnvironment {
    
-  //  private static final File sExternalVirtualRoot = BlackBoxCore.getContext().getExternalFilesDir("ParallaxCore");
+  //  private static final File sExternalVirtualRoot = BlackBoxCore.getContext().getExternalFilesDir("KESHAVXOWNERCore");
     private static final File sVBoxRoot = BlackBoxCore.getContext().getFilesDir();
-  //  private static final File sVBoxRoot = new File(BlackBoxCore.getContext().getCacheDir().getParent(), "ParallaxCore");
+  //  private static final File sVBoxRoot = new File(BlackBoxCore.getContext().getCacheDir().getParent(), "KESHAVXOWNERCore");
     private static final File sExternalVBoxRoot = Environment.getExternalStorageDirectory();
     
 	public static void load() {

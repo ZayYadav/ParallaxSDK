@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace ParallaxPanel;
+namespace KESHAVXOWNERPanel;
 
 if (PHP_SAPI !== 'cli') {
     http_response_code(404);

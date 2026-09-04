@@ -77,7 +77,7 @@ int inspect_maps() {
         if (contains_any(line, suspicious)) {
             result |= GUARD_INJECTED_MAP;
         }
-        if (line.find("libParallaxLoader.so") != std::string::npos) {
+        if (line.find("libKESHAVXOWNERLoader.so") != std::string::npos) {
             std::istringstream parser(line);
             std::string range;
             std::string permissions;
@@ -144,20 +144,20 @@ bool package_matches(JNIEnv *env, jstring packageName) {
 extern "C"
 JNIEXPORT jstring JNICALL
 com_onecore_loader_activity_LoginActivity_GetKey(JNIEnv *env, jclass clazz) {
-    return env->NewStringUTF(OBFUSCATE("https://t.me/ParallaxOwner"));
+    return env->NewStringUTF(OBFUSCATE("https://t.me/KESHAVXOWNEROwner"));
 }
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_onecore_loader_security_NativeLicenseGuard_nativeConnectUrl(
         JNIEnv *env, jclass) {
     return env->NewStringUTF(OBFUSCATE(
-            "https://parallaxloader.parallaxserver.online/api/v2/connect"));
+            "https://keshavxownerloader.keshavxownerserver.online/api/v2/connect"));
 }
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_onecore_loader_security_NativeLicenseGuard_nativeConnectHost(
         JNIEnv *env, jclass) {
-    return env->NewStringUTF(OBFUSCATE("parallaxloader.parallaxserver.online"));
+    return env->NewStringUTF(OBFUSCATE("keshavxownerloader.keshavxownerserver.online"));
 }
 
 extern "C" JNIEXPORT jint JNICALL
@@ -464,5 +464,5 @@ Java_com_onecore_loader_floating_Overlay_getReady(JNIEnv *, jobject) {
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_onecore_loader_BoxApplication_BoxApp(JNIEnv* env, jobject thiz) {
-    return env->NewStringUTF(OBFUSCATE("PARALLAX"));
+    return env->NewStringUTF(OBFUSCATE("KESHAVXOWNER"));
 }

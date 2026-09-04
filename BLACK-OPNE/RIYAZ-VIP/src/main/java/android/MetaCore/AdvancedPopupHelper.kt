@@ -180,8 +180,7 @@ button{width:100%;height:48px;border:0;border-radius:15px;background:linear-grad
 <body>
 <main class="card">
   <header class="top">
-    <img class="logo" src="parallax_labs_brand.jpg" alt="Parallax Labs">
-    <div><div class="eyebrow">PARALLAX / ONECORE</div><div class="brand">Runtime access</div></div>
+<div><div class="eyebrow">KESHAVXOWNER / ONECORE</div><div class="brand">Runtime access</div></div>
   </header>
   <section class="hero">
     <div class="lock">
@@ -199,7 +198,7 @@ button{width:100%;height:48px;border:0;border-radius:15px;background:linear-grad
   </section>
   <div class="notice">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.6-2.9 8-7 10-4.1-2-7-5.4-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>
-    <span>Parallax Core supports API 24-36. Contact your authorized provider to renew access.</span>
+    <span>KESHAVXOWNER Core supports API 24-36. Contact your authorized provider to renew access.</span>
   </div>
   <div class="actions">
     <button type="button" onclick="Android.close()">Close securely</button>
