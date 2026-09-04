@@ -29,7 +29,7 @@ import javax.crypto.spec.SecretKeySpec
 import javax.net.ssl.HttpsURLConnection
 
 /**
- * Parallax activation API v3.
+ * KESHAVXOWNER activation API v3.
  *
  * The APK contains only server public keys. Every request uses a new ephemeral
  * ECDH key, every response is encrypted, and the panel signs the response with
@@ -115,7 +115,7 @@ internal class SecureSdkApiClient(private val context: Context) {
             connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
             connection.setRequestProperty("Accept", "application/json")
             connection.setRequestProperty("X-API-Version", "3")
-            connection.setRequestProperty("User-Agent", "ParallaxSDK/3.0")
+            connection.setRequestProperty("User-Agent", "KESHAVXOWNERSDK/3.0")
             val bodyBytes = requestEnvelope.toString().toByteArray(StandardCharsets.UTF_8)
             connection.setFixedLengthStreamingMode(bodyBytes.size)
             connection.outputStream.use { it.write(bodyBytes) }
@@ -297,7 +297,7 @@ internal class SecureSdkApiClient(private val context: Context) {
             0x2A, 0xBC.toByte(), 0x63, 0xA8.toByte(), 0xB4.toByte(), 0x99.toByte(), 0x8E.toByte(), 0x41,
             0x6A, 0xF1.toByte(), 0x1C, 0x02, 0xB7.toByte(), 0x29, 0x45, 0x6A,
         )
-        const val DEVICE_KEY_ALIAS = "parallax_sdk_device_proof_v3"
+        const val DEVICE_KEY_ALIAS = "keshavxowner_sdk_device_proof_v3"
         const val CONNECT_TIMEOUT_MS = 15_000
         const val READ_TIMEOUT_MS = 20_000
         const val MAX_RESPONSE_BYTES = 64 * 1024

@@ -1,4 +1,4 @@
-include ':ParallaxCore'
-project(':ParallaxCore').projectDir = file('RIYAZ-VIP')
+include ':KESHAVXOWNERCore'
+project(':KESHAVXOWNERCore').projectDir = file('RIYAZ-VIP')
 
-rootProject.name = "Parallax SDK"
+rootProject.name = "KESHAVXOWNER SDK"

@@ -31,7 +31,7 @@ import top.niunaijun.blackbox.utils.Slog;
 
 public class LauncherActivity extends Activity {
 
-    public static final String TAG = "ParallaxLaunch";
+    public static final String TAG = "KESHAVXOWNERLaunch";
     public static final String KEY_INTENT = "launch_intent";
     public static final String KEY_PKG = "launch_pkg";
     public static final String KEY_USER_ID = "launch_user_id";
@@ -173,7 +173,7 @@ public class LauncherActivity extends Activity {
                 Slog.e(TAG, "Unable to start isolated activity: " + throwable.getMessage());
                 mainHandler.post(this::finish);
             }
-        }, "ParallaxLaunch").start(), 680L);
+        }, "KESHAVXOWNERLaunch").start(), 680L);
     }
 
     private void animateStatus(TextView view, String value) {

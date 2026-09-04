@@ -57,14 +57,14 @@ CREATE TABLE IF NOT EXISTS onoff (
 
 CREATE TABLE IF NOT EXISTS modname (
     id TINYINT UNSIGNED NOT NULL,
-    modname VARCHAR(100) NOT NULL DEFAULT 'Parallax',
+    modname VARCHAR(100) NOT NULL DEFAULT 'KESHAVXOWNER',
     PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `_ftext` (
     id TINYINT UNSIGNED NOT NULL,
     `_status` VARCHAR(32) NOT NULL DEFAULT 'on',
-    `_ftext` VARCHAR(255) NOT NULL DEFAULT 'Parallax',
+    `_ftext` VARCHAR(255) NOT NULL DEFAULT 'KESHAVXOWNER',
     PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -126,8 +126,8 @@ CREATE TABLE IF NOT EXISTS audit_log (
 
 INSERT INTO onoff (id,status,myinput) VALUES (1,'off','Maintenance in progress')
     ON DUPLICATE KEY UPDATE id=VALUES(id);
-INSERT INTO modname (id,modname) VALUES (1,'Parallax') ON DUPLICATE KEY UPDATE id=VALUES(id);
-INSERT INTO `_ftext` (id,`_status`,`_ftext`) VALUES (1,'on','Parallax') ON DUPLICATE KEY UPDATE id=VALUES(id);
+INSERT INTO modname (id,modname) VALUES (1,'KESHAVXOWNER') ON DUPLICATE KEY UPDATE id=VALUES(id);
+INSERT INTO `_ftext` (id,`_status`,`_ftext`) VALUES (1,'on','KESHAVXOWNER') ON DUPLICATE KEY UPDATE id=VALUES(id);
 INSERT INTO `Feature` (id) VALUES (1) ON DUPLICATE KEY UPDATE id=VALUES(id);
 INSERT INTO key_generation_options (option_type,option_value,option_label,sort_order) VALUES
     ('game','PUBG','PUBG',1),

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
-  <title>Parallax SDK - Panel Endpoint Generator</title>
+  <title>KESHAVXOWNER SDK - Panel Endpoint Generator</title>
   <style>
     :root {
       color-scheme: dark;
@@ -90,7 +90,7 @@
   <main class="wrap">
     <section class="hero">
       <div>
-        <div class="eyebrow">Parallax SDK Security Tool</div>
+        <div class="eyebrow">KESHAVXOWNER SDK Security Tool</div>
         <h1>Panel endpoint generator</h1>
         <p class="lead">Enter the new HTTPS activation API URL. This offline page generates a random masked native representation, native FNV-1a integrity value, and the independent Java SHA-256 trust bytes required by the SDK.</p>
       </div>
@@ -154,7 +154,7 @@
       </div>
     </section>
 
-    <footer>Parallax SDK v3 - endpoint rotation helper. Runs entirely in this browser tab.</footer>
+    <footer>KESHAVXOWNER SDK v3 - endpoint rotation helper. Runs entirely in this browser tab.</footer>
   </main>
 
   <script>
@@ -223,7 +223,7 @@
           const kotlin = `// Generated independently from the same exact endpoint.\n// Replace ENDPOINT_SHA256 in SecureSdkApiClient.kt.\nval ENDPOINT_SHA256 = byteArrayOf(\n${formatKotlin(digest)}\n)`;
 
           const generatedAt = new Date().toISOString();
-          const record = `PARALLAX SDK PANEL ENDPOINT ROTATION\nGenerated: ${generatedAt}\nEndpoint: ${endpoint}\nUTF-8 length: ${plain.length}\nSHA-256: ${digestHex}\nFNV-1a 64: 0x${fnvHex}\n\n${cpp}\n\n${kotlin}\n`;
+          const record = `KESHAVXOWNER SDK PANEL ENDPOINT ROTATION\nGenerated: ${generatedAt}\nEndpoint: ${endpoint}\nUTF-8 length: ${plain.length}\nSHA-256: ${digestHex}\nFNV-1a 64: 0x${fnvHex}\n\n${cpp}\n\n${kotlin}\n`;
 
           document.getElementById('cppOutput').textContent = cpp;
           document.getElementById('kotlinOutput').textContent = kotlin;
@@ -271,7 +271,7 @@
         const blob = new Blob([latestRecord], { type: 'text/plain;charset=utf-8' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = 'parallax-panel-endpoint-rotation.txt';
+        link.download = 'keshavxowner-panel-endpoint-rotation.txt';
         link.click();
         setTimeout(() => URL.revokeObjectURL(link.href), 1000);
       });

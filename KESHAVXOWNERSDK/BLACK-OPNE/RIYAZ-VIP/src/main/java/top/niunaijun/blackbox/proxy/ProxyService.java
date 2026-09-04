@@ -66,7 +66,7 @@ public class ProxyService extends Service {
     }
 
     private void showNotification() {
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(getApplicationContext(), getPackageName() + ".parallax_core_proxy").setPriority(NotificationCompat.PRIORITY_MAX);
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(getApplicationContext(), getPackageName() + ".keshavxowner_core_proxy").setPriority(NotificationCompat.PRIORITY_MAX);
         if (BuildCompat.isOreo()) {
             startForeground(BlackBoxCore.getHostPkg().hashCode(), builder.build());
         }
