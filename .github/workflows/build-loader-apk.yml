@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - master
+      - KESHAVXOWNER
     paths:
       - "BLACK-OPNE/**"
       - "One-Core-Engine/**"
