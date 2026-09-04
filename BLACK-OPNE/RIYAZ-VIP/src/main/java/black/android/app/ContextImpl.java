@@ -7,6 +7,7 @@ import android.content.pm.PackageManager;
 import top.niunaijun.blackreflection.annotation.BClassName;
 import top.niunaijun.blackreflection.annotation.BField;
 import top.niunaijun.blackreflection.annotation.BMethod;
+import top.niunaijun.blackreflection.annotation.BParamClassName;
 import top.niunaijun.blackreflection.annotation.BStaticMethod;
 
 @BClassName("android.app.ContextImpl")
@@ -24,7 +25,9 @@ public interface ContextImpl {
     PackageManager mPackageManager();
 
     @BStaticMethod
-    Object createAppContext();
+    Object createAppContext(
+            @BParamClassName("android.app.ActivityThread") Object mainThread,
+            @BParamClassName("android.app.LoadedApk") Object packageInfo);
 
     @BMethod
     Context getReceiverRestrictedContext();
