@@ -3,15 +3,19 @@ package top.niunaijun.blackbox.compat.oauth;
 import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
+import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.util.Log;
 
 import org.lsposed.lsparanoid.Obfuscate;
 
+import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.compat.auth.ExternalAuthRouter;
 import top.niunaijun.blackbox.fake.frameworks.BPackageManager;
 import top.niunaijun.blackbox.proxy.ProxyManifest;
@@ -29,11 +33,23 @@ import top.niunaijun.blackbox.utils.provider.ProviderCall;
  * If a provider build returns the callback directly as an Activity result, this
  * bridge accepts the same validated URI without waiting for the exported callback
  * Activity.</p>
+ *
+ * <p>Current official X builds expose their app-link entry point as
+ * {@code com.twitter.android/com.x.android.deeplink.XUrlInterpreterActivity}.
+ * A real {@code /i/oauth2/authorize} URL is sent to that exact component only
+ * after Android confirms that the installed Activity is enabled, exported and
+ * accessible. Legacy URL-less Twitter Kit SSO probes are never rewritten to this
+ * deep-link Activity.</p>
  */
 @Obfuscate
 public final class TwitterNativeAuthBridgeActivity extends Activity {
+    private static final String TAG = "TwitterNativeAuth";
     private static final int REQUEST_TWITTER_APP = 0x5854;
     private static final long CALLBACK_SETTLE_MS = 1_800L;
+
+    private static final String OFFICIAL_TWITTER_PACKAGE = "com.twitter.android";
+    private static final String X_URL_INTERPRETER_ACTIVITY =
+            "com.x.android.deeplink.XUrlInterpreterActivity";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
@@ -83,11 +99,8 @@ public final class TwitterNativeAuthBridgeActivity extends Activity {
             }
 
             try {
-                providerIntent = new Intent(providerIntent);
-                providerIntent.setComponent(null);
-                providerIntent.setPackage(providerPackage);
-                providerIntent.putExtra(
-                        ExternalAuthRouter.EXTRA_DIRECT_PROVIDER_DISPATCH, true);
+                providerIntent = prepareProviderIntent(
+                        providerIntent, providerPackage, authUri);
                 providerLaunched = true;
                 startActivityForResult(providerIntent, REQUEST_TWITTER_APP);
             } catch (Throwable ignored) {
@@ -98,6 +111,80 @@ public final class TwitterNativeAuthBridgeActivity extends Activity {
         } else {
             providerLaunched = true;
         }
+    }
+
+    /**
+     * Use the manifest-verified X URL interpreter for modern OAuth2 links. Older
+     * Twitter/X builds and OAuth1 links keep the existing package-only resolver.
+     */
+    private Intent prepareProviderIntent(
+            Intent original,
+            String providerPackage,
+            Uri authUri) {
+        Intent prepared = new Intent(original);
+        prepared.putExtra(ExternalAuthRouter.EXTRA_DIRECT_PROVIDER_DISPATCH, true);
+
+        if (OFFICIAL_TWITTER_PACKAGE.equals(providerPackage)
+                && TwitterOAuthUrl.isModernOAuth2Authorize(authUri.toString())) {
+            ComponentName exact = new ComponentName(
+                    OFFICIAL_TWITTER_PACKAGE, X_URL_INTERPRETER_ACTIVITY);
+            if (isLaunchableExactXAuthorizeComponent(exact, authUri)) {
+                prepared.setAction(Intent.ACTION_VIEW);
+                prepared.setData(authUri);
+                prepared.addCategory(Intent.CATEGORY_DEFAULT);
+                prepared.addCategory(Intent.CATEGORY_BROWSABLE);
+                prepared.setComponent(exact);
+                Log.i(TAG, "OAuth2 authorize handoff=verified_x_url_interpreter");
+                return prepared;
+            }
+            Log.w(TAG, "OAuth2 authorize handoff=package_fallback reason=component_unavailable");
+        }
+
+        prepared.setComponent(null);
+        prepared.setPackage(providerPackage);
+        return prepared;
+    }
+
+    private boolean isLaunchableExactXAuthorizeComponent(
+            ComponentName component,
+            Uri authUri) {
+        try {
+            if (component == null || authUri == null || BlackBoxCore.getContext() == null) {
+                return false;
+            }
+
+            PackageManager pm = BlackBoxCore.getContext().getPackageManager();
+            ActivityInfo info = pm.getActivityInfo(component, 0);
+            if (!isUsableExactXActivity(info)) {
+                return false;
+            }
+
+            String permission = info.permission;
+            if (permission != null && !permission.trim().isEmpty()
+                    && pm.checkPermission(permission, getPackageName())
+                    != PackageManager.PERMISSION_GRANTED) {
+                return false;
+            }
+
+            Intent probe = new Intent(Intent.ACTION_VIEW, authUri);
+            probe.addCategory(Intent.CATEGORY_DEFAULT);
+            probe.addCategory(Intent.CATEGORY_BROWSABLE);
+            probe.setComponent(component);
+            ResolveInfo resolved = pm.resolveActivity(
+                    probe, PackageManager.MATCH_DEFAULT_ONLY);
+            return resolved != null && isUsableExactXActivity(resolved.activityInfo);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static boolean isUsableExactXActivity(ActivityInfo info) {
+        return info != null
+                && OFFICIAL_TWITTER_PACKAGE.equals(info.packageName)
+                && X_URL_INTERPRETER_ACTIVITY.equals(info.name)
+                && info.enabled
+                && info.exported
+                && (info.applicationInfo == null || info.applicationInfo.enabled);
     }
 
     @Override
