@@ -215,7 +215,7 @@ public class BActivityThread extends IBActivityThread.Stub {
         if (!isInit()) bindApplication(serviceInfo.packageName, serviceInfo.processName);
         try {
             JobService service = (JobService) BRLoadedApk.get(this.mBoundApplication.info).getClassLoader().loadClass(serviceInfo.name).newInstance();
-            Context context = resolveComponentContext(serviceInfo.packageName);
+            Context context = resolveComponentContext(service, serviceInfo.packageName);
             BRContextImpl.get(context).setOuterContext(service);
             BRService.get(service).attach(context, BlackBoxCore.mainThread(), serviceInfo.name,getActivityThread(), this.mInitialApplication, BRActivityManagerNative.get().getDefault());
             ContextCompat.fix(context);
