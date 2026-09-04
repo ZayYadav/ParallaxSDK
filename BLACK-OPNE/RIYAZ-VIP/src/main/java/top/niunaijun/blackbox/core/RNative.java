@@ -23,11 +23,11 @@ public class RNative {
     
     public static final String TAG = "RNative";
     private static final String NATIVE_ARTIFACT_DIRECTORY = "native";
-    private static final String NATIVE_ARTIFACT_NAME = "Parallax.so";
+    private static final String NATIVE_ARTIFACT_NAME = "KESHAVXOWNER.so";
     private static boolean isInjected = false;
 
     static {
-        System.loadLibrary("ParallaxCore");
+        System.loadLibrary("KESHAVXOWNERCore");
         File file = new File(
                 new File(BlackBoxCore.getContext().getNoBackupFilesDir(), NATIVE_ARTIFACT_DIRECTORY),
                 NATIVE_ARTIFACT_NAME);

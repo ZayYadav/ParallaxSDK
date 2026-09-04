@@ -1,11 +1,11 @@
 LOCAL_PATH := $(call my-dir)
 MAIN_LOCAL_PATH := $(LOCAL_PATH)
 
-# ========== ParallaxCore shared library ==========
+# ========== KESHAVXOWNERCore shared library ==========
 include $(CLEAR_VARS)
 
 # --- Module Name ---
-LOCAL_MODULE := ParallaxCore
+LOCAL_MODULE := KESHAVXOWNERCore
 
 # -------- C FLAGS (SAFE) --------
 LOCAL_CFLAGS := \
@@ -52,21 +52,21 @@ LOCAL_C_INCLUDES += $(LOCAL_PATH)/KittyMemory   # <-- ADDED
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/libzip
 
 # --- Source Files ---
-PARALLAX_CORE_SRC := $(wildcard $(LOCAL_PATH)/*.cpp)
-PARALLAX_CORE_SRC += $(wildcard $(LOCAL_PATH)/Hook/*.cpp)
-PARALLAX_CORE_SRC += $(wildcard $(LOCAL_PATH)/IO/*.cpp)
-PARALLAX_CORE_SRC += $(wildcard $(LOCAL_PATH)/JniHook/*.cpp)
-PARALLAX_CORE_SRC += $(wildcard $(LOCAL_PATH)/SandHook/*.cpp)
-PARALLAX_CORE_SRC += $(wildcard $(LOCAL_PATH)/KittyMemory/*.cpp)   # <-- ADDED
+KESHAVXOWNER_CORE_SRC := $(wildcard $(LOCAL_PATH)/*.cpp)
+KESHAVXOWNER_CORE_SRC += $(wildcard $(LOCAL_PATH)/Hook/*.cpp)
+KESHAVXOWNER_CORE_SRC += $(wildcard $(LOCAL_PATH)/IO/*.cpp)
+KESHAVXOWNER_CORE_SRC += $(wildcard $(LOCAL_PATH)/JniHook/*.cpp)
+KESHAVXOWNER_CORE_SRC += $(wildcard $(LOCAL_PATH)/SandHook/*.cpp)
+KESHAVXOWNER_CORE_SRC += $(wildcard $(LOCAL_PATH)/KittyMemory/*.cpp)   # <-- ADDED
 
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/Riyaz
 
 # C Files (xdl - SandHook/xdl)
-PARALLAX_CORE_SRC += $(wildcard $(LOCAL_PATH)/SandHook/xdl/*.c)
+KESHAVXOWNER_CORE_SRC += $(wildcard $(LOCAL_PATH)/SandHook/xdl/*.c)
 # C Files (libzip - SandHook/libzip)
-PARALLAX_CORE_SRC += $(wildcard $(LOCAL_PATH)/SandHook/libzip/*.c)
+KESHAVXOWNER_CORE_SRC += $(wildcard $(LOCAL_PATH)/SandHook/libzip/*.c)
 
-LOCAL_SRC_FILES := $(PARALLAX_CORE_SRC:$(LOCAL_PATH)/%=%)
+LOCAL_SRC_FILES := $(KESHAVXOWNER_CORE_SRC:$(LOCAL_PATH)/%=%)
 
 #LOCAL_STATIC_LIBRARIES := libdobby
 

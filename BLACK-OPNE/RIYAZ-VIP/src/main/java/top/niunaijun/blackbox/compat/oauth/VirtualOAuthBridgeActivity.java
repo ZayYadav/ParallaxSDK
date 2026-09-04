@@ -38,8 +38,8 @@ import top.niunaijun.blackbox.utils.provider.ProviderCall;
  */
 @Obfuscate
 public final class VirtualOAuthBridgeActivity extends Activity {
-    private static final String TAG = "ParallaxOAuth";
-    private static final String AUTH_TAG = "ParallaxAuth";
+    private static final String TAG = "KESHAVXOWNEROAuth";
+    private static final String AUTH_TAG = "KESHAVXOWNERAuth";
     private static final int REQUEST_AUTH_TAB = 0x5041;
     private static final int REQUEST_EXTERNAL_AUTH = 0x5042;
     private static final long FACEBOOK_FALLBACK_WAIT_MS = 1_500L;

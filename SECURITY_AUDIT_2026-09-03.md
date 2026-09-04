@@ -1,4 +1,4 @@
-# ParallaxSDK security audit — 2026-09-03
+# KESHAVXOWNERSDK security audit — 2026-09-03
 
 Audited base commit: `bd31143f030434158053e5105b1d9cd8f3ff7877` (`main`).
 
@@ -14,7 +14,7 @@ The hardening branch fixes the high-impact code/configuration issues that can be
 
 | Severity | Finding | Status |
 | --- | --- | --- |
-| Critical | Executable runtime ZIP was fetched from mutable `Parallaxapp/main/JANGAM.zip`; accepted native files were validated as ZIP/ELF but not against a signed SHA-256 manifest | **Mitigated now:** URL pinned to immutable audited commit. **Residual:** add signed SHA-256 artifact manifest for independent content verification |
+| Critical | Executable runtime ZIP was fetched from mutable `KESHAVXOWNERapp/main/JANGAM.zip`; accepted native files were validated as ZIP/ELF but not against a signed SHA-256 manifest | **Mitigated now:** URL pinned to immutable audited commit. **Residual:** add signed SHA-256 artifact manifest for independent content verification |
 | High | DPT reusable workflow was referenced by mutable branch while receiving production Android signing secrets | **Fixed:** reusable workflow and `dpt_ref` pinned to exact DPT commit |
 | High | Loader Gradle resolved the live licensing certificate during CI and appended that observed pin into the release trust set | **Fixed:** removed live-network pin auto-enrollment; release only accepts preconfigured pins |
 | High | `TRUST_PROXY=true` trusted `X-Forwarded-For` / `X-Forwarded-Proto` without verifying the immediate proxy | **Fixed:** forwarded headers are authoritative only when `REMOTE_ADDR` is explicitly in `TRUSTED_PROXIES` |
@@ -46,7 +46,7 @@ The hardening branch fixes the high-impact code/configuration issues that can be
 ## Changes made in this hardening branch
 
 1. `One-Core-Engine/app/src/main/jni/backends/ModsLoader.h`
-   - Replaced mutable branch runtime URL with immutable `Parallaxapp` commit `c31b43f515e5af248ce575520dfe80d139ac2f8d`.
+   - Replaced mutable branch runtime URL with immutable `KESHAVXOWNERapp` commit `c31b43f515e5af248ce575520dfe80d139ac2f8d`.
 
 2. `One-Core-Engine/app/build.gradle`
    - Removed build-time TLS leaf-pin discovery/auto-append.
@@ -54,7 +54,7 @@ The hardening branch fixes the high-impact code/configuration issues that can be
 
 3. `.github/workflows/build-hardened-safe.yml`
    - Pinned checkout/setup-android/setup-java/upload-artifact action revisions used by the sensitive workflow.
-   - Pinned `ParallaxDPT` reusable workflow and `dpt_ref` to `7d72080525c22f2987cd46636730ee42a2056054`.
+   - Pinned `KESHAVXOWNERDPT` reusable workflow and `dpt_ref` to `7d72080525c22f2987cd46636730ee42a2056054`.
    - Production DPT release now fails closed if the API public key or TLS pins are absent instead of generating fake transport trust.
 
 4. `panels/sdk-panel/panel_security.php`
@@ -96,8 +96,8 @@ If a reverse proxy terminates TLS, enable `TRUST_PROXY` only after placing the p
 
 The sensitive DPT release workflow now requires valid production values for:
 
-- `PARALLAX_API_PUBLIC_KEY_B64`
-- `PARALLAX_TLS_PINS`
+- `KESHAVXOWNER_API_PUBLIC_KEY_B64`
+- `KESHAVXOWNER_TLS_PINS`
 - Android signing secrets used by the existing workflow
 
 A missing transport trust anchor is now a build failure, not an automatically trusted live certificate or fake production release.
