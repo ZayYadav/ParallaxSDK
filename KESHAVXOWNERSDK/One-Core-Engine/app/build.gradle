@@ -4,11 +4,6 @@ import java.util.Base64
 import javax.net.ssl.HttpsURLConnection
 import java.net.URL
 import java.security.cert.X509Certificate
-import javax.imageio.ImageIO
-import javax.imageio.IIOImage
-import javax.imageio.ImageWriteParam
-import java.awt.image.BufferedImage
-import java.awt.RenderingHints
 
 plugins {
     id 'com.android.application'
@@ -18,11 +13,11 @@ plugins {
 
 apply from: '../signing.gradle'
 
-def parallaxApiPublicKey = providers.gradleProperty('parallaxApiPublicKey')
-        .orElse(System.getenv('PARALLAX_API_PUBLIC_KEY_B64') ?: '')
+def keshavxownerApiPublicKey = providers.gradleProperty('keshavxownerApiPublicKey')
+        .orElse(System.getenv('KESHAVXOWNER_API_PUBLIC_KEY_B64') ?: '')
         .get()
-def parallaxTlsPins = providers.gradleProperty('parallaxTlsPins')
-        .orElse(System.getenv('PARALLAX_TLS_PINS') ?: '')
+def keshavxownerTlsPins = providers.gradleProperty('keshavxownerTlsPins')
+        .orElse(System.getenv('KESHAVXOWNER_TLS_PINS') ?: '')
         .get()
 def oneCoreAllowedSigningSha256 = providers.gradleProperty('onecoreAllowedSigningSha256')
         .orElse(System.getenv('ONECORE_ALLOWED_SIGNING_SHA256') ?: '')
@@ -34,9 +29,9 @@ def releaseTaskRequested = gradle.startParameter.taskNames.any {
 // Keep the user's supplied artwork as the untouched master outside res/. Every build creates
 // a compact, valid JPEG resource from it so launcher/UI branding stays faithful without adding
 // ~1.8 MB to every APK.
-def oneCoreBrandMaster = file("${projectDir}/branding/parallax_labs_brand.jpg")
+def oneCoreBrandMaster = file("${projectDir}/branding/keshavxowner_labs_brand.jpg")
 def oneCoreBrandGeneratedResDir = file("${buildDir}/generated/onecore-brand/res")
-def oneCoreBrandGeneratedFile = file("${oneCoreBrandGeneratedResDir}/drawable-nodpi/parallax_labs_brand.jpg")
+def oneCoreBrandGeneratedFile = file("${oneCoreBrandGeneratedResDir}/drawable-nodpi/keshavxowner_labs_brand.jpg")
 
 tasks.register('generateOneCoreBrandAsset') {
     inputs.file(oneCoreBrandMaster)
@@ -119,21 +114,21 @@ def resolveVerifiedLeafTlsPin = { String host ->
 }
 
 if ('true'.equalsIgnoreCase(System.getenv('GITHUB_ACTIONS'))
-        && parallaxApiPublicKey != null && !parallaxApiPublicKey.trim().isEmpty()
-        && parallaxTlsPins != null && !parallaxTlsPins.trim().isEmpty()) {
+        && keshavxownerApiPublicKey != null && !keshavxownerApiPublicKey.trim().isEmpty()
+        && keshavxownerTlsPins != null && !keshavxownerTlsPins.trim().isEmpty()) {
     try {
-        String livePin = resolveVerifiedLeafTlsPin('parallaxloader.parallaxserver.online')
+        String livePin = resolveVerifiedLeafTlsPin('keshavxownerloader.keshavxownerserver.online')
         def pins = new LinkedHashSet<String>()
-        parallaxTlsPins.split(',', -1)
+        keshavxownerTlsPins.split(',', -1)
                 .collect { it.trim() }
                 .findAll { !it.isEmpty() }
                 .each { pins.add(it) }
         boolean alreadyConfigured = pins.contains(livePin)
         pins.add(livePin)
-        parallaxTlsPins = pins.join(',')
-        logger.lifecycle("Verified live TLS pin for parallaxloader.parallaxserver.online: ${livePin}")
+        keshavxownerTlsPins = pins.join(',')
+        logger.lifecycle("Verified live TLS pin for keshavxownerloader.keshavxownerserver.online: ${livePin}")
         if (!alreadyConfigured) {
-            logger.warn('Configured PARALLAX_TLS_PINS did not contain the current verified leaf pin; the live pin was appended for this build.')
+            logger.warn('Configured KESHAVXOWNER_TLS_PINS did not contain the current verified leaf pin; the live pin was appended for this build.')
         }
     } catch (Exception error) {
         throw new GradleException('Unable to resolve the verified live TLS pin for the licensing host', error)
@@ -143,16 +138,16 @@ if ('true'.equalsIgnoreCase(System.getenv('GITHUB_ACTIONS'))
 if (releaseTaskRequested) {
     byte[] publicKeyDer
     try {
-        publicKeyDer = Base64.decoder.decode(parallaxApiPublicKey)
+        publicKeyDer = Base64.decoder.decode(keshavxownerApiPublicKey)
     } catch (IllegalArgumentException error) {
-        throw new GradleException('PARALLAX_API_PUBLIC_KEY_B64 is invalid for release builds', error)
+        throw new GradleException('KESHAVXOWNER_API_PUBLIC_KEY_B64 is invalid for release builds', error)
     }
     if (publicKeyDer.length < 256 || publicKeyDer.length > 1024) {
-        throw new GradleException('PARALLAX_API_PUBLIC_KEY_B64 has an invalid DER size')
+        throw new GradleException('KESHAVXOWNER_API_PUBLIC_KEY_B64 has an invalid DER size')
     }
-    def configuredPins = parallaxTlsPins.split(',', -1).collect { it.trim() }
+    def configuredPins = keshavxownerTlsPins.split(',', -1).collect { it.trim() }
     if (configuredPins.isEmpty() || configuredPins.any { !(it ==~ /^sha256\/[A-Za-z0-9+\/]{43}=$/) }) {
-        throw new GradleException('PARALLAX_TLS_PINS must contain valid SHA-256 pins for release builds')
+        throw new GradleException('KESHAVXOWNER_TLS_PINS must contain valid SHA-256 pins for release builds')
     }
 }
 
@@ -244,14 +239,7 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
     namespace rootProject.ext.LoaderPkg
-
-    sourceSets {
-        main {
-            res.srcDir oneCoreBrandGeneratedResDir
-        }
-    }
-
-    lint {
+lint {
         baseline = file("lint-baseline.xml")
     }
 
@@ -266,8 +254,8 @@ android {
         // Keep default resources plus the only explicitly supported translation.
         // This removes unused language packs contributed by dependencies.
         resourceConfigurations += ['en']
-        buildConfigField "String", "PARALLAX_API_PUBLIC_KEY_B64", javaString(parallaxApiPublicKey)
-        buildConfigField "String", "PARALLAX_TLS_PINS", javaString(parallaxTlsPins)
+        buildConfigField "String", "KESHAVXOWNER_API_PUBLIC_KEY_B64", javaString(keshavxownerApiPublicKey)
+        buildConfigField "String", "KESHAVXOWNER_TLS_PINS", javaString(keshavxownerTlsPins)
 
         ndk {
             abiFilters "arm64-v8a"

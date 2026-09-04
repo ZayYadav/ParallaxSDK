@@ -28,13 +28,13 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SDK_PROJECT_DIR: BLACK-OPNE
-      SDK_MODULE: ParallaxCore
+      SDK_MODULE: KESHAVXOWNERCore
       SDK_MODULE_DIR: RIYAZ-VIP
       LOADER_PROJECT_DIR: One-Core-Engine
-      LOADER_AAR_PATH: One-Core-Engine/app/libs/ParallaxCore-release.aar
+      LOADER_AAR_PATH: One-Core-Engine/app/libs/KESHAVXOWNERCore-release.aar
       NDK_VERSION: 27.2.12479018
-      PARALLAX_API_PUBLIC_KEY_B64: ${{ vars.PARALLAX_API_PUBLIC_KEY_B64 }}
-      PARALLAX_TLS_PINS: ${{ vars.PARALLAX_TLS_PINS }}
+      KESHAVXOWNER_API_PUBLIC_KEY_B64: ${{ vars.KESHAVXOWNER_API_PUBLIC_KEY_B64 }}
+      KESHAVXOWNER_TLS_PINS: ${{ vars.KESHAVXOWNER_TLS_PINS }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -78,8 +78,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "${PARALLAX_API_PUBLIC_KEY_B64:-}" ] || [ -z "${PARALLAX_TLS_PINS:-}" ]; then
-            echo 'Production PARALLAX_API_PUBLIC_KEY_B64 and PARALLAX_TLS_PINS are required.' >&2
+          if [ -z "${KESHAVXOWNER_API_PUBLIC_KEY_B64:-}" ] || [ -z "${KESHAVXOWNER_TLS_PINS:-}" ]; then
+            echo 'Production KESHAVXOWNER_API_PUBLIC_KEY_B64 and KESHAVXOWNER_TLS_PINS are required.' >&2
             exit 1
           fi
 
@@ -152,7 +152,7 @@ jobs:
   dpt-protect-release:
     name: DPT protect original UI and restore original signer
     needs: build-release
-    uses: ZayYadav/ParallaxDPT/.github/workflows/protect-apk.yml@7d72080525c22f2987cd46636730ee42a2056054
+    uses: ZayYadav/KESHAVXOWNERDPT/.github/workflows/protect-apk.yml@7d72080525c22f2987cd46636730ee42a2056054
     with:
       source_artifact: loader-original-release-apk
       output_artifact: loader-original-ui-dpt-protected-apk

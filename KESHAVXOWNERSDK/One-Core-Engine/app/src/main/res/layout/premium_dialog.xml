@@ -17,7 +17,7 @@
         android:layout_height="68dp"
         android:contentDescription="OneCore Edge"
         android:scaleType="centerCrop"
-        android:src="@drawable/parallax_labs_brand" />
+        android:src="@drawable/onecore_edge_brand_mark" />
 
     <TextView
         android:layout_width="wrap_content"

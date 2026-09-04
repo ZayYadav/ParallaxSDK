@@ -20,7 +20,7 @@ import org.lsposed.lsparanoid.Obfuscate;
  */
 @Obfuscate
 public final class FacebookOAuthCallbackActivity extends Activity {
-    private static final String TAG = "ParallaxOAuth";
+    private static final String TAG = "KESHAVXOWNEROAuth";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
