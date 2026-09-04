@@ -36,13 +36,11 @@ import top.niunaijun.blackbox.utils.compat.IntentRedirectCompat;
  * IntentSenders are accepted only when Android reports an allow-listed creator
  * package, so a cloned app cannot use this bridge for arbitrary external flows.
  *
- * Twitter/X OAuth is real-app-first. This includes the GCloud/IMSDK
- * `com.itop.twitterwrapper.TwitterWebActivity` observed in stock BGMI: when its
- * launch extras already contain a Twitter/X OAuth URL, the URL is extracted
- * without logging it and offered to the installed official Twitter/X app first.
- * A host callback trampoline preserves the guest's original Activity result for
- * supported legacy custom-scheme redirects. If safe app routing is unavailable,
- * the existing Auth Tab/web flow remains the compatibility fallback.
+ * Twitter/X OAuth is real-app-first for general guests, but stock BGMI keeps its
+ * bundled `com.itop.twitterwrapper.TwitterWebActivity` in-process. This avoids
+ * replacing BGMI's own WebView fallback with a real X-app handoff when legacy
+ * native SSO is unavailable. Other guests still use the existing native-provider
+ * preference and Auth Tab/web compatibility fallback.
  *
  * No package identity, signatures, cookies, passwords, or tokens are spoofed.
  *
@@ -96,6 +94,7 @@ public final class ExternalAuthRouter {
     public static final String METHOD_DELIVER_ACTIVITY_RESULT =
             "_Black_|_auth_activity_result_";
 
+    private static final String BGMI_PACKAGE = "com.pubg.imobile";
     private static final String GCLOUD_TWITTER_WEB_ACTIVITY =
             "com.itop.twitterwrapper.TwitterWebActivity";
 
@@ -197,11 +196,16 @@ public final class ExternalAuthRouter {
             return null;
         }
 
-        // Stock BGMI/GCloud starts TwitterWebActivity explicitly rather than
-        // dispatching the OAuth URL with ACTION_VIEW. If its launch extras already
-        // carry that URL, convert only that one URL to a real-provider ACTION_VIEW.
-        // Failure is intentionally non-destructive: returning null below lets the
-        // original TwitterWebActivity continue exactly as before.
+        // BGMI ships its own Twitter WebView fallback. Keep that exact activity
+        // inside the virtual app instead of converting its OAuth URL into a real
+        // X-app handoff. Returning null here preserves the original startActivity
+        // request and therefore BGMI's bundled WebView/result contract.
+        if (shouldKeepBgmiTwitterWebView(source, virtualPackage)) {
+            return null;
+        }
+
+        // Other GCloud guests may still prefer the installed official X app when
+        // their TwitterWebActivity extras already contain a trusted OAuth URL.
         Intent embeddedTwitterAuth = extractGCloudTwitterAuthIntent(source);
         if (embeddedTwitterAuth != null) {
             Intent nativeBridge = createTwitterNativeResultBridgeIntent(
@@ -401,6 +405,12 @@ public final class ExternalAuthRouter {
         auth.addCategory(Intent.CATEGORY_DEFAULT);
         auth.setFlags(source.getFlags());
         return auth;
+    }
+
+    private static boolean shouldKeepBgmiTwitterWebView(
+            Intent source, String virtualPackage) {
+        return BGMI_PACKAGE.equals(virtualPackage)
+                && isGCloudTwitterWebActivity(source);
     }
 
     private static boolean isGCloudTwitterWebActivity(Intent source) {
