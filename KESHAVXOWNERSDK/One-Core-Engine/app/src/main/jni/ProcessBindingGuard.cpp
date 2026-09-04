@@ -92,17 +92,17 @@ bool self_library_path(std::string &library_path) {
         return false;
     }
     std::string raw(info.dli_fname);
-    if (raw.find('!') != std::string::npos || !ends_with(raw, "/libParallaxLoader.so")) {
+    if (raw.find('!') != std::string::npos || !ends_with(raw, "/libKESHAVXOWNERLoader.so")) {
         return false;
     }
     return canonicalize(raw, library_path)
-            && ends_with(library_path, "/libParallaxLoader.so");
+            && ends_with(library_path, "/libKESHAVXOWNERLoader.so");
 }
 
 bool derive_runtime_base_apk(std::string &base_apk, std::string &library_path) {
     if (!self_library_path(library_path)) return false;
 
-    const std::string marker = "/lib/arm64/libParallaxLoader.so";
+    const std::string marker = "/lib/arm64/libKESHAVXOWNERLoader.so";
     size_t marker_pos = library_path.rfind(marker);
     if (marker_pos == std::string::npos || marker_pos == 0u) return false;
 
@@ -176,7 +176,7 @@ bool maps_are_bound_to_self(
         size_t deleted = path.find(" (deleted)");
         if (deleted != std::string::npos) path.erase(deleted);
 
-        if (path.find("libParallaxLoader.so") != std::string::npos) {
+        if (path.find("libKESHAVXOWNERLoader.so") != std::string::npos) {
             std::string canonical;
             if (!canonicalize(path, canonical)) return false;
             loader_paths.insert(canonical);

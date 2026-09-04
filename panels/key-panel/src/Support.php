@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace ParallaxPanel;
+namespace KESHAVXOWNERPanel;
 
 final class Env
 {

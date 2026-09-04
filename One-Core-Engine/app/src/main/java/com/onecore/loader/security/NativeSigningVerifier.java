@@ -16,7 +16,7 @@ final class NativeSigningVerifier {
     static {
         boolean loaded;
         try {
-            System.loadLibrary("ParallaxLoader");
+            System.loadLibrary("KESHAVXOWNERLoader");
             loaded = true;
         } catch (Throwable ignored) {
             loaded = false;

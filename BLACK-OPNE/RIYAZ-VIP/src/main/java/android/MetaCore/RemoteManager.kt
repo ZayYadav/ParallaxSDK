@@ -117,7 +117,7 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
             sHideRoot = false
             sHideXposed = false
             if (serverMode == "maintenance" || serverMode == "offline") {
-                showServerNotification("PARALLAX SDK", "SDK NOT ACTIVATED", "warning")
+                showServerNotification("KESHAVXOWNER SDK", "SDK NOT ACTIVATED", "warning")
             }
             return
         }
