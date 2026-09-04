@@ -102,7 +102,7 @@ android {
 
         release {
             // Stability mode: keep the SDK bytecode untouched while loader startup is debugged.
-            minifyEnabled false
+            minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
