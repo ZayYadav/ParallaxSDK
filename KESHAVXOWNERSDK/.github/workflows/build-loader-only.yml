@@ -28,11 +28,11 @@ jobs:
 
     env:
       LOADER_PROJECT_DIR: One-Core-Engine
-      LOADER_AAR_PATH: One-Core-Engine/app/libs/ParallaxCore-release.aar
+      LOADER_AAR_PATH: One-Core-Engine/app/libs/KESHAVXOWNERCore-release.aar
       NDK_VERSION: 27.2.12479018
       BUILD_LOG_DIR: loader-only-build-logs
-      PARALLAX_API_PUBLIC_KEY_B64: ${{ vars.PARALLAX_API_PUBLIC_KEY_B64 }}
-      PARALLAX_TLS_PINS: ${{ vars.PARALLAX_TLS_PINS }}
+      KESHAVXOWNER_API_PUBLIC_KEY_B64: ${{ vars.KESHAVXOWNER_API_PUBLIC_KEY_B64 }}
+      KESHAVXOWNER_TLS_PINS: ${{ vars.KESHAVXOWNER_TLS_PINS }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -70,7 +70,7 @@ jobs:
           chmod +x "${LOADER_PROJECT_DIR}/gradlew"
           mkdir -p "${BUILD_LOG_DIR}"
 
-      - name: Validate bundled ParallaxCore AAR
+      - name: Validate bundled KESHAVXOWNERCore AAR
         shell: bash
         run: |
           set -euo pipefail
@@ -82,18 +82,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -n "${PARALLAX_API_PUBLIC_KEY_B64:-}" ] && [ -n "${PARALLAX_TLS_PINS:-}" ]; then
-            echo 'PARALLAX_HAS_RELEASE_TRANSPORT=true' >> "$GITHUB_ENV"
+          if [ -n "${KESHAVXOWNER_API_PUBLIC_KEY_B64:-}" ] && [ -n "${KESHAVXOWNER_TLS_PINS:-}" ]; then
+            echo 'KESHAVXOWNER_HAS_RELEASE_TRANSPORT=true' >> "$GITHUB_ENV"
           else
             openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
-              -out /tmp/parallax-loader-only-private.pem 2>/dev/null
+              -out /tmp/keshavxowner-loader-only-private.pem 2>/dev/null
             PUBLIC_KEY=$(openssl pkey \
-              -in /tmp/parallax-loader-only-private.pem \
+              -in /tmp/keshavxowner-loader-only-private.pem \
               -pubout -outform DER 2>/dev/null | base64 -w0)
-            rm -f /tmp/parallax-loader-only-private.pem
-            echo "PARALLAX_API_PUBLIC_KEY_B64=${PUBLIC_KEY}" >> "$GITHUB_ENV"
-            echo 'PARALLAX_TLS_PINS=sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' >> "$GITHUB_ENV"
-            echo 'PARALLAX_HAS_RELEASE_TRANSPORT=false' >> "$GITHUB_ENV"
+            rm -f /tmp/keshavxowner-loader-only-private.pem
+            echo "KESHAVXOWNER_API_PUBLIC_KEY_B64=${PUBLIC_KEY}" >> "$GITHUB_ENV"
+            echo 'KESHAVXOWNER_TLS_PINS=sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' >> "$GITHUB_ENV"
+            echo 'KESHAVXOWNER_HAS_RELEASE_TRANSPORT=false' >> "$GITHUB_ENV"
             echo 'WARNING: using non-production transport configuration for this CI build.'
           fi
 
@@ -101,21 +101,21 @@ jobs:
             && [ -n "${STORE_PASSWORD:-}" ] \
             && [ -n "${KEY_ALIAS:-}" ] \
             && [ -n "${KEY_PASSWORD:-}" ]; then
-            echo 'PARALLAX_HAS_RELEASE_SIGNING=true' >> "$GITHUB_ENV"
+            echo 'KESHAVXOWNER_HAS_RELEASE_SIGNING=true' >> "$GITHUB_ENV"
           else
-            echo 'PARALLAX_HAS_RELEASE_SIGNING=false' >> "$GITHUB_ENV"
+            echo 'KESHAVXOWNER_HAS_RELEASE_SIGNING=false' >> "$GITHUB_ENV"
             echo 'WARNING: using the CI fallback signing certificate for this build.'
           fi
 
-          if [ -n "${PARALLAX_API_PUBLIC_KEY_B64:-}" ] \
-            && [ -n "${PARALLAX_TLS_PINS:-}" ] \
+          if [ -n "${KESHAVXOWNER_API_PUBLIC_KEY_B64:-}" ] \
+            && [ -n "${KESHAVXOWNER_TLS_PINS:-}" ] \
             && [ -n "${ANDROID_KEYSTORE_BASE64:-}" ] \
             && [ -n "${STORE_PASSWORD:-}" ] \
             && [ -n "${KEY_ALIAS:-}" ] \
             && [ -n "${KEY_PASSWORD:-}" ]; then
-            echo 'PARALLAX_ARTIFACT_TIER=production' >> "$GITHUB_ENV"
+            echo 'KESHAVXOWNER_ARTIFACT_TIER=production' >> "$GITHUB_ENV"
           else
-            echo 'PARALLAX_ARTIFACT_TIER=ci-nonproduction' >> "$GITHUB_ENV"
+            echo 'KESHAVXOWNER_ARTIFACT_TIER=ci-nonproduction' >> "$GITHUB_ENV"
           fi
 
       - name: Validate encrypted Loader transport
@@ -127,24 +127,24 @@ jobs:
 
           try:
               public_key = base64.b64decode(
-                  os.environ.get("PARALLAX_API_PUBLIC_KEY_B64", ""),
+                  os.environ.get("KESHAVXOWNER_API_PUBLIC_KEY_B64", ""),
                   validate=True,
               )
           except Exception as error:
-              raise SystemExit("PARALLAX_API_PUBLIC_KEY_B64 is invalid") from error
+              raise SystemExit("KESHAVXOWNER_API_PUBLIC_KEY_B64 is invalid") from error
           if len(public_key) < 256 or len(public_key) > 1024:
-              raise SystemExit("PARALLAX_API_PUBLIC_KEY_B64 has an invalid DER size")
+              raise SystemExit("KESHAVXOWNER_API_PUBLIC_KEY_B64 has an invalid DER size")
 
           pins = [
               item.strip()
-              for item in os.environ.get("PARALLAX_TLS_PINS", "").split(",")
+              for item in os.environ.get("KESHAVXOWNER_TLS_PINS", "").split(",")
               if item.strip()
           ]
           if not pins or any(
               not re.fullmatch(r"sha256/[A-Za-z0-9+/]{43}=", item)
               for item in pins
           ):
-              raise SystemExit("PARALLAX_TLS_PINS must contain valid SHA-256 pins")
+              raise SystemExit("KESHAVXOWNER_TLS_PINS must contain valid SHA-256 pins")
 
       - name: Configure Loader signing keystore
         working-directory: ${{ env.LOADER_PROJECT_DIR }}
@@ -157,7 +157,7 @@ jobs:
           CONFIG_KEY_PASSWORD=$(awk -F= '/^keyPassword=/{print $2}' signing.properties)
           test -n "$STORE_FILE"
 
-          if [ "${PARALLAX_HAS_RELEASE_SIGNING}" = 'true' ]; then
+          if [ "${KESHAVXOWNER_HAS_RELEASE_SIGNING}" = 'true' ]; then
             mkdir -p "$(dirname "$STORE_FILE")"
             printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$STORE_FILE"
           elif [ ! -f "$STORE_FILE" ]; then
@@ -171,7 +171,7 @@ jobs:
               -keyalg RSA \
               -keysize 2048 \
               -validity 10000 \
-              -dname 'CN=Loader Only CI,O=Parallax,C=US'
+              -dname 'CN=Loader Only CI,O=KESHAVXOWNER,C=US'
           fi
           test -s "$STORE_FILE"
 
@@ -201,9 +201,9 @@ jobs:
           test "$DEX_COUNT" -gt 0
 
           for plaintext in \
-            'https://parallaxloader.parallaxserver.online/api/v2/connect' \
-            'parallax-license-v2-request' \
-            'parallax-license-v2-response:' \
+            'https://keshavxownerloader.keshavxownerserver.online/api/v2/connect' \
+            'keshavxowner-license-v2-request' \
+            'keshavxowner-license-v2-response:' \
             'Licensing TLS pins are not configured' \
             'accounts.google.com' \
             'www.facebook.com' \
@@ -255,12 +255,12 @@ jobs:
             --print-certs "$RELEASE_APK" \
             | tee "${BUILD_LOG_DIR}/loader-signing-certificate.txt"
           {
-            printf 'artifact_tier=%s\n' "${PARALLAX_ARTIFACT_TIER}"
-            printf 'production_transport=%s\n' "${PARALLAX_HAS_RELEASE_TRANSPORT}"
-            printf 'production_signing=%s\n' "${PARALLAX_HAS_RELEASE_SIGNING}"
-            printf 'parallaxcore_source=repository-bundled-aar\n'
+            printf 'artifact_tier=%s\n' "${KESHAVXOWNER_ARTIFACT_TIER}"
+            printf 'production_transport=%s\n' "${KESHAVXOWNER_HAS_RELEASE_TRANSPORT}"
+            printf 'production_signing=%s\n' "${KESHAVXOWNER_HAS_RELEASE_SIGNING}"
+            printf 'keshavxownercore_source=repository-bundled-aar\n'
             printf 'commit=%s\n' "${GITHUB_SHA}"
-            if [ "${PARALLAX_ARTIFACT_TIER}" != 'production' ]; then
+            if [ "${KESHAVXOWNER_ARTIFACT_TIER}" != 'production' ]; then
               printf 'warning=CI verification build only; configure production transport and signing before distribution.\n'
             fi
             sha256sum "${LOADER_AAR_PATH}" "$RELEASE_APK" "$DEBUG_APK"
@@ -269,14 +269,14 @@ jobs:
       - name: Upload Loader release APK
         uses: actions/upload-artifact@v6
         with:
-          name: loader-only-${{ env.PARALLAX_ARTIFACT_TIER }}-release-apk
+          name: loader-only-${{ env.KESHAVXOWNER_ARTIFACT_TIER }}-release-apk
           path: ${{ env.LOADER_PROJECT_DIR }}/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
 
       - name: Upload Loader debug APK
         uses: actions/upload-artifact@v6
         with:
-          name: loader-only-${{ env.PARALLAX_ARTIFACT_TIER }}-debug-apk
+          name: loader-only-${{ env.KESHAVXOWNER_ARTIFACT_TIER }}-debug-apk
           path: ${{ env.LOADER_PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 

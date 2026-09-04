@@ -29,7 +29,7 @@ import okhttp3.Response;
 import okhttp3.ResponseBody;
 import okio.BufferedSource;
 
-/** Fail-closed encrypted client for the Parallax licensing API over platform-validated TLS. */
+/** Fail-closed encrypted client for the KESHAVXOWNER licensing API over platform-validated TLS. */
 @Obfuscate
 public final class HostedLicenseClient {
     static final String GAME_ID = "PUBG";
@@ -43,11 +43,11 @@ public final class HostedLicenseClient {
     private static final Pattern PUBLIC_KEY_PATTERN =
             Pattern.compile("^[A-Za-z0-9+/]+={0,2}$");
 
-    private static final String LICENSE_KEY = "PARALLAX_LICENSE_KEY";
-    private static final String LICENSE_TOKEN = "PARALLAX_LICENSE_TOKEN";
-    public static final String LICENSE_EXPIRES_AT = "PARALLAX_LICENSE_EXPIRES_AT";
-    private static final String VERIFIED_SERVER_TIME = "PARALLAX_VERIFIED_SERVER_TIME";
-    private static final String VERIFIED_ELAPSED_TIME = "PARALLAX_VERIFIED_ELAPSED_TIME";
+    private static final String LICENSE_KEY = "KESHAVXOWNER_LICENSE_KEY";
+    private static final String LICENSE_TOKEN = "KESHAVXOWNER_LICENSE_TOKEN";
+    public static final String LICENSE_EXPIRES_AT = "KESHAVXOWNER_LICENSE_EXPIRES_AT";
+    private static final String VERIFIED_SERVER_TIME = "KESHAVXOWNER_VERIFIED_SERVER_TIME";
+    private static final String VERIFIED_ELAPSED_TIME = "KESHAVXOWNER_VERIFIED_ELAPSED_TIME";
 
     private final Context context;
     private final okhttp3.OkHttpClient httpClient;
@@ -97,7 +97,7 @@ public final class HostedLicenseClient {
             String normalizedKey = normalizeActivationKey(activationKey);
             if (!isSupportedActivationKey(normalizedKey)) {
                 clearLicense();
-                return "Use a key created in Parallax Control";
+                return "Use a key created in KESHAVXOWNER Control";
             }
             String serial = DeviceIdentity.deviceId();
             JSONObject payload = new JSONObject();
@@ -323,7 +323,7 @@ public final class HostedLicenseClient {
     }
 
     private static String configuredPublicKey() {
-        String value = BuildConfig.PARALLAX_API_PUBLIC_KEY_B64;
+        String value = BuildConfig.KESHAVXOWNER_API_PUBLIC_KEY_B64;
         if (value == null || value.length() < 256 || value.length() > 2048
                 || !PUBLIC_KEY_PATTERN.matcher(value).matches()) {
             throw new IllegalStateException("Licensing public key is not configured");

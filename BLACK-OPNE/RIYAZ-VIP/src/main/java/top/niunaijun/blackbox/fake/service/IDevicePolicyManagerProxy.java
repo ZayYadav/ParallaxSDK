@@ -64,7 +64,7 @@ public class IDevicePolicyManagerProxy extends BinderInvocationStub {
 
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            return "ParallaxCore";
+            return "KESHAVXOWNERCore";
         }
     }
 
@@ -73,7 +73,7 @@ public class IDevicePolicyManagerProxy extends BinderInvocationStub {
 
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            return "ParallaxCore";
+            return "KESHAVXOWNERCore";
         }
     }
 

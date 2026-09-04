@@ -22,7 +22,7 @@ return [
     // The matching public keys are compiled into the SDK; private keys never
     // leave the server.
     'API_V3_KEYS' => [
-        'parallax-2026-09' => [
+        'keshavxowner-2026-09' => [
             'ecdh_private_key_file' => '/home/ACCOUNT/private/sdk-api-v3-ecdh-private.pem',
             'signing_private_key_file' => '/home/ACCOUNT/private/sdk-api-v3-signing-private.pem',
         ],

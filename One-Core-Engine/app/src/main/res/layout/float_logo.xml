@@ -24,7 +24,7 @@
                  android:layout_height="50dp"
                  android:layout_width="50dp"
                  android:scaleType="centerCrop"
-                 android:src="@drawable/parallax_labs_brand"
+                 android:src="@drawable/onecore_edge_brand_mark"
                  tools:ignore="ContentDescription" />
 
         </RelativeLayout>
