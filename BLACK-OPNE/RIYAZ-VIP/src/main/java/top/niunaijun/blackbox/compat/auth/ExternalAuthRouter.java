@@ -197,6 +197,12 @@ public final class ExternalAuthRouter {
             return null;
         }
 
+        Intent legacyPinBridge = createLegacyTwitterPinBridgeIntent(
+                source, resultTo, resultWho, requestCode, virtualPackage);
+        if (legacyPinBridge != null) {
+            return legacyPinBridge;
+        }
+
         // Stock BGMI/GCloud starts TwitterWebActivity explicitly rather than
         // dispatching the OAuth URL with ACTION_VIEW. If its launch extras already
         // carry that URL, convert only that one URL to a real-provider ACTION_VIEW.
@@ -284,6 +290,62 @@ public final class ExternalAuthRouter {
         }
         bridge.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         return prepareBridgeForLaunch(bridge);
+    }
+
+    /**
+     * Current X builds no longer export Twitter Kit's legacy SSO Activity.
+     * When Twitter Kit has already verified the official X package signature
+     * and then launches that exact legacy component with ck/cs, route only that
+     * narrowly-scoped request to the host PIN/OOB compatibility Activity.
+     */
+    private static Intent createLegacyTwitterPinBridgeIntent(
+            Intent source,
+            IBinder resultTo,
+            String resultWho,
+            int requestCode,
+            String virtualPackage) {
+        if (!isLegacyTwitterSsoIntent(source)) {
+            return null;
+        }
+
+        String consumerKey = source.getStringExtra("ck");
+        String consumerSecret = source.getStringExtra("cs");
+        if (consumerKey == null || consumerKey.trim().isEmpty()
+                || consumerSecret == null || consumerSecret.trim().isEmpty()) {
+            return null;
+        }
+
+        int bpid = BActivityThread.getAppPid();
+        if (bpid < 0 || bpid > 24) {
+            return null;
+        }
+
+        Intent bridge = new Intent();
+        bridge.setComponent(new ComponentName(
+                BlackBoxCore.getHostPkg(),
+                TwitterLegacyPinAuthActivity.class.getName()));
+        bridge.putExtra(TwitterLegacyPinAuthActivity.EXTRA_PIN_COMPAT, true);
+        bridge.putExtra(EXTRA_BPID, bpid);
+        bridge.putExtra(EXTRA_USER_ID, BActivityThread.getUserId());
+        // Preserve only Twitter Kit's two legacy SSO credential fields.
+        bridge.putExtra("ck", consumerKey);
+        bridge.putExtra("cs", consumerSecret);
+        putResultTarget(bridge, resultTo, resultWho, requestCode, virtualPackage);
+        bridge.addFlags(source.getFlags() & (
+                Intent.FLAG_ACTIVITY_NO_ANIMATION
+                        | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+        return prepareBridgeForLaunch(bridge);
+    }
+
+    private static boolean isLegacyTwitterSsoIntent(Intent source) {
+        if (source == null) {
+            return false;
+        }
+        ComponentName component = source.getComponent();
+        return component != null
+                && "com.twitter.android".equals(component.getPackageName())
+                && LEGACY_TWITTER_SSO_ACTIVITY.equals(component.getClassName());
     }
 
     private static Intent createBaseBridge(

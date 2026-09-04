@@ -38,6 +38,13 @@
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
 
         <activity
+            android:name="top.niunaijun.blackbox.compat.oauth.TwitterLegacyPinAuthActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+
+        <activity
             android:name="top.niunaijun.blackbox.compat.oauth.TwitterNativeAuthBridgeActivity"
             android:excludeFromRecents="true"
             android:exported="false"
