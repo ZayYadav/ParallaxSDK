@@ -11,9 +11,8 @@ public class IAuthCompatPackageManagerProxyTest {
     public void acceptsOnlyTwitterKitResultCompatibleActivities() {
         assertTrue(IAuthCompatPackageManagerProxy.isWireCompatibleTwitterSsoClass(
                 "com.twitter.android.SingleSignOnActivity"));
-        assertTrue(IAuthCompatPackageManagerProxy.isWireCompatibleTwitterSsoClass(
+        assertFalse(IAuthCompatPackageManagerProxy.isWireCompatibleTwitterSsoClass(
                 "com.twitter.android.AuthorizeAppActivity"));
-
         assertFalse(IAuthCompatPackageManagerProxy.isWireCompatibleTwitterSsoClass(
                 "com.twitter.app.authorizeapp.AppAuthorizationActivity"));
         assertFalse(IAuthCompatPackageManagerProxy.isWireCompatibleTwitterSsoClass(
