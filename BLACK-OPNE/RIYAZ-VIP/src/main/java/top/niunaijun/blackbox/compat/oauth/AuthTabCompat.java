@@ -7,6 +7,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.net.Uri;
+import android.util.Log;
 
 import java.util.HashSet;
 import java.util.List;
@@ -24,9 +25,16 @@ import java.util.Set;
  * Facebook web login is intentionally Chrome-first. When stable Chrome is
  * installed and advertises Auth Tab support for the exact Facebook URL, the
  * bridge launches Chrome so the user can reuse the Facebook session already
- * owned by Chrome. The SDK never reads or copies Chrome/Facebook cookies.
+ * owned by Chrome. 
+ *
+ * Twitter/X login also prefers Chrome or other system browsers that support
+ * Auth Tab to preserve the device's Twitter session.
+ * 
+ * The SDK never reads or copies Chrome/Facebook/Twitter cookies.
  */
 public final class AuthTabCompat {
+    private static final String TAG = "AuthTabCompat";
+    
     public static final String EXTRA_LAUNCH_AUTH_TAB =
             "androidx.browser.auth.extra.LAUNCH_AUTH_TAB";
     public static final String EXTRA_REDIRECT_SCHEME =
@@ -39,10 +47,16 @@ public final class AuthTabCompat {
     private static final String CATEGORY_AUTH_TAB =
             "androidx.browser.auth.category.AuthTab";
     private static final String CHROME_STABLE_PACKAGE = "com.android.chrome";
+    private static final String FIREFOX_PACKAGE = "org.mozilla.firefox";
+    private static final String EDGE_PACKAGE = "com.microsoft.emmx";
 
     private AuthTabCompat() {
     }
 
+    /**
+     * Finds the best browser provider for authentication, with priority for
+     * Chrome on Facebook and Auth Tab-capable browsers on other services.
+     */
     public static String findProvider(Context context, Uri authUri) {
         if (context == null || authUri == null
                 || !"https".equalsIgnoreCase(authUri.getScheme())) {
@@ -54,12 +68,24 @@ public final class AuthTabCompat {
             return null;
         }
 
-        // Facebook must use the real Chrome profile when possible so an existing
-        // Chrome Facebook login is naturally reused by the browser itself.
-        // This branch is Facebook-only; Twitter/X provider selection is unchanged.
+        // Facebook must use the real Chrome profile when possible
         if (FacebookAuthHost.matches(authUri)
                 && supportsAuthTabProvider(pm, CHROME_STABLE_PACKAGE, authUri)) {
             return CHROME_STABLE_PACKAGE;
+        }
+
+        // Twitter/X: Try Chrome first, then other Auth Tab browsers
+        if (isTwitterAuthHost(authUri)) {
+            if (supportsAuthTabProvider(pm, CHROME_STABLE_PACKAGE, authUri)) {
+                return CHROME_STABLE_PACKAGE;
+            }
+            // Try Firefox or Edge as fallback for Twitter
+            if (supportsAuthTabProvider(pm, FIREFOX_PACKAGE, authUri)) {
+                return FIREFOX_PACKAGE;
+            }
+            if (supportsAuthTabProvider(pm, EDGE_PACKAGE, authUri)) {
+                return EDGE_PACKAGE;
+            }
         }
 
         String defaultBrowser = resolveDefaultBrowser(pm, authUri);
@@ -90,6 +116,7 @@ public final class AuthTabCompat {
                 }
 
                 if (pkg.equals(defaultBrowser)) {
+                    Log.d(TAG, "Found Auth Tab provider: " + pkg);
                     return pkg;
                 }
                 if (firstSupported == null) {
@@ -97,10 +124,40 @@ public final class AuthTabCompat {
                 }
             }
         } catch (Throwable ignored) {
+            Log.d(TAG, "Error querying Auth Tab providers", ignored);
             return null;
         }
 
+        if (firstSupported != null) {
+            Log.d(TAG, "Using fallback Auth Tab provider: " + firstSupported);
+        }
         return firstSupported;
+    }
+
+    /**
+     * Check if a URI is for Twitter/X authentication.
+     */
+    private static boolean isTwitterAuthHost(Uri authUri) {
+        if (authUri == null) {
+            return false;
+        }
+        String host = authUri.getHost();
+        if (host == null) {
+            return false;
+        }
+        String lowerHost = host.toLowerCase();
+        return lowerHost.equals("twitter.com")
+                || lowerHost.equals("x.com")
+                || lowerHost.equals("www.twitter.com")
+                || lowerHost.equals("www.x.com")
+                || lowerHost.equals("mobile.twitter.com")
+                || lowerHost.equals("mobile.x.com")
+                || lowerHost.equals("api.twitter.com")
+                || lowerHost.equals("api.x.com")
+                || lowerHost.equals("oauth.twitter.com")
+                || lowerHost.equals("oauth.x.com")
+                || lowerHost.endsWith(".twitter.com")
+                || lowerHost.endsWith(".x.com");
     }
 
     public static boolean isSupportedProvider(Context context, String provider, Uri authUri) {
@@ -143,10 +200,12 @@ public final class AuthTabCompat {
                         && filter != null
                         && filter.hasCategory(CATEGORY_AUTH_TAB)
                         && canHandleAuthUrl(pm, provider, authUri)) {
+                    Log.d(TAG, "Auth Tab supported by: " + provider);
                     return true;
                 }
             }
         } catch (Throwable ignored) {
+            Log.d(TAG, "Error checking Auth Tab support for " + provider, ignored);
         }
         return false;
     }
