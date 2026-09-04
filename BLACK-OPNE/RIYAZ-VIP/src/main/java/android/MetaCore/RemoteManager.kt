@@ -177,7 +177,7 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
             .apply()
 
         nk.setHidden("online")
-        nk.Msg = "SDK activated - secure lease verified"
+        nk.Msg = "SDK activated - YOUR SDK ACTIVATED"
         renewalTask?.cancel(false)
         val renewAfter = maxOf(60L, leaseExpiresAt - serverTime - 60L)
         renewalTask = renewalExecutor.schedule({ activateSdk(licenseKey) }, renewAfter, TimeUnit.SECONDS)
@@ -195,7 +195,7 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
                 )
             }
         }
-        showNotificationSafe("SDK ACTIVATED", "Secure panel lease active")
+        showNotificationSafe("SDK ACTIVATED", "YOUR SDK ACTIVATED")
     }
 
     private fun isRetryable(throwable: Throwable): Boolean {
@@ -208,10 +208,10 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
     override fun getActivatedSdk(): Boolean {
         return try {
             val result = nk.getActivatedSdk()
-            nk.Msg = if (result) "✅ SDK IS ACTIVATED" else "❌ SDK IS NOT ACTIVATED"
+            nk.Msg = if (result) "✅ SDK IS ACTIVATED" else "❌ YOU ARE NOT AUTHRISED"
             result
         } catch (_: Exception) {
-            nk.Msg = "ERROR: FAILED TO GET ACTIVATE STATUS"
+            nk.Msg = "ERROR: SERVER ISSUE"
             false
         }
     }
