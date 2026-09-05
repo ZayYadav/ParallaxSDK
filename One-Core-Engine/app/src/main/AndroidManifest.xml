@@ -90,6 +90,10 @@
         
         <service android:name=".floating.Overlay" android:stopWithTask="true" />
 
+        <receiver
+            android:name=".server.ServerInstallCancelReceiver"
+            android:exported="false" />
+
         <!-- WorkManager foreground service for user-initiated BGMI data downloads. -->
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
