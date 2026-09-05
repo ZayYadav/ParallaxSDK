@@ -151,18 +151,18 @@ public class BoxApplication extends Application {
                 }
 
                 if (!bootstrapKey.isEmpty()) {
-                    boolean ok = MetaActivationManager.activateSdkAndWait(bootstrapKey, 45_000L);
+                    boolean ok = activateSdkAndWaitCompat(bootstrapKey, 45_000L);
                     if (ok) {
                         return true;
                     }
-                    if (MetaActivationManager.isActivationInProgress()) {
+                    if (isSdkActivationInProgressCompat()) {
                         return false;
                     }
                 }
 
                 String fallback = loaderKey == null ? "" : loaderKey.trim();
                 if (!fallback.isEmpty() && !fallback.equalsIgnoreCase(bootstrapKey)) {
-                    boolean ok = MetaActivationManager.activateSdkAndWait(fallback, 45_000L);
+                    boolean ok = activateSdkAndWaitCompat(fallback, 45_000L);
                     if (ok) {
                         return true;
                     }
@@ -173,6 +173,50 @@ public class BoxApplication extends Application {
                 FLog.error("SDK activation bridge failed", error);
                 return false;
             }
+        }
+    }
+
+    /**
+     * Uses the newer blocking activation API when the freshly built SDK AAR is present.
+     * Loader-only CI may still compile against an older bundled AAR, so reflection keeps
+     * that build compatible and falls back to bounded status polling.
+     */
+    private boolean activateSdkAndWaitCompat(String key, long timeoutMillis) {
+        try {
+            java.lang.reflect.Method method = MetaActivationManager.class.getMethod(
+                    "activateSdkAndWait", String.class, long.class);
+            Object value = method.invoke(null, key, timeoutMillis);
+            return Boolean.TRUE.equals(value);
+        } catch (NoSuchMethodException ignored) {
+            MetaActivationManager.activateSdk(key);
+            long deadline = android.os.SystemClock.elapsedRealtime()
+                    + Math.max(1000L, Math.min(120000L, timeoutMillis));
+            while (android.os.SystemClock.elapsedRealtime() < deadline) {
+                if (MetaActivationManager.getActivatedStatus()) {
+                    return true;
+                }
+                try {
+                    Thread.sleep(150L);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    return false;
+                }
+            }
+            return MetaActivationManager.getActivatedStatus();
+        } catch (Throwable error) {
+            FLog.error("Blocking SDK activation call failed", error);
+            return false;
+        }
+    }
+
+    private boolean isSdkActivationInProgressCompat() {
+        try {
+            java.lang.reflect.Method method = MetaActivationManager.class.getMethod(
+                    "isActivationInProgress");
+            Object value = method.invoke(null);
+            return Boolean.TRUE.equals(value);
+        } catch (Throwable ignored) {
+            return false;
         }
     }
 
