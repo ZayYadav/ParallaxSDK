@@ -56,4 +56,16 @@ public final class ServerInstallStrings {
             "Notification permission is needed to show background download progress.";
     public static final String STORAGE_PERMISSION_TOAST =
             "Allow file access once. Download will start when you return.";
+
+    public static final String CLEAR_BGMI_DATA = "CLEAR BGMI DATA";
+    public static final String CLEAR_BGMI_DATA_SUBTITLE =
+            "Reset BGMI app data inside OneCore without uninstalling the game";
+    public static final String CLEAR_DATA_DIALOG_TITLE = "RESET BGMI DATA";
+    public static final String CLEAR_DATA_DIALOG_MESSAGE =
+            "This clears BGMI login, settings, cache and local app data inside OneCore. The installed APK and OBB stay in place.";
+    public static final String CLEAR_DATA_CONFIRM = "CLEAR DATA";
+    public static final String CLEAR_DATA_CANCEL = "KEEP DATA";
+    public static final String CLEAR_DATA_SUCCESS = "BGMI data cleared successfully";
+    public static final String CLEAR_DATA_FAILED = "Unable to clear BGMI data";
+    public static final String CLEAR_DATA_NOT_INSTALLED = "Install BGMI first";
 }
