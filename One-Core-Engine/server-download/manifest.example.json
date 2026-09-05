@@ -11,18 +11,22 @@
     "parts": [
       {
         "name": "bgmi_obb.zip.part00",
+        "size": 419430400,
         "url": "https://cdn.yourdomain.com/bgmi/4.2/bgmi_obb.zip.part00"
       },
       {
         "name": "bgmi_obb.zip.part01",
+        "size": 419430400,
         "url": "https://cdn.yourdomain.com/bgmi/4.2/bgmi_obb.zip.part01"
       },
       {
         "name": "bgmi_obb.zip.part02",
+        "size": 419430400,
         "url": "https://cdn.yourdomain.com/bgmi/4.2/bgmi_obb.zip.part02"
       },
       {
         "name": "bgmi_obb.zip.part03",
+        "size": 157286400,
         "url": "https://cdn.yourdomain.com/bgmi/4.2/bgmi_obb.zip.part03"
       }
     ]
