@@ -1,9 +1,12 @@
 package com.onecore.loader;
 
 import android.app.Activity;
+import android.app.ActivityManager;
 import android.app.Application;
 import android.content.Context;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Process;
 import android.view.WindowManager;
 
 import androidx.appcompat.app.AppCompatDelegate;
@@ -24,6 +27,7 @@ import com.onecore.loader.utils.NetworkConnection;
 import com.topjohnwu.superuser.Shell;
 
 import java.io.IOException;
+import java.util.List;
 
 import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.configuration.ClientConfiguration;
@@ -36,6 +40,7 @@ public class BoxApplication extends Application {
 
     private final Object sdkActivationLock = new Object();
     private boolean isNetworkConnected = false;
+    private boolean mainProcess = true;
 
     public static BoxApplication get() {
         return gApp;
@@ -86,9 +91,12 @@ public class BoxApplication extends Application {
     public void onCreate() {
         super.onCreate();
         gApp = this;
-        selectRandomThemeForLaunch();
-        configureLoaderActivities();
-        FLog.info("Startup: Application.onCreate begin");
+        mainProcess = isMainProcess();
+        if (mainProcess) {
+            selectRandomThemeForLaunch();
+            configureLoaderActivities();
+        }
+        FLog.info("Startup: Application.onCreate begin • mainProcess=" + mainProcess);
 
         IntegrityEnforcer.install(this);
 
@@ -100,29 +108,33 @@ public class BoxApplication extends Application {
             FLog.error("BlackBox service initialization failed", error);
         }
 
-        new Thread(() -> {
+        if (mainProcess) {
+            new Thread(() -> {
+                try {
+                    String storedKey = new HostedLicenseClient(this).getStoredActivationKey();
+                    boolean activated = activateSdkWithFallback(storedKey);
+                    FLog.info("Startup SDK activation result: " + activated);
+                } catch (Throwable error) {
+                    FLog.error("Background SDK activation failed", error);
+                }
+            }, "OneCore-SdkActivation").start();
+
             try {
-                String storedKey = new HostedLicenseClient(this).getStoredActivationKey();
-                boolean activated = activateSdkWithFallback(storedKey);
-                FLog.info("Startup SDK activation result: " + activated);
+                DynamicColors.applyToActivitiesIfAvailable(this);
             } catch (Throwable error) {
-                FLog.error("Background SDK activation failed", error);
+                FLog.error("Dynamic color initialization failed", error);
             }
-        }, "OneCore-SdkActivation").start();
 
-        try {
-            DynamicColors.applyToActivitiesIfAvailable(this);
-        } catch (Throwable error) {
-            FLog.error("Dynamic color initialization failed", error);
-        }
+            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
 
-        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
-
-        try {
-            NetworkConnection.CheckInternet network = new NetworkConnection.CheckInternet(this);
-            network.registerNetworkCallback();
-        } catch (Throwable error) {
-            FLog.error("Network callback registration failed", error);
+            try {
+                NetworkConnection.CheckInternet network = new NetworkConnection.CheckInternet(this);
+                network.registerNetworkCallback();
+            } catch (Throwable error) {
+                FLog.error("Network callback registration failed", error);
+            }
+        } else {
+            FLog.info("Startup: proxy/virtual process detected; skipping host-only SDK activation and UI observers");
         }
 
         FLog.info("Startup: Application.onCreate complete");
@@ -218,6 +230,37 @@ public class BoxApplication extends Application {
         } catch (Throwable ignored) {
             return false;
         }
+    }
+
+    private boolean isMainProcess() {
+        String packageName = getPackageName();
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                String processName = Application.getProcessName();
+                return packageName.equals(processName);
+            }
+
+            ActivityManager manager =
+                    (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+            if (manager != null) {
+                List<ActivityManager.RunningAppProcessInfo> processes =
+                        manager.getRunningAppProcesses();
+                if (processes != null) {
+                    int pid = Process.myPid();
+                    for (ActivityManager.RunningAppProcessInfo process : processes) {
+                        if (process != null && process.pid == pid) {
+                            return packageName.equals(process.processName);
+                        }
+                    }
+                }
+            }
+        } catch (Throwable error) {
+            FLog.warning("Unable to resolve current process; using host-safe fallback");
+        }
+
+        // Conservative fallback for old/quirky devices: keep legacy behavior rather than
+        // risking a loader startup regression when Android cannot report the process name.
+        return true;
     }
 
     private void selectRandomThemeForLaunch() {
