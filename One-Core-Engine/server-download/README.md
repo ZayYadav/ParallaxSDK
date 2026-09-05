@@ -132,6 +132,7 @@ Recommended behavior for APK and part files:
 - `apk.url` must be HTTPS.
 - `obb.output_name` must exactly match the OBB filename inside the reconstructed ZIP.
 - `obb.parts` order is the binary join order.
+- Generated manifests also include each part's byte `size` so a fully downloaded part can be reused on resume; this is not a hash or SHA check.
 - Part names may be arbitrary, but generated `.part00`, `.part01` naming is recommended.
 - No hash or SHA fields are required.
 
