@@ -166,6 +166,12 @@ public final class HostedLicenseClient {
         return activate(key);
     }
 
+    /** Returns the securely stored Loader activation key for the SDK activation bridge. */
+    public String getStoredActivationKey() {
+        String key = new SecurePreferences(context).getString(LICENSE_KEY, "");
+        return isSupportedActivationKey(key) ? normalizeActivationKey(key) : "";
+    }
+
     public boolean hasActiveLicense() {
         long expiresAt = readLong(LICENSE_EXPIRES_AT);
         long serverTime = readLong(VERIFIED_SERVER_TIME);
