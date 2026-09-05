@@ -1,0 +1,59 @@
+Cloudflare setup for bgmiobbapk.parallaxserver.online
+
+1. DNS
+   Record for bgmiobbapk.parallaxserver.online must be PROXIED (orange cloud).
+   Cache Rules only work for proxied traffic.
+
+2. Cache Rule: BGMI static payload
+   Rules > Cache Rules > Create rule
+
+   Rule name:
+   BGMI APK OBB CDN CACHE
+
+   Expression:
+   (http.host eq "bgmiobbapk.parallaxserver.online" and http.request.uri.path.extension in {"apk" "zip" "z01" "z02" "z03" "z04" "z05" "z06" "z07" "z08" "z09"})
+
+   Settings:
+   - Cache eligibility: Eligible for cache
+   - Edge TTL: Override origin / 1 month
+   - Browser TTL: Respect existing headers
+     (origin .htaccess sends 1 day)
+   - Cache key: Default
+
+3. Cache Rule: never cache manifest
+   Rule name:
+   BGMI MANIFEST NO CACHE
+
+   Expression:
+   (http.host eq "bgmiobbapk.parallaxserver.online" and http.request.uri.path eq "/manifest.json")
+
+   Settings:
+   - Cache eligibility: Bypass cache
+
+4. Important size rule
+   Cloudflare Free / Pro / Business cache individual files up to 512 MB.
+   Your 400 MB z01/z02/z03 chunks are intentionally below that limit.
+   Keep every future split segment <= 500 MB; 400 MB is recommended.
+
+5. After replacing an existing payload URL
+   Caching > Configuration > Purge Cache > Custom Purge
+   Purge the exact replaced APK/ZIP/zXX URLs.
+   Better: use a new version folder or new filenames for each BGMI release.
+
+6. Test after upload
+   Run twice:
+   curl -I https://bgmiobbapk.parallaxserver.online/main.21325.com.pubg.imobile.z01
+
+   Expected:
+   HTTP/2 200
+   content-length: ...
+   accept-ranges: bytes
+   cache-control: public, ...
+   cf-cache-status: MISS   (first request can be MISS)
+   cf-cache-status: HIT    (later request from the same edge should become HIT)
+
+   Range test:
+   curl -I -H "Range: bytes=0-1023" https://bgmiobbapk.parallaxserver.online/main.21325.com.pubg.imobile.z01
+
+   Expected status: 206 Partial Content
+   Expected header: Content-Range: bytes 0-1023/<total>
