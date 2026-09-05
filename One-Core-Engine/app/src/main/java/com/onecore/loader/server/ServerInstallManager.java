@@ -152,7 +152,7 @@ public final class ServerInstallManager {
 
         File apkFile = new File(workspace, safeName(spec.apkFileName));
         updateUi("DOWNLOADING APK", "Preparing BGMI package", 5);
-        downloadResumable(spec.apkUrl, apkFile, 5, 32, "APK");
+        downloadResumable(spec.apkUrl, apkFile, -1L, 5, 32, "APK");
         validateArchivePackage(apkFile, spec.packageName);
 
         updateUi("INSTALLING APK", "Installing BGMI inside OneCore", 35);
@@ -178,7 +178,7 @@ public final class ServerInstallManager {
             int end = 38 + (int) Math.floor(((i + 1) * 34.0d) / Math.max(1, count));
             updateUi("DOWNLOADING OBB",
                     "Part " + (i + 1) + " of " + count, start);
-            downloadResumable(part.url, partFile, start, Math.max(start + 1, end),
+            downloadResumable(part.url, partFile, part.size, start, Math.max(start + 1, end),
                     "OBB part " + (i + 1));
             downloadedParts.add(partFile);
         }
@@ -278,7 +278,8 @@ public final class ServerInstallManager {
                 requireHttps(partUrl, "OBB part");
                 String name = part.optString("name",
                         String.format(Locale.US, "bgmi_obb.zip.part%02d", i)).trim();
-                parts.add(new PartSpec(name, partUrl));
+                long size = part.optLong("size", -1L);
+                parts.add(new PartSpec(name, partUrl, size));
             }
 
             return new ManifestSpec(packageName, apkFileName, apkUrl,
@@ -298,10 +299,22 @@ public final class ServerInstallManager {
         }
     }
 
-    private void downloadResumable(String url, File destination,
+    private void downloadResumable(String url, File destination, long expectedLength,
                                    int overallStart, int overallEnd, String label)
             throws IOException {
         requireHttps(url, label);
+        if (expectedLength > 0L && destination.isFile()
+                && destination.length() == expectedLength) {
+            updateUi(label.toUpperCase(Locale.US),
+                    humanBytes(expectedLength) + " ready", overallEnd);
+            return;
+        }
+        if (expectedLength > 0L && destination.isFile()
+                && destination.length() > expectedLength) {
+            if (!destination.delete()) {
+                throw new IOException(label + " partial file could not be reset.");
+            }
+        }
         File parent = destination.getParentFile();
         if (parent != null && !parent.exists() && !parent.mkdirs()) {
             throw new IOException("Unable to create download folder.");
@@ -310,7 +323,10 @@ public final class ServerInstallManager {
         boolean retried = false;
         while (true) {
             long existing = destination.isFile() ? destination.length() : 0L;
-            Request.Builder builder = new Request.Builder().url(url).get();
+            Request.Builder builder = new Request.Builder()
+                    .url(url)
+                    .header("Accept-Encoding", "identity")
+                    .get();
             if (existing > 0L) builder.header("Range", "bytes=" + existing + "-");
 
             try (Response response = HTTP.newCall(builder.build()).execute()) {
@@ -367,6 +383,9 @@ public final class ServerInstallManager {
 
                 if (!destination.isFile() || destination.length() <= 0L) {
                     throw new IOException(label + " download produced an empty file.");
+                }
+                if (expectedLength > 0L && destination.length() != expectedLength) {
+                    throw new IOException(label + " size does not match the manifest.");
                 }
                 return;
             }
@@ -656,10 +675,12 @@ public final class ServerInstallManager {
     private static final class PartSpec {
         final String name;
         final String url;
+        final long size;
 
-        PartSpec(String name, String url) {
+        PartSpec(String name, String url, long size) {
             this.name = name;
             this.url = url;
+            this.size = size;
         }
     }
 }
