@@ -1,12 +1,17 @@
 package com.onecore.loader.activity;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.ActivityManager;
+import android.app.Dialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -15,7 +20,10 @@ import android.os.Looper;
 import android.os.Environment;
 import android.provider.Settings;
 import android.text.TextUtils;
+import android.view.Gravity;
+import android.view.Window;
 import android.view.WindowManager;
+import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.RadioButton;
 import android.widget.TextView;
@@ -30,7 +38,8 @@ import com.onecore.loader.libhelper.ApkEnv;
 import com.onecore.loader.libhelper.DownloadZip;
 import com.onecore.loader.libhelper.FileCopyTask;
 import com.onecore.loader.security.HostedLicenseClient;
-import com.onecore.loader.server.ServerInstallManager;
+import com.onecore.loader.server.ServerInstallWorker;
+import com.onecore.loader.ui.ThemeManager;
 import com.onecore.loader.utils.Constants;
 import com.onecore.loader.utils.CrashHandler;
 import com.onecore.loader.utils.FLog;
@@ -53,6 +62,7 @@ public class MainActivity extends Activity {
 
     private static final long ONLINE_REVALIDATION_INTERVAL_MS = 5L * 60L * 1000L;
     private static final int BGMI_INDEX = 0;
+    private static final int REQUEST_SERVER_NOTIFICATIONS = 9104;
 
     public static MainActivity instance;
     private BlackBoxCore blackBoxCore;
@@ -60,16 +70,25 @@ public class MainActivity extends Activity {
     public String CURRENT_PACKAGE;
 
     private TextView installIndia;
-    private TextView installFromServer;
     private TextView btnStartGame;
     private RadioButton tvHideEsp;
 
     public static int gameType = 5;
     private String selectedGamePkg;
     private final Handler countdownHandler = new Handler(Looper.getMainLooper());
+    private final Handler serverStateHandler = new Handler(Looper.getMainLooper());
+    private final Runnable serverStateRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (installIndia != null) {
+                updateButtonState(BGMI_INDEX, installIndia);
+            }
+            serverStateHandler.postDelayed(this, 1000L);
+        }
+    };
     private Runnable countdownRunnable;
     private HostedLicenseClient licenseClient;
-    private ServerInstallManager serverInstallManager;
+    private boolean pendingServerInstall;
     private boolean accessClosed;
     private boolean revalidationInProgress;
 
@@ -107,9 +126,7 @@ public class MainActivity extends Activity {
         gameType = 5;
 
         installIndia = findViewById(R.id.installIndia);
-        installFromServer = findViewById(R.id.installFromServer);
         btnStartGame = findViewById(R.id.btn_start_game);
-        serverInstallManager = new ServerInstallManager(this);
         tvHideEsp = findViewById(R.id.tv_hide_esp);
 
         TextView deviceStatus = findViewById(R.id.tv_device_status);
@@ -119,65 +136,17 @@ public class MainActivity extends Activity {
         updateButtonState(BGMI_INDEX, installIndia);
 
         installIndia.setOnClickListener(view -> {
-            if (ensureLicenseActive()) {
-                if (serverInstallManager != null && serverInstallManager.isBusy()) {
-                    BoxApplication.get().showToastWithImage(
-                            "Server installation is already running.", TastyToast.INFO);
-                    return;
-                }
-                handleInstallUninstall(BGMI_INDEX, installIndia);
+            if (!ensureLicenseActive()) {
+                return;
             }
+            if (ServerInstallWorker.isRunning(MainActivity.this)) {
+                BoxApplication.get().showToastWithImage(
+                        "BGMI server download is already running in background.",
+                        TastyToast.INFO);
+                return;
+            }
+            showInstallSourceDialog();
         });
-
-        if (installFromServer != null) {
-            installFromServer.setOnClickListener(view -> {
-                if (!ensureLicenseActive()) {
-                    return;
-                }
-                if (selectedGamePkg == null || selectedGamePkg.isEmpty()) {
-                    BoxApplication.get().showToastWithImage(
-                            "BGMI profile is unavailable in this build.", TastyToast.ERROR);
-                    return;
-                }
-                if (serverInstallManager == null || serverInstallManager.isBusy()) {
-                    BoxApplication.get().showToastWithImage(
-                            "Server installation is already running.", TastyToast.INFO);
-                    return;
-                }
-
-                FileCopyTask serverStorage = new FileCopyTask(MainActivity.this);
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-                        && !Environment.isExternalStorageManager()) {
-                    serverStorage.requestStoragePermission();
-                    BoxApplication.get().showToastWithImage(
-                            "Allow file access, then tap Install From Server again.",
-                            TastyToast.INFO);
-                    return;
-                }
-
-                installFromServer.setEnabled(false);
-                installFromServer.setAlpha(0.72f);
-                installFromServer.setText("SERVER INSTALL RUNNING");
-
-                serverInstallManager.start(selectedGamePkg, (success, message) -> {
-                    if (installFromServer != null) {
-                        installFromServer.setEnabled(true);
-                        installFromServer.setAlpha(1f);
-                        installFromServer.setText("INSTALL FROM SERVER");
-                    }
-
-                    if (success) {
-                        saveInstallationStatus(selectedGamePkg, true);
-                        updateButtonState(BGMI_INDEX, installIndia);
-                        BoxApplication.get().showToastWithImage(
-                                "BGMI installed from server.", TastyToast.SUCCESS);
-                    } else {
-                        BoxApplication.get().showToastWithImage(
-                                message, TastyToast.ERROR);
-                    }
-                });
-            });
-        }
 
         btnStartGame.setOnClickListener(v -> {
             if (!ensureLicenseActive()) {
@@ -243,6 +212,236 @@ public class MainActivity extends Activity {
         });
     }
 
+    private void showInstallSourceDialog() {
+        if (!ensureLicenseActive()) {
+            return;
+        }
+
+        if (selectedGamePkg == null || selectedGamePkg.isEmpty()) {
+            BoxApplication.get().showToastWithImage(
+                    "BGMI profile is unavailable in this build.", TastyToast.ERROR);
+            return;
+        }
+
+        // Once installed, the same button remains a direct UNINSTALL action.
+        if (getInstallationStatus(selectedGamePkg)) {
+            handleInstallUninstall(BGMI_INDEX, installIndia);
+            return;
+        }
+
+        ThemeManager.ThemeSpec theme = ThemeManager.current(this);
+        Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        dialog.setCancelable(true);
+        dialog.setCanceledOnTouchOutside(true);
+
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(22), dp(20), dp(22), dp(18));
+
+        GradientDrawable shell = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{theme.surfaceAlt, theme.surface});
+        shell.setCornerRadius(dp(theme.cardRadiusDp));
+        shell.setStroke(
+                dp(Math.max(1f, theme.strokeDp)),
+                ThemeManager.withAlpha(theme.accent, 190));
+        root.setBackground(shell);
+
+        TextView title = new TextView(this);
+        title.setText("INSTALL BGMI");
+        title.setTextColor(theme.text);
+        title.setTextSize(20f);
+        title.setTypeface(android.graphics.Typeface.create(
+                theme.headingFont, android.graphics.Typeface.BOLD));
+        title.setLetterSpacing(0.05f);
+        root.addView(title, matchWrapParams(0));
+
+        TextView subtitle = new TextView(this);
+        subtitle.setText("Choose where OneCore should get the game files");
+        subtitle.setTextColor(theme.muted);
+        subtitle.setTextSize(12f);
+        LinearLayout.LayoutParams subtitleParams = matchWrapParams(0);
+        subtitleParams.topMargin = dp(5);
+        subtitleParams.bottomMargin = dp(15);
+        root.addView(subtitle, subtitleParams);
+
+        TextView installedGame = makeInstallChoice(
+                "INSTALL FROM YOUR INSTALLED GAME",
+                "Copy the BGMI APK + OBB already available on this device",
+                theme,
+                false);
+        root.addView(installedGame, matchWrapParams(10));
+
+        TextView oneCoreServer = makeInstallChoice(
+                "INSTALL BGMI FROM ONECORE SERVER",
+                "Fast resumable CDN download • runs in background with notification progress",
+                theme,
+                true);
+        root.addView(oneCoreServer, matchWrapParams(0));
+
+        TextView footer = new TextView(this);
+        footer.setText("Tap outside to cancel");
+        footer.setTextColor(theme.muted);
+        footer.setTextSize(10f);
+        footer.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams footerParams = matchWrapParams(0);
+        footerParams.topMargin = dp(13);
+        root.addView(footer, footerParams);
+
+        installedGame.setOnClickListener(v -> {
+            dialog.dismiss();
+            handleInstallUninstall(BGMI_INDEX, installIndia);
+        });
+
+        oneCoreServer.setOnClickListener(v -> {
+            dialog.dismiss();
+            beginServerInstall();
+        });
+
+        dialog.setContentView(root);
+        dialog.show();
+
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            WindowManager.LayoutParams attrs = window.getAttributes();
+            attrs.dimAmount = 0.78f;
+            window.setAttributes(attrs);
+            int width = getResources().getDisplayMetrics().widthPixels;
+            window.setLayout(
+                    (int) (width * 0.90f),
+                    WindowManager.LayoutParams.WRAP_CONTENT);
+            window.setGravity(Gravity.CENTER);
+        }
+    }
+
+    private TextView makeInstallChoice(
+            String title,
+            String subtitle,
+            ThemeManager.ThemeSpec theme,
+            boolean primary) {
+        TextView option = new TextView(this);
+        option.setText(title + "\n" + subtitle);
+        option.setTextColor(primary ? ThemeManager.contrastInk(theme.accent) : theme.text);
+        option.setTextSize(13f);
+        option.setLineSpacing(dp(3), 1f);
+        option.setGravity(Gravity.CENTER_VERTICAL);
+        option.setPadding(dp(16), dp(14), dp(16), dp(14));
+        option.setTypeface(android.graphics.Typeface.create(
+                theme.headingFont, android.graphics.Typeface.BOLD));
+
+        GradientDrawable background;
+        if (primary) {
+            background = new GradientDrawable(
+                    GradientDrawable.Orientation.LEFT_RIGHT,
+                    new int[]{theme.accent, theme.accent2});
+            background.setStroke(0, Color.TRANSPARENT);
+        } else {
+            background = new GradientDrawable(
+                    GradientDrawable.Orientation.TL_BR,
+                    new int[]{
+                            ThemeManager.withAlpha(theme.surfaceAlt, 250),
+                            ThemeManager.withAlpha(theme.surface, 250)});
+            background.setStroke(
+                    dp(Math.max(1f, theme.strokeDp)),
+                    ThemeManager.withAlpha(theme.accent, 150));
+        }
+        background.setCornerRadius(dp(theme.buttonRadiusDp));
+        option.setBackground(background);
+        option.setClickable(true);
+        option.setFocusable(true);
+        return option;
+    }
+
+    private void beginServerInstall() {
+        if (!ensureLicenseActive()) {
+            pendingServerInstall = false;
+            return;
+        }
+
+        if (selectedGamePkg == null || selectedGamePkg.isEmpty()) {
+            pendingServerInstall = false;
+            BoxApplication.get().showToastWithImage(
+                    "BGMI profile is unavailable in this build.", TastyToast.ERROR);
+            return;
+        }
+
+        if (ServerInstallWorker.isRunning(this)) {
+            pendingServerInstall = false;
+            BoxApplication.get().showToastWithImage(
+                    "BGMI server download is already running in background.",
+                    TastyToast.INFO);
+            return;
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                && !Environment.isExternalStorageManager()) {
+            pendingServerInstall = true;
+            new FileCopyTask(this).requestStoragePermission();
+            BoxApplication.get().showToastWithImage(
+                    "Allow file access once. Download will start when you return.",
+                    TastyToast.INFO);
+            return;
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+            pendingServerInstall = true;
+            requestPermissions(
+                    new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                    REQUEST_SERVER_NOTIFICATIONS);
+            return;
+        }
+
+        pendingServerInstall = false;
+        boolean queued = ServerInstallWorker.enqueue(this, selectedGamePkg);
+        if (queued) {
+            updateButtonState(BGMI_INDEX, installIndia);
+            BoxApplication.get().showToastWithImage(
+                    "BGMI download started • you can leave the loader open or put it in background.",
+                    TastyToast.SUCCESS);
+        } else {
+            BoxApplication.get().showToastWithImage(
+                    "Unable to start background download.", TastyToast.ERROR);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(
+            int requestCode,
+            String[] permissions,
+            int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != REQUEST_SERVER_NOTIFICATIONS || !pendingServerInstall) {
+            return;
+        }
+
+        if (grantResults.length > 0
+                && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            beginServerInstall();
+        } else {
+            pendingServerInstall = false;
+            BoxApplication.get().showToastWithImage(
+                    "Notification permission is needed to show background download progress.",
+                    TastyToast.INFO);
+        }
+    }
+
+    private LinearLayout.LayoutParams matchWrapParams(int bottomMarginDp) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.bottomMargin = dp(bottomMarginDp);
+        return params;
+    }
+
+    private int dp(float value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
     private void handleInstallUninstall(final int gameIndex, final TextView installButton) {
         if (!ensureLicenseActive()) {
             return;
@@ -305,7 +504,17 @@ public class MainActivity extends Activity {
         if (installButton == null || GAME_LIST_PKG.length <= gameIndex) {
             return;
         }
+
+        if (ServerInstallWorker.isRunning(this)) {
+            installButton.setText("DOWNLOADING…");
+            installButton.setEnabled(false);
+            installButton.setAlpha(0.72f);
+            return;
+        }
+
         String packageName = GAME_LIST_PKG[gameIndex];
+        installButton.setEnabled(true);
+        installButton.setAlpha(1f);
         installButton.setText(getInstallationStatus(packageName) ? "UNINSTALL" : "INSTALL");
     }
 
@@ -500,10 +709,20 @@ public class MainActivity extends Activity {
         } else if (licenseClient != null) {
             closeExpiredAccess();
         }
+
+        serverStateHandler.removeCallbacks(serverStateRunnable);
+        serverStateHandler.post(serverStateRunnable);
+
+        if (pendingServerInstall
+                && (Build.VERSION.SDK_INT < Build.VERSION_CODES.R
+                || Environment.isExternalStorageManager())) {
+            beginServerInstall();
+        }
     }
 
     @Override
     protected void onPause() {
+        serverStateHandler.removeCallbacks(serverStateRunnable);
         super.onPause();
     }
 
@@ -512,6 +731,7 @@ public class MainActivity extends Activity {
         if (countdownRunnable != null) {
             countdownHandler.removeCallbacks(countdownRunnable);
         }
+        serverStateHandler.removeCallbacks(serverStateRunnable);
         stopService(new Intent(this, FloatLogo.class));
         stopService(new Intent(this, Overlay.class));
         stopService(new Intent(this, FloatAim.class));
