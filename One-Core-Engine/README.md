@@ -117,6 +117,9 @@ Themes are selected automatically on each Loader process launch (and avoid repea
 the immediately previous theme when multiple themes are available). The header brand
 mark is decorative; there is no manual theme-picker button.
 
+Downloader button/notification labels are centralized in
+`app/src/main/java/com/onecore/loader/server/ServerInstallStrings.java`, so wording can be changed without editing download logic.
+
 Configuration and payload-generation instructions are in
 `server-download/README.md`. The Loader's compiled server-download setting is
 `app/src/main/assets/server_download_config.json`; APK and OBB URLs belong in the
