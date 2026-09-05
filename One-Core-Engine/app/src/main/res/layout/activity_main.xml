@@ -441,7 +441,7 @@
             android:fontFamily="sans-serif-black"
             android:gravity="center"
             android:letterSpacing="0.075"
-            android:text="CLEAR BGMI DATA"
+            android:text="CLEAR ALL BGMI DATA"
             android:textColor="@color/premium_gold"
             android:textSize="13sp" />
     </LinearLayout>
