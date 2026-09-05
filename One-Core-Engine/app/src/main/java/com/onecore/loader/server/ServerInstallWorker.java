@@ -299,6 +299,30 @@ public final class ServerInstallWorker extends Worker {
         }
     }
 
+    @Override
+    public void onStopped() {
+        super.onStopped();
+        try {
+            HTTP.dispatcher().cancelAll();
+        } catch (Throwable ignored) {
+        }
+
+        setSnapshot(
+                appContext,
+                false,
+                "CANCELLED",
+                ServerInstallStrings.CANCELLED,
+                Math.max(0, readPublishedPercent()));
+
+        try {
+            ensureNotificationChannel();
+            if (notificationManager != null) {
+                notificationManager.cancel(NOTIFICATION_ID);
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
     private void performInstall(String expectedPackageName) throws Exception {
         publishProgress("CONNECTING", "Loading server manifest", 2, true);
 
