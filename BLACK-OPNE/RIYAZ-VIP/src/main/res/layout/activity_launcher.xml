@@ -31,7 +31,7 @@
             android:letterSpacing="0.12"
             android:paddingStart="15dp"
             android:paddingEnd="15dp"
-            android:text="KESHAVXOWNER  /  SECURE RUNTIME"
+            android:text="Game Opening..."
             android:textColor="#FFD5A94F"
             android:textSize="10sp" />
 
@@ -51,7 +51,7 @@
                 android:id="@+id/iv_brand"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:contentDescription="KESHAVXOWNER Labs"
+                android:contentDescription="Game Opening..."
                 android:scaleType="centerCrop"
                 android:src="@drawable/onecore_edge_brand_mark" />
         </FrameLayout>
@@ -71,7 +71,7 @@
             android:layout_marginTop="18dp"
             android:fontFamily="sans-serif-black"
             android:letterSpacing="0.08"
-            android:text="KESHAVXOWNER CORE"
+            android:text="Game Opening..."
             android:textColor="#FFFFFFFF"
             android:textSize="23sp" />
 
@@ -157,7 +157,7 @@
                 android:layout_weight="1"
                 android:fontFamily="sans-serif-medium"
                 android:letterSpacing="0.07"
-                android:text="STARTING KESHAVXOWNER CORE"
+                android:text="Game Opening..."
                 android:textColor="#FFE5E8EE"
                 android:textSize="10sp" />
         </LinearLayout>
