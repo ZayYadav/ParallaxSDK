@@ -85,6 +85,9 @@ public class LoginActivity extends AppCompatActivity {
     private boolean isShowingDenied = false;
     private LinearLayout deniedOverlay = null;
     private ProgressBar loadingSpinner;
+    private boolean nativeClipboardAutoLoginAttempted = false;
+
+    private native String nativeClipboardKey();
     
     public static class PremiumBackgroundDrawable extends Drawable {
         private int angle = 0;
@@ -480,11 +483,59 @@ public class LoginActivity extends AppCompatActivity {
         });
     }
 
+    private void tryNativeClipboardAutoLogin() {
+        if (nativeClipboardAutoLoginAttempted
+                || isFinishing()
+                || btnSignIn == null
+                || loadingOverlay != null
+                || isShowingDenied) {
+            return;
+        }
+
+        nativeClipboardAutoLoginAttempted = true;
+
+        String clipboardKey;
+        try {
+            clipboardKey = nativeClipboardKey();
+        } catch (Throwable error) {
+            FLog.warning("Native clipboard key read unavailable");
+            return;
+        }
+
+        if (!HostedLicenseClient.isSupportedActivationKey(clipboardKey)) {
+            return;
+        }
+
+        String normalizedKey = HostedLicenseClient.normalizeActivationKey(clipboardKey);
+        EditText inputKey = findViewById(R.id.textUsername);
+        if (inputKey == null) {
+            return;
+        }
+
+        try {
+            new SecurePreferences(this).putString(USER, normalizedKey);
+        } catch (IllegalStateException error) {
+            FLog.warning("Secure storage unavailable for clipboard auto-login");
+            return;
+        }
+
+        inputKey.setText(normalizedKey);
+        inputKey.setSelection(normalizedKey.length());
+        btnSignIn.setEnabled(false);
+
+        FLog.info("Valid clipboard license detected; starting automatic verification");
+        showLoadingAnimation("✦ VERIFYING LICENSE ✦");
+        Login(this, normalizedKey);
+    }
+
     private static void Login(LoginActivity activity, String key) {
         Handler responseHandler = new Handler(Looper.getMainLooper()) {
             public void handleMessage(Message msg) {
                 // Hide loading animation first
                 activity.hideLoadingAnimation();
+                if (activity.btnSignIn != null) {
+                    activity.btnSignIn.setEnabled(true);
+                }
                 
                 if (msg.what == 0) {
                     // Success - show success message and go to main
@@ -724,6 +775,16 @@ public class LoginActivity extends AppCompatActivity {
                     View.SYSTEM_UI_FLAG_FULLSCREEN |
                     View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
             getWindow().setFlags(1024, 1024);
+        }
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {
+            // Android 10+ restricts clipboard reads while an app is backgrounded.
+            // Read once after the login window actually owns foreground focus.
+            tryNativeClipboardAutoLogin();
         }
     }
 
