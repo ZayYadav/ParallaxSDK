@@ -12,6 +12,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Environment;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.view.WindowManager;
@@ -141,6 +142,16 @@ public class MainActivity extends Activity {
                 if (serverInstallManager == null || serverInstallManager.isBusy()) {
                     BoxApplication.get().showToastWithImage(
                             "Server installation is already running.", TastyToast.INFO);
+                    return;
+                }
+
+                FileCopyTask serverStorage = new FileCopyTask(MainActivity.this);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                        && !Environment.isExternalStorageManager()) {
+                    serverStorage.requestStoragePermission();
+                    BoxApplication.get().showToastWithImage(
+                            "Allow file access, then tap Install From Server again.",
+                            TastyToast.INFO);
                     return;
                 }
 
