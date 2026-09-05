@@ -351,16 +351,16 @@ public final class ThemeManager {
     }
 
     private static void applyThemePickerHook(Activity activity) {
+        // Themes are selected automatically by BoxApplication for every app launch.
+        // Keep the top-right brand mark decorative so there is no manual theme picker button.
         View settings = activity.findViewById(R.id.btn_settings);
         if (settings != null) {
-            settings.setClickable(true);
-            settings.setFocusable(true);
-            settings.setContentDescription("Choose OneCore Edge theme");
-            settings.setOnClickListener(v -> showThemePicker(activity));
-            settings.setOnLongClickListener(v -> {
-                showThemePicker(activity);
-                return true;
-            });
+            settings.setOnClickListener(null);
+            settings.setOnLongClickListener(null);
+            settings.setClickable(false);
+            settings.setLongClickable(false);
+            settings.setFocusable(false);
+            settings.setContentDescription("OneCore Edge brand");
         }
     }
 
