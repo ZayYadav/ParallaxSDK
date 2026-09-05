@@ -29,6 +29,7 @@ import android.widget.TextView;
 import com.onecore.loader.R;
 import com.onecore.loader.security.HostedLicenseClient;
 import com.onecore.loader.security.SecurityThreatDetector;
+import com.onecore.loader.ui.ThemeManager;
 import com.onecore.loader.utils.CrashHandler;
 
 import org.lsposed.lsparanoid.Obfuscate;
@@ -152,6 +153,9 @@ public class SplashActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // A fresh non-repeating theme is chosen every time the launcher entry opens,
+        // even when Android kept the Loader process alive in the background.
+        ThemeManager.randomizeForLaunch(this);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);

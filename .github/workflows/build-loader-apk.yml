@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - master
+      - ParallaxLoaderServerDonwnLoad
     paths:
       - "BLACK-OPNE/**"
       - "One-Core-Engine/**"

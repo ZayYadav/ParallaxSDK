@@ -16,6 +16,25 @@ public class MetaActivationManager {
         }
     }
 
+    public static boolean activateSdkAndWait(final String userkey, final long timeoutMillis) {
+        try {
+            RemoteManager manager = RemoteManager.getInstance();
+            manager.activateSdk(userkey);
+            return manager.awaitActivation(timeoutMillis);
+        } catch (Throwable e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    public static boolean isActivationInProgress() {
+        try {
+            return RemoteManager.getInstance().isActivationInProgress();
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
     /* ================= GET SERVER MESSAGE ================= */
     public static String getServerMessage() {
         try {

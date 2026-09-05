@@ -71,10 +71,9 @@ public class ContentProviderDelegate {
         BlackBoxCore.getContext().getContentResolver().call(
                 Uri.parse("content://settings"), "", null, null);
 
-        // FirebaseInitProvider is removed from Android 16 virtual packages before
-        // this point. Prime GMS Dynamite now, under the real host identity, so the
-        // provider exists in ActivityThread's cache and can be wrapped before the
-        // virtual Application.onCreate/UE4 startup can explicitly request Analytics.
+        // Prime GMS Dynamite under the real host identity so the provider exists
+        // in ActivityThread's cache and can be wrapped before the virtual
+        // Application.onCreate/UE4 startup can explicitly request Analytics.
         if (Build.VERSION.SDK_INT >= 36 && sGmsDynamiteClient == null) {
             try {
                 sGmsDynamiteClient = BlackBoxCore.getContext()

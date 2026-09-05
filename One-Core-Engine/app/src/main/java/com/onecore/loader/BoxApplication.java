@@ -1,16 +1,19 @@
 package com.onecore.loader;
 
 import android.app.Activity;
+import android.app.ActivityManager;
 import android.app.Application;
 import android.content.Context;
-import android.content.SharedPreferences;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Process;
 import android.view.WindowManager;
 
 import androidx.appcompat.app.AppCompatDelegate;
 
 import com.Jagdish.tastytoast.TastyToast;
 import com.google.android.material.color.DynamicColors;
+import com.onecore.loader.security.HostedLicenseClient;
 import com.onecore.loader.security.IntegrityEnforcer;
 import com.onecore.loader.security.SecurityIncidentDispatcher;
 import com.onecore.loader.ui.AdvancedUiStyler;
@@ -24,7 +27,7 @@ import com.onecore.loader.utils.NetworkConnection;
 import com.topjohnwu.superuser.Shell;
 
 import java.io.IOException;
-import java.util.Random;
+import java.util.List;
 
 import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.configuration.ClientConfiguration;
@@ -32,13 +35,12 @@ import top.niunaijun.blackbox.core.system.api.MetaActivationManager;
 
 public class BoxApplication extends Application {
     public static final String STATUS_BY = "online";
-    private static final String UI_PREFS = "onecore_edge_ui";
-    private static final String UI_THEME_KEY = "theme_index";
-
     private native String BoxApp();
     public static BoxApplication gApp;
 
+    private final Object sdkActivationLock = new Object();
     private boolean isNetworkConnected = false;
+    private boolean mainProcess = true;
 
     public static BoxApplication get() {
         return gApp;
@@ -89,9 +91,12 @@ public class BoxApplication extends Application {
     public void onCreate() {
         super.onCreate();
         gApp = this;
-        selectRandomThemeForLaunch();
-        configureLoaderActivities();
-        FLog.info("Startup: Application.onCreate begin");
+        mainProcess = isMainProcess();
+        if (mainProcess) {
+            selectRandomThemeForLaunch();
+            configureLoaderActivities();
+        }
+        FLog.info("Startup: Application.onCreate begin • mainProcess=" + mainProcess);
 
         IntegrityEnforcer.install(this);
 
@@ -103,54 +108,167 @@ public class BoxApplication extends Application {
             FLog.error("BlackBox service initialization failed", error);
         }
 
-        new Thread(() -> {
+        if (mainProcess) {
+            new Thread(() -> {
+                try {
+                    String storedKey = new HostedLicenseClient(this).getStoredActivationKey();
+                    boolean activated = activateSdkWithFallback(storedKey);
+                    FLog.info("Startup SDK activation result: " + activated);
+                } catch (Throwable error) {
+                    FLog.error("Background SDK activation failed", error);
+                }
+            }, "OneCore-SdkActivation").start();
+
             try {
-                MetaActivationManager.activateSdk(BoxApp());
+                DynamicColors.applyToActivitiesIfAvailable(this);
             } catch (Throwable error) {
-                FLog.error("Background SDK activation failed", error);
+                FLog.error("Dynamic color initialization failed", error);
             }
-        }, "OneCore-SdkActivation").start();
 
-        try {
-            DynamicColors.applyToActivitiesIfAvailable(this);
-        } catch (Throwable error) {
-            FLog.error("Dynamic color initialization failed", error);
-        }
+            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
 
-        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
-
-        try {
-            NetworkConnection.CheckInternet network = new NetworkConnection.CheckInternet(this);
-            network.registerNetworkCallback();
-        } catch (Throwable error) {
-            FLog.error("Network callback registration failed", error);
+            try {
+                NetworkConnection.CheckInternet network = new NetworkConnection.CheckInternet(this);
+                network.registerNetworkCallback();
+            } catch (Throwable error) {
+                FLog.error("Network callback registration failed", error);
+            }
+        } else {
+            FLog.info("Startup: proxy/virtual process detected; skipping host-only SDK activation and UI observers");
         }
 
         FLog.info("Startup: Application.onCreate complete");
     }
 
+    /**
+     * Ensures the embedded SDK is actually activated before OneCore package operations run.
+     *
+     * The native bootstrap key remains the primary SDK-panel credential. If that key is no
+     * longer provisioned, the securely verified Loader key is tried as a compatibility fallback.
+     * Calls are serialized so startup/login/install cannot race each other.
+     */
+    public boolean activateSdkWithFallback(String loaderKey) {
+        synchronized (sdkActivationLock) {
+            try {
+                if (MetaActivationManager.getActivatedStatus()) {
+                    return true;
+                }
+
+                String bootstrapKey = "";
+                try {
+                    String value = BoxApp();
+                    bootstrapKey = value == null ? "" : value.trim();
+                } catch (Throwable error) {
+                    FLog.warning("Native SDK bootstrap key is unavailable");
+                }
+
+                if (!bootstrapKey.isEmpty()) {
+                    boolean ok = activateSdkAndWaitCompat(bootstrapKey, 45_000L);
+                    if (ok) {
+                        return true;
+                    }
+                    if (isSdkActivationInProgressCompat()) {
+                        return false;
+                    }
+                }
+
+                String fallback = loaderKey == null ? "" : loaderKey.trim();
+                if (!fallback.isEmpty() && !fallback.equalsIgnoreCase(bootstrapKey)) {
+                    boolean ok = activateSdkAndWaitCompat(fallback, 45_000L);
+                    if (ok) {
+                        return true;
+                    }
+                }
+
+                return MetaActivationManager.getActivatedStatus();
+            } catch (Throwable error) {
+                FLog.error("SDK activation bridge failed", error);
+                return false;
+            }
+        }
+    }
+
+    /**
+     * Uses the newer blocking activation API when the freshly built SDK AAR is present.
+     * Loader-only CI may still compile against an older bundled AAR, so reflection keeps
+     * that build compatible and falls back to bounded status polling.
+     */
+    private boolean activateSdkAndWaitCompat(String key, long timeoutMillis) {
+        try {
+            java.lang.reflect.Method method = MetaActivationManager.class.getMethod(
+                    "activateSdkAndWait", String.class, long.class);
+            Object value = method.invoke(null, key, timeoutMillis);
+            return Boolean.TRUE.equals(value);
+        } catch (NoSuchMethodException ignored) {
+            MetaActivationManager.activateSdk(key);
+            long deadline = android.os.SystemClock.elapsedRealtime()
+                    + Math.max(1000L, Math.min(120000L, timeoutMillis));
+            while (android.os.SystemClock.elapsedRealtime() < deadline) {
+                if (MetaActivationManager.getActivatedStatus()) {
+                    return true;
+                }
+                try {
+                    Thread.sleep(150L);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    return false;
+                }
+            }
+            return MetaActivationManager.getActivatedStatus();
+        } catch (Throwable error) {
+            FLog.error("Blocking SDK activation call failed", error);
+            return false;
+        }
+    }
+
+    private boolean isSdkActivationInProgressCompat() {
+        try {
+            java.lang.reflect.Method method = MetaActivationManager.class.getMethod(
+                    "isActivationInProgress");
+            Object value = method.invoke(null);
+            return Boolean.TRUE.equals(value);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private boolean isMainProcess() {
+        String packageName = getPackageName();
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                String processName = Application.getProcessName();
+                return packageName.equals(processName);
+            }
+
+            ActivityManager manager =
+                    (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+            if (manager != null) {
+                List<ActivityManager.RunningAppProcessInfo> processes =
+                        manager.getRunningAppProcesses();
+                if (processes != null) {
+                    int pid = Process.myPid();
+                    for (ActivityManager.RunningAppProcessInfo process : processes) {
+                        if (process != null && process.pid == pid) {
+                            return packageName.equals(process.processName);
+                        }
+                    }
+                }
+            }
+        } catch (Throwable error) {
+            FLog.warning("Unable to resolve current process; using host-safe fallback");
+        }
+
+        // Conservative fallback for old/quirky devices: keep legacy behavior rather than
+        // risking a loader startup regression when Android cannot report the process name.
+        return true;
+    }
+
     private void selectRandomThemeForLaunch() {
-        int themeCount = ThemeManager.themeCount();
-        if (themeCount <= 0) {
-            return;
-        }
-
-        SharedPreferences preferences = getSharedPreferences(UI_PREFS, Context.MODE_PRIVATE);
-        int previousTheme = preferences.getInt(UI_THEME_KEY, -1);
-        Random random = new Random(System.nanoTime() ^ android.os.Process.myPid());
-
-        int nextTheme;
-        if (themeCount == 1) {
-            nextTheme = 0;
-        } else if (previousTheme >= 0 && previousTheme < themeCount) {
-            int offset = 1 + random.nextInt(themeCount - 1);
-            nextTheme = (previousTheme + offset) % themeCount;
-        } else {
-            nextTheme = random.nextInt(themeCount);
-        }
-
-        preferences.edit().putInt(UI_THEME_KEY, nextTheme).apply();
-        FLog.info("UI: selected random launch theme " + nextTheme + " of " + themeCount);
+        ThemeManager.randomizeForLaunch(this);
+        FLog.info("UI: selected automatic launch theme "
+                + ThemeManager.currentIndex(this)
+                + " of "
+                + ThemeManager.themeCount());
     }
 
     private void configureLoaderActivities() {

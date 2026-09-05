@@ -96,3 +96,31 @@ The CI workflow performs both stages automatically.
 These controls are defense in depth; no client-side Android application can be
 made impossible to inspect or modify. Server-side authorization should remain
 the source of truth for licenses and entitlements.
+
+
+## Server APK + multipart OBB installation
+
+The `ParallaxLoaderServerDonwnLoad` branch keeps one **INSTALL** control. When BGMI
+is not installed, tapping it opens a themed source chooser:
+
+- **INSTALL FROM YOUR INSTALLED GAME** keeps the original local APK/OBB clone path.
+- **INSTALL BGMI FROM ONECORE SERVER** starts a foreground WorkManager transfer.
+
+The server path is activity-independent: APK and split-OBB payloads download with
+resume support, up to four CDN streams run in parallel, progress stays visible in an
+Android notification, and transient network failures retry without discarding
+completed files. After download, the APK is installed into OneCore and the extracted
+OBB is moved into OneCore virtual external storage. The old standalone server button
+is intentionally removed.
+
+Themes are selected automatically on each Loader process launch (and avoid repeating
+the immediately previous theme when multiple themes are available). The header brand
+mark is decorative; there is no manual theme-picker button.
+
+Downloader button/notification labels are centralized in
+`app/src/main/java/com/onecore/loader/server/ServerInstallStrings.java`, so wording can be changed without editing download logic.
+
+Configuration and payload-generation instructions are in
+`server-download/README.md`. The Loader's compiled server-download setting is
+`app/src/main/assets/server_download_config.json`; APK and OBB URLs belong in the
+remote manifest.

@@ -60,7 +60,10 @@
                 android:layout_width="58dp"
                 android:layout_height="58dp"
                 android:background="@drawable/ios_icon_bg"
-                android:contentDescription="OneCore Edge Server"
+                android:clickable="false"
+                android:focusable="false"
+                android:importantForAccessibility="no"
+                android:contentDescription="OneCore Edge brand"
                 android:padding="8dp"
                 android:scaleType="centerInside"
                 android:src="@drawable/onecore_edge_brand_mark" />
@@ -426,5 +429,20 @@
                 android:textColor="@color/premium_text_muted"
                 android:textSize="11sp" />
         </LinearLayout>
+
+        <TextView
+            android:id="@+id/btn_clear_bgmi_data"
+            android:layout_width="match_parent"
+            android:layout_height="58dp"
+            android:layout_marginTop="18dp"
+            android:background="@drawable/premium_outline_button"
+            android:clickable="true"
+            android:focusable="true"
+            android:fontFamily="sans-serif-black"
+            android:gravity="center"
+            android:letterSpacing="0.075"
+            android:text="CLEAR ALL BGMI DATA"
+            android:textColor="@color/premium_gold"
+            android:textSize="13sp" />
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>

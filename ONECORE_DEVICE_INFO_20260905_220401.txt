@@ -1,0 +1,830 @@
+======================================================================
+ONECORE LOADER DEBUG REPORT
+======================================================================
+
+[TIME]
+2026-09-05 22:04:01.507057
+
+[PACKAGE]
+com.onecore.loader
+
+[ANDROID]
+16
+
+[SDK]
+36
+
+[MODEL]
+A001
+
+[MANUFACTURER]
+Nothing
+
+[BUILD]
+Nothing/GalagaIND/Galaga:16/BP2A.250605.031.A3/2601081654:user/release-keys
+
+[KERNEL]
+Linux localhost 6.1.134-android14-11-g8dc7d7757edd-ab13492451 #1 SMP PREEMPT Wed May 14 12:46:03 UTC 2025 aarch64 Android
+
+[ROOT]
+uid=0(root) gid=0(root) groups=0(root) context=u:r:magisk:s0
+
+[SELINUX]
+Permissive
+
+[PACKAGE INFO]
+Activity Resolver Table:
+  Schemes:
+      twitterauth:
+        4f69724 com.onecore.loader/top.niunaijun.blackbox.compat.oauth.TwitterOAuthCallbackActivity filter 8e3828d
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "twittersdk"
+          Scheme: "twitterkit"
+          Scheme: "twitter"
+          Scheme: "twitterauth"
+          Scheme: "oauth-twitter"
+          Scheme: "xauth"
+          Scheme: "x"
+      twitter:
+        4f69724 com.onecore.loader/top.niunaijun.blackbox.compat.oauth.TwitterOAuthCallbackActivity filter 8e3828d
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "twittersdk"
+          Scheme: "twitterkit"
+          Scheme: "twitter"
+          Scheme: "twitterauth"
+          Scheme: "oauth-twitter"
+          Scheme: "xauth"
+          Scheme: "x"
+      twitterkit:
+        4f69724 com.onecore.loader/top.niunaijun.blackbox.compat.oauth.TwitterOAuthCallbackActivity filter 8e3828d
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "twittersdk"
+          Scheme: "twitterkit"
+          Scheme: "twitter"
+          Scheme: "twitterauth"
+          Scheme: "oauth-twitter"
+          Scheme: "xauth"
+          Scheme: "x"
+      twittersdk:
+        4f69724 com.onecore.loader/top.niunaijun.blackbox.compat.oauth.TwitterOAuthCallbackActivity filter 8e3828d
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "twittersdk"
+          Scheme: "twitterkit"
+          Scheme: "twitter"
+          Scheme: "twitterauth"
+          Scheme: "oauth-twitter"
+          Scheme: "xauth"
+          Scheme: "x"
+      x:
+        4f69724 com.onecore.loader/top.niunaijun.blackbox.compat.oauth.TwitterOAuthCallbackActivity filter 8e3828d
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "twittersdk"
+          Scheme: "twitterkit"
+          Scheme: "twitter"
+          Scheme: "twitterauth"
+          Scheme: "oauth-twitter"
+          Scheme: "xauth"
+          Scheme: "x"
+      xauth:
+        4f69724 com.onecore.loader/top.niunaijun.blackbox.compat.oauth.TwitterOAuthCallbackActivity filter 8e3828d
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "twittersdk"
+          Scheme: "twitterkit"
+          Scheme: "twitter"
+          Scheme: "twitterauth"
+          Scheme: "oauth-twitter"
+          Scheme: "xauth"
+          Scheme: "x"
+      fbconnect:
+        b3bc42 com.onecore.loader/top.niunaijun.blackbox.compat.oauth.FacebookOAuthCallbackActivity filter cef7453
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "fbconnect"
+      oauth-twitter:
+        4f69724 com.onecore.loader/top.niunaijun.blackbox.compat.oauth.TwitterOAuthCallbackActivity filter 8e3828d
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "twittersdk"
+          Scheme: "twitterkit"
+          Scheme: "twitter"
+          Scheme: "twitterauth"
+          Scheme: "oauth-twitter"
+          Scheme: "xauth"
+          Scheme: "x"
+
+  Non-Data Actions:
+      android.intent.action.MAIN:
+        a5faab6 com.onecore.loader/.activity.SplashActivity filter f8353b7
+          Action: "android.intent.action.MAIN"
+          Category: "android.intent.category.LAUNCHER"
+
+Receiver Resolver Table:
+  Non-Data Actions:
+      androidx.profileinstaller.action.SAVE_PROFILE:
+        840919a com.onecore.loader/androidx.profileinstaller.ProfileInstallReceiver filter fca31c1
+          Action: "androidx.profileinstaller.action.SAVE_PROFILE"
+      androidx.profileinstaller.action.INSTALL_PROFILE:
+        840919a com.onecore.loader/androidx.profileinstaller.ProfileInstallReceiver filter 6f71acb
+          Action: "androidx.profileinstaller.action.INSTALL_PROFILE"
+      androidx.profileinstaller.action.SKIP_FILE:
+        840919a com.onecore.loader/androidx.profileinstaller.ProfileInstallReceiver filter 56272a8
+          Action: "androidx.profileinstaller.action.SKIP_FILE"
+      androidx.profileinstaller.action.BENCHMARK_OPERATION:
+        840919a com.onecore.loader/androidx.profileinstaller.ProfileInstallReceiver filter 862d66
+          Action: "androidx.profileinstaller.action.BENCHMARK_OPERATION"
+      android.intent.action.BOOT_COMPLETED:
+        2455a8e com.onecore.loader/androidx.work.impl.background.systemalarm.RescheduleReceiver filter f302af
+          Action: "android.intent.action.BOOT_COMPLETED"
+      androidx.work.diagnostics.REQUEST_DIAGNOSTICS:
+        4a3a6bc com.onecore.loader/androidx.work.impl.diagnostics.DiagnosticsReceiver filter 7e37645
+          Action: "androidx.work.diagnostics.REQUEST_DIAGNOSTICS"
+      com.onecore.loader.stub_receiver:
+        2980190 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyBroadcastReceiver filter 92ba89
+          Action: "com.onecore.loader.stub_receiver"
+
+Service Resolver Table:
+  Non-Data Actions:
+      android.net.VpnService:
+        a0728fd com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyVpnService filter 437b9f2 permission android.permission.BIND_VPN_SERVICE
+          Action: "android.net.VpnService"
+      android.MetaCore.Service.RemoteManagerService:
+        dda98a7 com.onecore.loader/android.MetaCore.Service.RemoteManagerService filter 8c01154
+          Action: "android.MetaCore.Service.RemoteManagerService"
+
+Domain verification status:
+
+Permissions:
+  Permission [com.onecore.loader.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION] (1f508):
+    sourcePackage=com.onecore.loader
+    uid=10890 gids=[] type=0 prot=signature
+    perm=PermissionInfo{10156c com.onecore.loader.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION}
+    flags=0x0
+
+Registered ContentProviders:
+  com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P10:
+    Provider{ae83735 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P10}
+  com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P11:
+    Provider{dafd7ca com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P11}
+  com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P12:
+    Provider{7da9d3b com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P12}
+  com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P13:
+    Provider{a9f1c58 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P13}
+  com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P14:
+    Provider{47211b1 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P14}
+  com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P15:
+    Provider{5dba696 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P15}
+  com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P16:
+    Provider{94bd217 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P16}
+  com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P17:
+    Provider{415a604 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P17}
+  com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P18:
+    Provider{e517ed com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P18}
+  com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P19:
+    Provider{d239622 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P19}
+  com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P20:
+    Provider{3178b3 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P20}
+  com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P21:
+    Provider{5491e70 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P21}
+  com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P22:
+    Provider{20845e9 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P22}
+  com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P23:
+    Provider{e08f26e com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P23}
+  com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P24:
+    Provider{2c0ed0f com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P24}
+  com.onecore.loader/top.niunaijun.blackbox.fake.provider.FileProvider:
+    Provider{cf9b19c com.onecore.loader/top.niunaijun.blackbox.fake.provider.FileProvider}
+  com.onecore.loader/androidx.startup.InitializationProvider:
+    Provider{51657a5 com.onecore.loader/androidx.startup.InitializationProvider}
+  com.onecore.loader/top.niunaijun.blackbox.core.system.SystemCallProvider:
+    Provider{7d5c77a com.onecore.loader/top.niunaijun.blackbox.core.system.SystemCallProvider}
+  com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P0:
+    Provider{b294b2b com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P0}
+  com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P1:
+    Provider{3be4b88 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P1}
+  com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P2:
+    Provider{639c921 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P2}
+  com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P3:
+    Provider{268e146 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P3}
+  com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P4:
+    Provider{d6f6f07 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P4}
+  com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P5:
+    Provider{2b09834 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P5}
+  com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P6:
+    Provider{fc8d65d com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P6}
+  com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P7:
+    Provider{2c1cbd2 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P7}
+  com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P8:
+    Provider{f09f4a3 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P8}
+  com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P9:
+    Provider{8d903a0 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P9}
+
+ContentProvider Authorities:
+  [com.onecore.loader.SystemCallProvider]:
+    Provider{7d5c77a com.onecore.loader/top.niunaijun.blackbox.core.system.SystemCallProvider}
+      applicationInfo=ApplicationInfo{5adf4a1 com.onecore.loader}
+  [com.onecore.loader.proxy_content_provider_10]:
+    Provider{ae83735 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P10}
+      applicationInfo=ApplicationInfo{12066c6 com.onecore.loader}
+  [com.onecore.loader.proxy_content_provider_11]:
+    Provider{dafd7ca com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P11}
+      applicationInfo=ApplicationInfo{d404687 com.onecore.loader}
+  [com.onecore.loader.proxy_content_provider_12]:
+    Provider{7da9d3b com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P12}
+      applicationInfo=ApplicationInfo{d4559b4 com.onecore.loader}
+  [com.onecore.loader.proxy_content_provider_13]:
+    Provider{a9f1c58 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P13}
+      applicationInfo=ApplicationInfo{d1439dd com.onecore.loader}
+  [com.onecore.loader.proxy_content_provider_14]:
+    Provider{47211b1 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P14}
+      applicationInfo=ApplicationInfo{92c2952 com.onecore.loader}
+  [com.onecore.loader.proxy_content_provider_15]:
+    Provider{5dba696 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P15}
+      applicationInfo=ApplicationInfo{3d0c423 com.onecore.loader}
+  [com.onecore.loader.proxy_content_provider_16]:
+    Provider{94bd217 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P16}
+      applicationInfo=ApplicationInfo{1b85d20 com.onecore.loader}
+  [com.onecore.loader.proxy_content_provider_17]:
+    Provider{415a604 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P17}
+      applicationInfo=ApplicationInfo{e9f96d9 com.onecore.loader}
+  [com.onecore.loader.proxy_content_provider_18]:
+    Provider{e517ed com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P18}
+      applicationInfo=ApplicationInfo{ebf889e com.onecore.loader}
+  [com.onecore.loader.proxy_content_provider_19]:
+    Provider{d239622 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P19}
+      applicationInfo=ApplicationInfo{b617f7f com.onecore.loader}
+  [com.onecore.loader.proxy_content_provider_20]:
+    Provider{3178b3 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P20}
+      applicationInfo=ApplicationInfo{8962b4c com.onecore.loader}
+  [com.onecore.loader.proxy_content_provider_21]:
+    Provider{5491e70 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P21}
+      applicationInfo=ApplicationInfo{1e9c795 com.onecore.loader}
+  [com.onecore.loader.proxy_content_provider_22]:
+    Provider{20845e9 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P22}
+      applicationInfo=ApplicationInfo{d9790aa com.onecore.loader}
+  [com.onecore.loader.proxy_content_provider_23]:
+    Provider{e08f26e com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P23}
+      applicationInfo=ApplicationInfo{518949b com.onecore.loader}
+  [com.onecore.loader.proxy_content_provider_24]:
+    Provider{2c0ed0f com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P24}
+      applicationInfo=ApplicationInfo{3a0b038 com.onecore.loader}
+  [com.onecore.loader.androidx-startup]:
+    Provider{51657a5 com.onecore.loader/androidx.startup.InitializationProvider}
+      applicationInfo=ApplicationInfo{46c4811 com.onecore.loader}
+  [com.onecore.loader.FileProvider]:
+    Provider{cf9b19c com.onecore.loader/top.niunaijun.blackbox.fake.provider.FileProvider}
+      applicationInfo=ApplicationInfo{e360d76 com.onecore.loader}
+  [com.onecore.loader.proxy_content_provider_0]:
+    Provider{b294b2b com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P0}
+      applicationInfo=ApplicationInfo{461df77 com.onecore.loader}
+  [com.onecore.loader.proxy_content_provider_1]:
+    Provider{3be4b88 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P1}
+      applicationInfo=ApplicationInfo{ccc97e4 com.onecore.loader}
+  [com.onecore.loader.proxy_content_provider_2]:
+    Provider{639c921 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P2}
+      applicationInfo=ApplicationInfo{7bc544d com.onecore.loader}
+  [com.onecore.loader.proxy_content_provider_3]:
+    Provider{268e146 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P3}
+      applicationInfo=ApplicationInfo{d6d8b02 com.onecore.loader}
+  [com.onecore.loader.proxy_content_provider_4]:
+    Provider{d6f6f07 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P4}
+      applicationInfo=ApplicationInfo{d8afc13 com.onecore.loader}
+  [com.onecore.loader.proxy_content_provider_5]:
+    Provider{2b09834 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P5}
+      applicationInfo=ApplicationInfo{6ad4e50 com.onecore.loader}
+  [com.onecore.loader.proxy_content_provider_6]:
+    Provider{fc8d65d com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P6}
+      applicationInfo=ApplicationInfo{786e849 com.onecore.loader}
+  [com.onecore.loader.proxy_content_provider_7]:
+    Provider{2c1cbd2 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P7}
+      applicationInfo=ApplicationInfo{ad554e com.onecore.loader}
+  [com.onecore.loader.proxy_content_provider_8]:
+    Provider{f09f4a3 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P8}
+      applicationInfo=ApplicationInfo{21f466f com.onecore.loader}
+  [com.onecore.loader.proxy_content_provider_9]:
+    Provider{8d903a0 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyContentProvider$P9}
+      applicationInfo=ApplicationInfo{7a0ff7c com.onecore.loader}
+
+Key Set Manager:
+  [com.onecore.loader]
+      Signing KeySets: 503
+
+Packages:
+  Package [com.onecore.loader] (c1dff79):
+    appId=10890
+    pkg=Package{cd4c73d com.onecore.loader}
+    codePath=/data/app/~~2xqLepwnFfjSqem_QJT6LQ==/com.onecore.loader-SPxInwuz4RxHfrJdhvWjnw==
+    resourcePath=/data/app/~~2xqLepwnFfjSqem_QJT6LQ==/com.onecore.loader-SPxInwuz4RxHfrJdhvWjnw==
+    legacyNativeLibraryDir=/data/app/~~2xqLepwnFfjSqem_QJT6LQ==/com.onecore.loader-SPxInwuz4RxHfrJdhvWjnw==/lib
+    extractNativeLibs=true
+    primaryCpuAbi=arm64-v8a
+    secondaryCpuAbi=null
+    cpuAbiOverride=null
+    versionCode=2 minSdk=24 targetSdk=36
+    minExtensionVersions=[]
+    versionName=2.0.0
+    hiddenApiEnforcementPolicy=2
+    usesNonSdkApi=false
+    splits=[base]
+    apkSigningVersion=2
+    flags=[ HAS_CODE ALLOW_CLEAR_USER_DATA ]
+    privateFlags=[ PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE ALLOW_AUDIO_PLAYBACK_CAPTURE PARTIALLY_DIRECT_BOOT_AWARE PRIVATE_FLAG_ALLOW_NATIVE_HEAP_POINTER_TAGGING ]
+    forceQueryable=false
+    pageSizeCompat=0
+    queriesPackages=[com.twitter.android, com.twitter.android.lite, com.x.android, com.google.android.gms, com.google.android.play.games, com.facebook.katana, com.facebook.wakizashi, com.facebook.lite, com.whatsapp, com.whatsapp.w4b]
+    queriesIntents=[Intent { act=android.accounts.AccountAuthenticator }, Intent { act=android.intent.action.VIEW cat=[android.intent.category.BROWSABLE] dat=https:/... }, Intent { act=android.support.customtabs.action.CustomTabsService }]
+    scannedAsStoppedSystemApp=false
+    supportsScreens=[small, medium, large, xlarge, resizeable, anyDensity]
+    timeStamp=2026-09-05 21:35:39
+    lastUpdateTime=2026-09-05 21:35:39
+    installerPackageName=null
+    installerPackageUid=-1
+    initiatingPackageName=com.android.shell
+    originatingPackageName=null
+    packageSource=1
+    appMetadataFilePath=null
+    appMetadataSource=0
+    signatures=PackageSignatures{17b9b32 version:2, signatures:[47c304ea], past signatures:[]}
+    installPermissionsFixed=false
+    pkgFlags=[ HAS_CODE ALLOW_CLEAR_USER_DATA ]
+    privatePkgFlags=[ PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE ALLOW_AUDIO_PLAYBACK_CAPTURE PARTIALLY_DIRECT_BOOT_AWARE PRIVATE_FLAG_ALLOW_NATIVE_HEAP_POINTER_TAGGING ]
+    apexModuleName=null
+    forceFull=false
+    declared permissions:
+      com.onecore.loader.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: prot=signature
+    requested permissions:
+      android.permission.DOWNLOAD_WITHOUT_NOTIFICATION
+      android.permission.WRITE_SETTINGS
+      android.permission.READ_SMS
+      com.sonyericsson.home.permission.BROADCAST_BADGE
+      android.permission.ACCESS_WIMAX_STATE
+      android.permission.READ_CLIPS
+      com.android.launcher2.permission.READ_SETTINGS
+      com.android.launcher3.permission.READ_SETTINGS
+      android.permission.READ_CALENDAR
+      android.permission.POST_NOTIFICATIONS
+      android.permission.READ_CALL_LOG
+      android.permission.READ_OWNER_DATA
+      com.google.android.c2dm.permission.RECEIVE
+      com.bbk.launcher2.permission.READ_SETTINGS
+      android.permission.ACCESS_FINE_LOCATION
+      android.permission.RESTART_PACKAGES
+      android.permission.USE_CREDENTIALS
+      com.lenovo.launcher.permission.READ_SETTINGS
+      android.permission.MODIFY_AUDIO_SETTINGS
+      android.permission.MANAGE_EXTERNAL_STORAGE
+      com.google.android.providers.gsf.permission.READ_GSERVICES
+      android.permission.MANAGE_ACCOUNTS
+      android.permission.SYSTEM_ALERT_WINDOW
+      com.google.android.providers.talk.permission.WRITE_ONLY
+      com.oppo.launcher.permission.WRITE_SETTINGS
+      android.permission.CLEAR_APP_USER_DATA
+      android.permission.SYSTEM_OVERLAY_WINDOW
+      android.permission.INSTALL_PACKAGES
+      me.everything.badger.permission.BADGE_COUNT_READ
+      android.permission.SEND_RESPOND_VIA_MESSAGE
+      com.samsung.svoice.sync.ACCESS_SERVICE
+      android.permission.NFC
+      android.permission.BODY_SENSORS
+      com.anddoes.launcher.permission.UPDATE_COUNT
+      com.sec.android.provider.badge.permission.READ
+      com.apusapps.launcher.permission.READ_SETTINGS
+      android.permission.BROADCAST_SMS
+      android.permission.CHANGE_NETWORK_STATE
+      android.permission.FOREGROUND_SERVICE
+      android.permission.PERSISTENT_ACTIVITY
+      me.everything.badger.permission.BADGE_COUNT_WRITE
+      android.permission.READ_MEDIA_VISUAL_USER_SELECTED
+      android.permission.WRITE_SYNC_SETTINGS
+      com.android.voicemail.permission.READ_WRITE_ALL_VOICEMAIL
+      com.huawei.android.launcher.permission.WRITE_SETTINGS
+      com.samsung.android.scloud.backup.lib.write
+      android.permission.RECEIVE_BOOT_COMPLETED
+      cn.nubia.launcher.permission.READ_SETTINGS
+      com.sec.android.settings.permission.SOFT_RESET
+      android.permission.FOREGROUND_SERVICE_SPECIAL_USE
+      android.permission.SUBSCRIBED_FEEDS_READ
+      android.permission.DEVICE_POWER
+      android.permission.RECEIVE_MMS
+      android.permission.RECEIVE_SMS
+      android.permission.SET_TIME_ZONE
+      android.permission.EXPAND_STATUS_BAR
+      com.android.launcher.permission.UNINSTALL_SHORTCUT
+      android.permission.READ_PROFILE
+      android.permission.BLUETOOTH
+      android.permission.BROADCAST_WAP_PUSH
+      android.permission.CHANGE_WIFI_MULTICAST_STATE
+      com.android.alarm.permission.SET_ALARM
+      android.permission.GET_CLIPS
+      com.google.android.gms.permission.AD_ID_NOTIFICATION
+      android.permission.GET_TASKS
+      android.permission.SUBSCRIBED_FEEDS_WRITE
+      android.permission.AUTHENTICATE_ACCOUNTS
+      android.permission.INTERNET
+      com.android.vending.CHECK_LICENSE
+      android.permission.TRANSMIT_IR
+      android.permission.REORDER_TASKS
+      com.android.browser.permission.READ_HISTORY_BOOKMARKS
+      android.permission.GET_INTENT_SENDER_INTENT
+      android.permission.CREDENTIAL_MANAGER_SET_ALLOWED_PROVIDERS
+      com.android.vending.BILLING
+      android.hardware.usb.host
+      android.permission.BLUETOOTH_ADMIN
+      com.anddoes.launcher.permission.READ_SETTINGS
+      android.permission.WRITE_CLIPS
+      android.permission.WRITE_SOCIAL_STREAM
+      com.android.launcher.permission.WRITE_SETTINGS
+      android.permission.GET_PACKAGE_SIZE
+      android.permission.BIND_VPN_SERVICE
+      android.permission.ACCOUNT_MANAGER
+      android.permission.INTERACT_ACROSS_USERS_FULL
+      android.permission.BIND_APPWIDGET
+      android.permission.BATTERY_STATS
+      android.permission.PACKAGE_USAGE_STATS
+      android.permission.WRITE_PROFILE
+      android.permission.ACCESS_COARSE_LOCATION
+      com.samsung.svoice.sync.WRITE_DATABASE
+      android.permission.READ_PHONE_STATE
+      android.permission.HIDE_OVERLAY_WINDOWS
+      android.permission.USE_FULL_SCREEN_INTENT
+      com.android.launcher.permission.READ_SETTINGS
+      android.permission.READ_APP_BADGE
+      android.permission.ACCESS_LOCATION_EXTRA_COMMANDS
+      android.permission.SEND_SMS
+      android.permission.ACCESS_DOWNLOAD_MANAGER
+      android.permission.BROADCAST_STICKY
+      android.permission.CALL_PHONE
+      android.permission.HARDWARE_TEST
+      android.permission.WRITE_SMS
+      android.permission.READ_MEDIA_IMAGES
+      android.permission.WRITE_CONTACTS
+      com.samsung.android.providers.context.permission.WRITE_USE_APP_FEATURE_SURVEY
+      android.permission.SET_TIME
+      com.samsung.android.providers.context.permission.READ_RECORD_AUDIO
+      android.permission.CHANGE_WIFI_STATE
+      android.permission.READ_INSTALL_SESSIONS
+      com.majeur.launcher.permission.UPDATE_BADGE
+      android.permission.FOREGROUND_SERVICE_DATA_SYNC
+      android.permission.FLASHLIGHT
+      android.permission.ACCESS_NETWORK_STATE
+      com.oppo.launcher.permission.READ_SETTINGS
+      android.permission.ACCESS_GPS
+      android.permission.DISABLE_KEYGUARD
+      android.permission.WRITE_OWNER_DATA
+      android.permission.CAMERA
+      android.permission.CHANGE_CONFIGURATION
+      com.sonymobile.home.permission.PROVIDER_INSERT_BADGE
+      android.permission.READ_LOGS
+      com.samsung.android.scloud.backup.lib.read
+      android.permission.INTERACT_ACROSS_USERS
+      android.permission.SET_WALLPAPER
+      android.permission.READ_VOICEMAIL
+      com.google.android.gms.permission.ACTIVITY_RECOGNITION
+      android.permission.WRITE_CALENDAR
+      android.permission.WRITE_CALL_LOG
+      com.sec.android.permission.LAUNCH_PERSONAL_PAGE_SERVICE
+      com.huawei.android.launcher.permission.READ_SETTINGS
+      android.permission.READ_MEDIA_AUDIO
+      android.permission.READ_MEDIA_VIDEO
+      android.permission.KILL_BACKGROUND_PROCESSES
+      android.permission.USE_FINGERPRINT
+      com.sec.android.provider.badge.permission.WRITE
+      android.permission.BIND_DIRECTORY_SEARCH
+      android.permission.USE_SIP
+      com.s.launcher.permission.READ_SETTINGS
+      android.permission.WRITE_USER_DICTIONARY
+      android.permission.READ_SYNC_STATS
+      com.onecore.loader.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+      android.permission.PROCESS_OUTGOING_CALLS
+      android.permission.READ_CELL_BROADCASTS
+      com.sec.android.permission.VOIP_INTERFACE
+      android.permission.CLEAR_APP_CACHE
+      com.huawei.authentication.HW_ACCESS_AUTH_SERVICE
+      android.permission.SET_WALLPAPER_HINTS
+      android.permission.READ_SYNC_SETTINGS
+      android.provider.Telephony.SMS_RECEIVED
+      com.android.browser.permission.WRITE_HISTORY_BOOKMARKS
+      android.permission.GET_ACCOUNTS
+      com.samsung.android.providers.context.permission.WRITE_RECORD_AUDIO
+      com.mx.launcher.permission.READ_SETTINGS
+      android.permission.VIBRATE
+      com.huawei.android.launcher.permission.CHANGE_BADGE
+      android.permission.READ_USER_DICTIONARY
+      sec.android.permission.READ_MSG_PREF
+      com.sec.android.app.voicenote.Controller
+      com.google.android.providers.talk.permission.READ_ONLY
+      android.permission.ACCESS_WIFI_STATE
+      com.htc.launcher.permission.UPDATE_SHORTCUT
+      com.google.android.launcher.permission.READ_SETTINGS
+      android.permission.CHANGE_WIMAX_STATE
+      android.permission.REQUEST_INSTALL_PACKAGES
+      com.android.launcher.permission.INSTALL_SHORTCUT
+      android.permission.QUERY_ALL_PACKAGES
+      android.permission.RECORD_AUDIO
+      com.samsung.svoice.sync.READ_DATABASE
+      android.permission.READ_DEVICE_CONFIG
+      com.htc.launcher.permission.READ_SETTINGS
+      android.permission.READ_SOCIAL_STREAM
+      android.permission.WAKE_LOCK
+      android.permission.READ_CONTACTS
+      com.teslacoilsw.launcher.permission.READ_SETTINGS
+      com.tsf.shell.permission.READ_SETTINGS
+      android.permission.UPDATE_APP_OPS_STATS
+      com.actionlauncher.playstore.permission.READ_SETTINGS
+      android.permission.DELETE_PACKAGES
+      com.android.voicemail.permission.ADD_VOICEMAIL
+    install permissions:
+      android.permission.DOWNLOAD_WITHOUT_NOTIFICATION: granted=true
+      com.google.android.c2dm.permission.RECEIVE: granted=true
+      android.permission.RESTART_PACKAGES: granted=true
+      android.permission.USE_CREDENTIALS: granted=true
+      android.permission.MODIFY_AUDIO_SETTINGS: granted=true
+      android.permission.MANAGE_EXTERNAL_STORAGE: granted=false, flags=[ USER_SET]
+      android.permission.MANAGE_EXTERNAL_STORAGE: granted=false, userId=10
+      android.permission.MANAGE_EXTERNAL_STORAGE: granted=false, userId=999
+      com.google.android.providers.gsf.permission.READ_GSERVICES: granted=true
+      android.permission.MANAGE_ACCOUNTS: granted=true
+      android.permission.SYSTEM_ALERT_WINDOW: granted=false, flags=[ USER_SET]
+      android.permission.SYSTEM_ALERT_WINDOW: granted=false, userId=10
+      android.permission.SYSTEM_ALERT_WINDOW: granted=false, userId=999
+      android.permission.NFC: granted=true
+      android.permission.CHANGE_NETWORK_STATE: granted=true
+      android.permission.FOREGROUND_SERVICE: granted=true
+      android.permission.PERSISTENT_ACTIVITY: granted=true
+      android.permission.WRITE_SYNC_SETTINGS: granted=true
+      android.permission.RECEIVE_BOOT_COMPLETED: granted=true
+      android.permission.FOREGROUND_SERVICE_SPECIAL_USE: granted=true
+      android.permission.SUBSCRIBED_FEEDS_READ: granted=true
+      android.permission.EXPAND_STATUS_BAR: granted=true
+      com.android.launcher.permission.UNINSTALL_SHORTCUT: granted=true
+      android.permission.READ_PROFILE: granted=true
+      android.permission.BLUETOOTH: granted=true
+      android.permission.CHANGE_WIFI_MULTICAST_STATE: granted=true
+      com.android.alarm.permission.SET_ALARM: granted=true
+      com.google.android.gms.permission.AD_ID_NOTIFICATION: granted=true
+      android.permission.GET_TASKS: granted=true
+      android.permission.SUBSCRIBED_FEEDS_WRITE: granted=true
+      android.permission.AUTHENTICATE_ACCOUNTS: granted=true
+      android.permission.INTERNET: granted=true
+      com.android.vending.CHECK_LICENSE: granted=true
+      android.permission.TRANSMIT_IR: granted=true
+      android.permission.REORDER_TASKS: granted=true
+      com.android.browser.permission.READ_HISTORY_BOOKMARKS: granted=true
+      android.permission.CREDENTIAL_MANAGER_SET_ALLOWED_PROVIDERS: granted=true
+      com.android.vending.BILLING: granted=true
+      android.permission.BLUETOOTH_ADMIN: granted=true
+      android.permission.WRITE_SOCIAL_STREAM: granted=true
+      android.permission.GET_PACKAGE_SIZE: granted=true
+      android.permission.WRITE_PROFILE: granted=true
+      android.permission.HIDE_OVERLAY_WINDOWS: granted=true
+      android.permission.USE_FULL_SCREEN_INTENT: granted=true
+      android.permission.ACCESS_LOCATION_EXTRA_COMMANDS: granted=true
+      android.permission.BROADCAST_STICKY: granted=true
+      android.permission.WRITE_SMS: granted=true
+      android.permission.CHANGE_WIFI_STATE: granted=true
+      android.permission.READ_INSTALL_SESSIONS: granted=true
+      android.permission.FOREGROUND_SERVICE_DATA_SYNC: granted=true
+      android.permission.FLASHLIGHT: granted=true
+      android.permission.ACCESS_NETWORK_STATE: granted=true
+      android.permission.DISABLE_KEYGUARD: granted=true
+      android.permission.SET_WALLPAPER: granted=true
+      com.google.android.gms.permission.ACTIVITY_RECOGNITION: granted=true
+      android.permission.KILL_BACKGROUND_PROCESSES: granted=true
+      android.permission.USE_FINGERPRINT: granted=true
+      android.permission.WRITE_USER_DICTIONARY: granted=true
+      android.permission.READ_SYNC_STATS: granted=true
+      com.onecore.loader.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: granted=true
+      android.permission.SET_WALLPAPER_HINTS: granted=true
+      android.permission.READ_SYNC_SETTINGS: granted=true
+      com.android.browser.permission.WRITE_HISTORY_BOOKMARKS: granted=true
+      android.permission.VIBRATE: granted=true
+      android.permission.READ_USER_DICTIONARY: granted=true
+      android.permission.ACCESS_WIFI_STATE: granted=true
+      android.permission.REQUEST_INSTALL_PACKAGES: granted=false, flags=[ USER_SET]
+      android.permission.REQUEST_INSTALL_PACKAGES: granted=false, userId=10
+      android.permission.REQUEST_INSTALL_PACKAGES: granted=false, userId=999
+      com.android.launcher.permission.INSTALL_SHORTCUT: granted=true
+      android.permission.QUERY_ALL_PACKAGES: granted=true
+      android.permission.READ_SOCIAL_STREAM: granted=true
+      android.permission.WAKE_LOCK: granted=true
+    User 0: ceDataInode=1610719 deDataInode=1610726 installed=true hidden=false privacy_hidden=false suspended=false distractionFlags=0 stopped=false notLaunched=false enabled=0 instant=false virtual=false quarantined=false
+      installReason=0
+      dataDir=/data/user/0/com.onecore.loader
+      firstInstallTime=2026-09-05 21:35:39
+      uninstallReason=0
+      overlay paths:
+        /product/overlay/NavigationBarModeGestural/NavigationBarModeGesturalOverlay.apk
+        /data/resource-cache/com.android.systemui-neutral-Exos.frro
+        /data/resource-cache/com.android.systemui-accent-pv7C.frro
+        /data/resource-cache/com.android.systemui-dynamic-GRCc.frro
+      legacy overlay paths:
+        /product/overlay/NavigationBarModeGestural/NavigationBarModeGesturalOverlay.apk
+      gids=[3002, 3003, 3001]
+      runtime permissions:
+        android.permission.READ_SMS: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED|RESTRICTION_INSTALLER_EXEMPT]
+        android.permission.READ_CALENDAR: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.POST_NOTIFICATIONS: granted=true, flags=[ USER_SET|USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.READ_CALL_LOG: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED|RESTRICTION_INSTALLER_EXEMPT]
+        android.permission.ACCESS_FINE_LOCATION: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.READ_MEDIA_VISUAL_USER_SELECTED: granted=true, flags=[ USER_SET|USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.RECEIVE_MMS: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED|RESTRICTION_INSTALLER_EXEMPT]
+        android.permission.RECEIVE_SMS: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED|RESTRICTION_INSTALLER_EXEMPT]
+        android.permission.ACCESS_COARSE_LOCATION: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.READ_PHONE_STATE: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.SEND_SMS: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED|RESTRICTION_INSTALLER_EXEMPT]
+        android.permission.CALL_PHONE: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.READ_MEDIA_IMAGES: granted=true, flags=[ USER_SET|USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.WRITE_CONTACTS: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.CAMERA: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.WRITE_CALENDAR: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.WRITE_CALL_LOG: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED|RESTRICTION_INSTALLER_EXEMPT]
+        android.permission.READ_MEDIA_AUDIO: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.READ_MEDIA_VIDEO: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.USE_SIP: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.PROCESS_OUTGOING_CALLS: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED|RESTRICTION_INSTALLER_EXEMPT]
+        android.permission.READ_CELL_BROADCASTS: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED|RESTRICTION_INSTALLER_EXEMPT]
+        android.permission.GET_ACCOUNTS: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.RECORD_AUDIO: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        android.permission.READ_CONTACTS: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+        com.android.voicemail.permission.ADD_VOICEMAIL: granted=false, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+      enabledComponents:
+        androidx.work.impl.background.systemjob.SystemJobService
+    User 10: ceDataInode=0 deDataInode=0 installed=false hidden=false privacy_hidden=false suspended=false distractionFlags=0 stopped=true notLaunched=true enabled=0 instant=false virtual=false quarantined=false
+      installReason=0
+      dataDir=null
+      firstInstallTime=1970-01-01 05:30:00
+      uninstallReason=0
+      gids=[3002, 3003, 3001]
+      runtime permissions:
+        android.permission.READ_SMS: granted=false, flags=[ RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.READ_CALL_LOG: granted=false, flags=[ RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.RECEIVE_MMS: granted=false, flags=[ RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.RECEIVE_SMS: granted=false, flags=[ RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.SEND_SMS: granted=false, flags=[ RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.WRITE_CALL_LOG: granted=false, flags=[ RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.PROCESS_OUTGOING_CALLS: granted=false, flags=[ RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.READ_CELL_BROADCASTS: granted=false, flags=[ RESTRICTION_UPGRADE_EXEMPT]
+    User 999: ceDataInode=0 deDataInode=0 installed=false hidden=false privacy_hidden=false suspended=false distractionFlags=0 stopped=true notLaunched=true enabled=0 instant=false virtual=false quarantined=false
+      installReason=0
+      dataDir=null
+      firstInstallTime=1970-01-01 05:30:00
+      uninstallReason=0
+      gids=[3002, 3003, 3001]
+      runtime permissions:
+        android.permission.READ_SMS: granted=false, flags=[ RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.READ_CALL_LOG: granted=false, flags=[ RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.RECEIVE_MMS: granted=false, flags=[ RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.RECEIVE_SMS: granted=false, flags=[ RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.SEND_SMS: granted=false, flags=[ RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.WRITE_CALL_LOG: granted=false, flags=[ RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.PROCESS_OUTGOING_CALLS: granted=false, flags=[ RESTRICTION_UPGRADE_EXEMPT]
+        android.permission.READ_CELL_BROADCASTS: granted=false, flags=[ RESTRICTION_UPGRADE_EXEMPT]
+
+Queries:
+  system apps queryable: false
+  queries via forceQueryable:
+  queries via package name:
+    com.onecore.loader:
+      com.whatsapp
+      com.twitter.android
+  queries via component:
+    com.nothing.smartcenter:
+      com.onecore.loader
+    com.google.android.as:
+      com.onecore.loader
+    com.google.android.apps.messaging:
+      com.onecore.loader
+    com.google.android.as.oss:
+      com.onecore.loader
+    com.android.settings.intelligence:
+      com.onecore.loader
+    rikka.appops:
+      com.onecore.loader
+    ru.zdevs.zarchiver:
+      com.onecore.loader
+    com.flipkart.android:
+      com.onecore.loader
+    com.whatsapp:
+      com.onecore.loader
+    com.instagold.android:
+      com.onecore.loader
+    com.ixigo.train.ixitrain:
+      com.onecore.loader
+    com.rapido.passenger:
+      com.onecore.loader
+    com.wn.app.np:
+      com.onecore.loader
+    com.xiaomi.midrop:
+      com.onecore.loader
+    com.snaptube.premium:
+      com.onecore.loader
+    eu.faircode.netguard:
+      com.onecore.loader
+    com.community.oneroom:
+      com.onecore.loader
+    in.startv.hotstar:
+      com.onecore.loader
+    com.dubox.drive:
+      com.onecore.loader
+    com.truecaller:
+      com.onecore.loader
+    com.zoro.loader:
+      com.onecore.loader
+    com.pubg.imobile:
+      com.onecore.loader
+    com.onecore.loader:
+      com.android.bluetooth
+      com.google.android.googlequicksearchbox
+      com.android.chrome
+      com.google.android.apps.docs
+      com.google.android.gm
+      com.google.android.apps.tachyon
+      com.google.android.setupwizard
+      org.telegram.messenger
+      com.radolyn.ayugram
+      app.revanced.android.gms
+      com.mxtech.videoplayer.pro
+      com.parallax.op
+      ru.swwzldoh.orfaromqb
+      com.jio.jse
+      com.snaptube.premium
+      com.community.oneroom
+      com.twitter.android
+      com.dubox.drive
+      com.reddit.frontpage
+      com.kattwinkel.android.soundseeder.player
+      com.offsec.nethunter.store
+  queryable via interaction:
+    User 0:
+      [com.nothing.ntgamedashboard,com.mediatek,com.android.inputdevices,com.android.settings,com.nothing.ntfactorytest,com.nothing.logkit,com.wapi.wapicertmanager,com.nothing.ntessentialrecorder,com.android.server.telecom,com.android.dynsystem,com.android.keychain,com.nothing.applocker,com.nothing.proxy,com.android.location.fused,com.android.providers.settings,com.nothing.thirdparty,com.nothing.experience,com.nothing.audioeffect,android,com.mediatek.simprocessor,com.android.localtransport,com.tools.fps,com.mediatek.location.lppe.main,com.nothing.OfflineOTAUpgradeApp]:
+        com.onecore.loader
+      com.google.android.gms:
+        com.onecore.loader
+      com.android.vending:
+        com.onecore.loader
+      com.google.android.inputmethod.latin:
+        com.onecore.loader
+      com.google.android.webview:
+        com.onecore.loader
+      com.google.android.permissioncontroller:
+        com.onecore.loader
+      com.google.android.providers.media.module:
+        com.onecore.loader
+      com.onecore.loader:
+        com.google.android.webview
+    User 10:
+    User 999:
+  queryable via uses-library:
+
+Dexopt state:
+  [com.onecore.loader]
+    path: /data/app/~~2xqLepwnFfjSqem_QJT6LQ==/com.onecore.loader-SPxInwuz4RxHfrJdhvWjnw==/base.apk
+      arm64: [status=speed-profile] [reason=cmdline] [primary-abi]
+        [location is /data/app/~~2xqLepwnFfjSqem_QJT6LQ==/com.onecore.loader-SPxInwuz4RxHfrJdhvWjnw==/oat/arm64/base.odex]
+
+Compiler stats:
+  [com.onecore.loader]
+     base.apk - 1096
+
+[ACTIVITY INFO]
+* Task{e7dd676 #39145 type=standard A=10890:com.onecore.loader U=0 visible=false visibleRequested=false mode=fullscreen translucent=true sz=2}
+    * Hist  #1: ActivityRecord{177646913 u0 com.onecore.loader/top.niunaijun.blackbox.app.LauncherActivity t39145}
+      packageName=com.onecore.loader processName=com.onecore.loader
+      launchedFromUid=10890 launchedFromPackage=com.onecore.loader launchedFromFeature=null userId=0
+      Intent { flg=0x10800000 xflg=0x4 cmp=com.onecore.loader/top.niunaijun.blackbox.app.LauncherActivity (has extras) }
+      rootOfTask=false task=Task{e7dd676 #39145 type=standard A=10890:com.onecore.loader}
+      taskAffinity=10890:com.onecore.loader
+      mActivityComponent=com.onecore.loader/top.niunaijun.blackbox.app.LauncherActivity
+      baseDir=/data/app/~~2xqLepwnFfjSqem_QJT6LQ==/com.onecore.loader-SPxInwuz4RxHfrJdhvWjnw==/base.apk
+      dataDir=/data/user/0/com.onecore.loader
+    * Hist  #0: ActivityRecord{250745780 u0 com.onecore.loader/.activity.MainActivity t39145}
+      packageName=com.onecore.loader processName=com.onecore.loader
+      launchedFromUid=10890 launchedFromPackage=com.onecore.loader launchedFromFeature=null userId=0
+      Intent { xflg=0x4 cmp=com.onecore.loader/.activity.MainActivity }
+      rootOfTask=true task=Task{e7dd676 #39145 type=standard A=10890:com.onecore.loader}
+      taskAffinity=10890:com.onecore.loader
+      mActivityComponent=com.onecore.loader/.activity.MainActivity
+      baseDir=/data/app/~~2xqLepwnFfjSqem_QJT6LQ==/com.onecore.loader-SPxInwuz4RxHfrJdhvWjnw==/base.apk
+      dataDir=/data/user/0/com.onecore.loader
+      * Task{e7dd676 #39145 type=standard A=10890:com.onecore.loader U=0 visible=false visibleRequested=false mode=fullscreen translucent=true sz=2}
+        * ActivityRecord{177646913 u0 com.onecore.loader/top.niunaijun.blackbox.app.LauncherActivity t39145}
+        * ActivityRecord{250745780 u0 com.onecore.loader/.activity.MainActivity t39145}
+        source=ActivityRecord{88673856 u0 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyActivity$P0 t39144} SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        source=ActivityRecord{82231891 u0 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyActivity$P1 t39146} SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        source=ActivityRecord{234256615 u0 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyActivity$P1 t39146} SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        source=ActivityRecord{177646913 u0 com.onecore.loader/top.niunaijun.blackbox.app.LauncherActivity t39145} SCREEN_ORIENTATION_UNSPECIFIED
+        source=ActivityRecord{235687754 u0 com.onecore.loader/top.niunaijun.blackbox.proxy.ProxyActivity$P1 t39148} SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        (fullscreen) Task{e7dd676 #39145 type=standard A=10890:com.onecore.loader}

@@ -68,3 +68,10 @@
 
 # Warnings from optional logging APIs are not actionable in the release APK.
 -dontwarn org.slf4j.**
+
+
+# WorkManager restores pending jobs by worker class name after process recreation/app relaunch.
+# Keep this entry stable so resumable BGMI downloads survive background process death.
+-keep class com.onecore.loader.server.ServerInstallWorker {
+    public <init>(android.content.Context, androidx.work.WorkerParameters);
+}

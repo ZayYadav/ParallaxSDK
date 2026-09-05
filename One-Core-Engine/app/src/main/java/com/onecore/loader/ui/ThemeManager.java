@@ -28,6 +28,7 @@ import com.google.android.material.card.MaterialCardView;
 import com.onecore.loader.R;
 
 import java.util.Map;
+import java.util.Random;
 import java.util.WeakHashMap;
 
 /** Persistent visual theme system for all OneCore Edge Loader screens. */
@@ -204,6 +205,36 @@ public final class ThemeManager {
         return THEMES.length;
     }
 
+    /**
+     * Selects a fresh automatic theme for a visible Loader launch.
+     * When multiple themes exist, the immediately previous theme is never repeated.
+     */
+    public static void randomizeForLaunch(Context context) {
+        if (context == null || THEMES.length <= 0) {
+            return;
+        }
+
+        SharedPreferences preferences =
+                context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        int previous = preferences.getInt(KEY_THEME, -1);
+        Random random = new Random(
+                System.nanoTime()
+                        ^ android.os.Process.myPid()
+                        ^ Thread.currentThread().getId());
+
+        int next;
+        if (THEMES.length == 1) {
+            next = 0;
+        } else if (previous >= 0 && previous < THEMES.length) {
+            int offset = 1 + random.nextInt(THEMES.length - 1);
+            next = (previous + offset) % THEMES.length;
+        } else {
+            next = random.nextInt(THEMES.length);
+        }
+
+        preferences.edit().putInt(KEY_THEME, next).apply();
+    }
+
     public static void applyNow(Activity activity) {
         if (activity == null) {
             return;
@@ -351,16 +382,16 @@ public final class ThemeManager {
     }
 
     private static void applyThemePickerHook(Activity activity) {
+        // Themes are selected automatically by BoxApplication for every app launch.
+        // Keep the top-right brand mark decorative so there is no manual theme picker button.
         View settings = activity.findViewById(R.id.btn_settings);
         if (settings != null) {
-            settings.setClickable(true);
-            settings.setFocusable(true);
-            settings.setContentDescription("Choose OneCore Edge theme");
-            settings.setOnClickListener(v -> showThemePicker(activity));
-            settings.setOnLongClickListener(v -> {
-                showThemePicker(activity);
-                return true;
-            });
+            settings.setOnClickListener(null);
+            settings.setOnLongClickListener(null);
+            settings.setClickable(false);
+            settings.setLongClickable(false);
+            settings.setFocusable(false);
+            settings.setContentDescription("OneCore Edge brand");
         }
     }
 

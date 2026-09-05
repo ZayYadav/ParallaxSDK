@@ -78,6 +78,7 @@ public final class PremiumButtonStyler {
         // Main controls.
         stylePrimary(activity.findViewById(R.id.btn_start_game), theme, themeIndex, 70L);
         styleOutline(activity.findViewById(R.id.installIndia), theme, themeIndex, 110L);
+        styleDanger(activity.findViewById(R.id.btn_clear_bgmi_data), theme, themeIndex, 145L);
         styleIcon(activity.findViewById(R.id.btn_settings), theme, themeIndex, false, 35L);
     }
 
@@ -139,6 +140,51 @@ public final class PremiumButtonStyler {
                 ThemeManager.withAlpha(theme.accent, 165));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             text.setElevation(dp(context, Math.max(4f, theme.elevationDp * 0.45f)));
+        }
+        animateEntrance(text, entranceDelay);
+    }
+
+    private static void styleDanger(
+            View view,
+            ThemeManager.ThemeSpec theme,
+            int themeIndex,
+            long entranceDelay) {
+        if (!(view instanceof TextView)) return;
+        TextView text = (TextView) view;
+        Context context = text.getContext();
+
+        float radius = dp(context, Math.max(4f, theme.buttonRadiusDp));
+        GradientDrawable base = new GradientDrawable(
+                orientation(themeIndex),
+                new int[]{
+                        ThemeManager.withAlpha(mix(theme.surfaceAlt, theme.error, 0.10f), 247),
+                        ThemeManager.withAlpha(theme.surface, 247)});
+        base.setCornerRadius(radius);
+        base.setStroke(
+                dp(context, Math.max(1f, theme.strokeDp)),
+                ThemeManager.withAlpha(theme.error, 220));
+
+        Drawable background = base;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            background = new RippleDrawable(
+                    ColorStateList.valueOf(ThemeManager.withAlpha(theme.error, 72)),
+                    base,
+                    roundedMask(radius));
+        }
+
+        text.setBackground(background);
+        text.setTextColor(theme.error);
+        text.setTypeface(Typeface.create(theme.headingFont, Typeface.BOLD));
+        text.setGravity(Gravity.CENTER);
+        text.setLetterSpacing(themeIndex == 4 || themeIndex == 8 ? 0.11f : 0.07f);
+        text.setIncludeFontPadding(false);
+        text.setShadowLayer(
+                dp(context, 2.2f),
+                0f,
+                0f,
+                ThemeManager.withAlpha(theme.error, 120));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            text.setElevation(dp(context, Math.max(4f, theme.elevationDp * 0.42f)));
         }
         animateEntrance(text, entranceDelay);
     }

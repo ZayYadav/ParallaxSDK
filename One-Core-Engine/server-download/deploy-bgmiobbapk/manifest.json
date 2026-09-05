@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "package_name": "com.pubg.imobile",
+  "apk": {
+    "filename": "bgmi4.5.apk",
+    "url": "https://bgmiobbapk.parallaxserver.online/bgmi4.5.apk"
+  },
+  "obb": {
+    "mode": "split_zip",
+    "archive_name": "main.21325.com.pubg.imobile.zip",
+    "output_name": "main.21325.com.pubg.imobile.obb",
+    "parts": [
+      {
+        "name": "main.21325.com.pubg.imobile.z01",
+        "url": "https://bgmiobbapk.parallaxserver.online/main.21325.com.pubg.imobile.z01"
+      },
+      {
+        "name": "main.21325.com.pubg.imobile.z02",
+        "url": "https://bgmiobbapk.parallaxserver.online/main.21325.com.pubg.imobile.z02"
+      },
+      {
+        "name": "main.21325.com.pubg.imobile.z03",
+        "url": "https://bgmiobbapk.parallaxserver.online/main.21325.com.pubg.imobile.z03"
+      },
+      {
+        "name": "main.21325.com.pubg.imobile.zip",
+        "url": "https://bgmiobbapk.parallaxserver.online/main.21325.com.pubg.imobile.zip"
+      }
+    ]
+  }
+}

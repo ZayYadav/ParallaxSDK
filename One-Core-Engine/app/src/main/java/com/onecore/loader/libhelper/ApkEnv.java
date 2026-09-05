@@ -61,6 +61,21 @@ public class ApkEnv {
             throw new RuntimeException(e);
         }
     }
+
+    /**
+     * Clears only the virtual app's user data/cache for the selected OneCore profile.
+     * The virtual APK installation and OBB payload remain in place.
+     */
+    public boolean clearAppData(String packageName) {
+        try {
+            BlackBoxCore.get().stopPackage(packageName, 0);
+            BlackBoxCore.get().clearPackage(packageName, 0);
+            return true;
+        } catch (Throwable error) {
+            FLog.error("Unable to clear virtual app data", error);
+            return false;
+        }
+    }
     
     public ApplicationInfo getApplicationInfo(String packageName) {
         ApplicationInfo applicationInfo = null;

@@ -191,8 +191,122 @@ public class BActivityThread extends IBActivityThread.Stub {
         }
     }
 
+    /**
+     * True only after the guest Application is fully created and published back
+     * to the real framework ActivityThread.
+     *
+     * Android 16 calls ConfigurationController from handleLaunchActivity before
+     * Activity.onCreate(). ClientTransactionListenerController expects
+     * ActivityThread.currentApplication() to be non-null there, so treating a
+     * partially-populated AppBindData as "initialized" can crash the process.
+     */
     public boolean isInit() {
-        return this.mBoundApplication != null;
+        return this.mBoundApplication != null
+                && this.mInitialApplication != null
+                && ensureFrameworkInitialApplication();
+    }
+
+    /**
+     * Android 16 ConfigurationController does not stop at
+     * ActivityThread.currentApplication(). During launch it also calls
+     * app.getApplicationContext().getResources(). ContextImpl#getApplicationContext()
+     * resolves through LoadedApk.mApplication, so all three references must agree:
+     *
+     *   ActivityThread.mInitialApplication
+     *   LoadedApk.mApplication
+     *   Application base ContextImpl.mPackageInfo
+     *
+     * Old virtualization code can leave the second reference null even though the
+     * Application object itself is already alive. That produces the framework NPE
+     * in updateLocaleListFromAppContext().
+     */
+    public boolean ensureFrameworkInitialApplication() {
+        try {
+            Object activityThread = BlackBoxCore.mainThread();
+            if (activityThread == null) {
+                return false;
+            }
+
+            Application frameworkApplication =
+                    BRActivityThread.get(activityThread).mInitialApplication();
+            Application desiredApplication = this.mInitialApplication;
+
+            if (desiredApplication == null) {
+                desiredApplication = frameworkApplication;
+            }
+            if (desiredApplication == null) {
+                Context hostContext = BlackBoxCore.getContext();
+                Context hostApplicationContext =
+                        hostContext == null ? null : hostContext.getApplicationContext();
+                if (hostApplicationContext instanceof Application) {
+                    desiredApplication = (Application) hostApplicationContext;
+                }
+            }
+            if (desiredApplication == null) {
+                return false;
+            }
+
+            // Repair the LoadedApk used by the virtual bind data.
+            if (mBoundApplication != null) {
+                publishApplicationToLoadedApk(mBoundApplication.info, desiredApplication);
+            }
+
+            // Repair the LoadedApk actually backing Application.getBaseContext().
+            // ContextImpl#getApplicationContext() returns that LoadedApk's
+            // mApplication, and Android 16 dereferences it during launch config.
+            Context baseContext = desiredApplication.getBaseContext();
+            if (baseContext != null) {
+                try {
+                    Object baseLoadedApk = BRContextImpl.get(baseContext).mPackageInfo();
+                    publishApplicationToLoadedApk(baseLoadedApk, desiredApplication);
+                } catch (Throwable error) {
+                    Log.w(TAG, "Unable to repair Application base LoadedApk", error);
+                }
+            }
+
+            if (frameworkApplication != desiredApplication) {
+                BRActivityThread.get(activityThread)
+                        ._set_mInitialApplication(desiredApplication);
+            }
+
+            return isApplicationContextReady(desiredApplication);
+        } catch (Throwable error) {
+            Log.e(TAG, "Unable to ensure framework Application context", error);
+            return false;
+        }
+    }
+
+    private void publishApplicationToLoadedApk(Object loadedApk, Application application) {
+        if (loadedApk == null || application == null) {
+            return;
+        }
+        try {
+            Application current = BRLoadedApk.get(loadedApk).mApplication();
+            if (current != application) {
+                // Use the existing hidden-API reflector instead of depending on
+                // a generated setter name. Reflection is already unsealed by
+                // BlackBoxCore during attachBaseContext().
+                Reflector.with(loadedApk).field("mApplication").set(application);
+            }
+        } catch (Throwable error) {
+            Log.w(TAG, "Unable to publish Application into LoadedApk", error);
+        }
+    }
+
+    private boolean isApplicationContextReady(Application application) {
+        if (application == null) {
+            return false;
+        }
+        try {
+            if (application.getResources() == null) {
+                return false;
+            }
+            Context appContext = application.getApplicationContext();
+            return appContext != null && appContext.getResources() != null;
+        } catch (Throwable error) {
+            Log.w(TAG, "Application context/resources are not launch-ready", error);
+            return false;
+        }
     }
 
     public Service createService(ServiceInfo serviceInfo, IBinder token) {
@@ -313,6 +427,14 @@ public class BActivityThread extends IBActivityThread.Stub {
     public synchronized void handleBindApplication(String packageName, String processName) {
         if (isInit())
             return;
+
+        // Android 16 configuration dispatch assumes the process has a live
+        // Application even while a virtual guest is being rebound. Preserve
+        // the host Application until the guest Application is ready.
+        if (Build.VERSION.SDK_INT >= 36 && !ensureFrameworkInitialApplication()) {
+            Log.w(TAG, "Framework initial Application is unavailable before guest bind");
+        }
+
         try {
             CrashHandler.create();
         } catch (Throwable ignored) {
@@ -374,13 +496,28 @@ public class BActivityThread extends IBActivityThread.Stub {
         try {
             onBeforeCreateApplication(packageName, processName, packageContext);
             application = BRLoadedApk.get(loadedApk).makeApplication(false, null);
+            if (application == null) {
+                throw new IllegalStateException("LoadedApk.makeApplication returned null for " + packageName);
+            }
+
+            // Publish the guest Application immediately and repair LoadedApk's
+            // back-reference before any context/configuration work. On Android 16
+            // Application.getApplicationContext() is resolved through
+            // LoadedApk.mApplication during launch-time locale handling.
+            mInitialApplication = application;
+            publishApplicationToLoadedApk(loadedApk, application);
+            BRActivityThread.get(BlackBoxCore.mainThread())
+                    ._set_mInitialApplication(mInitialApplication);
+            if (!ensureFrameworkInitialApplication()) {
+                throw new IllegalStateException(
+                        "Unable to publish launch-ready guest Application context for " + packageName);
+            }
+
             ContextCompat.fix(application);
             ContextCompat.fix((Context) BRActivityThread.get(BlackBoxCore.mainThread()).getSystemContext());
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && "com.tencent.mm:recovery".equals(processName)) {
-                fixWeChatRecovery(mInitialApplication);
+                fixWeChatRecovery(application);
             }
-            mInitialApplication = application;
-            BRActivityThread.get(BlackBoxCore.mainThread())._set_mInitialApplication(mInitialApplication);
             List<ProviderInfo> providers;
             installProviders(mInitialApplication, bindData.processName, bindData.providers);
             try {

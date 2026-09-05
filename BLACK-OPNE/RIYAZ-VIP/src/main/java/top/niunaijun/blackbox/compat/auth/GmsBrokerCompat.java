@@ -1,6 +1,7 @@
 package top.niunaijun.blackbox.compat.auth;
 
 import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.IInterface;
@@ -47,6 +48,7 @@ public final class GmsBrokerCompat {
             "com.google.android.gms.common.internal.BaseGmsClient";
     private static final String GMS_PACKAGE = "com.google.android.gms";
     private static final int GET_SERVICE_TRANSACTION = 46;
+    private static final int MAX_NESTED_IDENTITY_DEPTH = 4;
 
     private static final Map<IBinder, IBinder> BINDER_CACHE =
             Collections.synchronizedMap(new WeakHashMap<>());
@@ -424,6 +426,8 @@ public final class GmsBrokerCompat {
                         field.set(request, hostPackage);
                     } else if (value instanceof Bundle) {
                         normalizeBundle((Bundle) value, virtualPackage, hostPackage);
+                    } else if (value instanceof Intent) {
+                        normalizeIntent((Intent) value, virtualPackage, hostPackage, 0);
                     } else if (value != null
                             && "android.content.AttributionSource".equals(
                             value.getClass().getName())) {
@@ -441,7 +445,15 @@ public final class GmsBrokerCompat {
 
     private static void normalizeBundle(
             Bundle bundle, String virtualPackage, String hostPackage) {
+        normalizeBundle(bundle, virtualPackage, hostPackage, 0);
+    }
+
+    private static void normalizeBundle(
+            Bundle bundle, String virtualPackage, String hostPackage, int depth) {
         if (bundle == null) {
+            return;
+        }
+        if (depth > MAX_NESTED_IDENTITY_DEPTH) {
             return;
         }
         try {
@@ -449,12 +461,63 @@ public final class GmsBrokerCompat {
                 Object value = bundle.get(key);
                 if (value instanceof String && virtualPackage.equals(value)) {
                     bundle.putString(key, hostPackage);
-                } else if (value != null
-                        && "android.content.AttributionSource".equals(
-                        value.getClass().getName())) {
-                    ContextCompat.fixAttributionSourceState(
-                            value, BlackBoxCore.getHostUid());
+                    continue;
                 }
+                normalizeNestedIdentity(value, virtualPackage, hostPackage, depth + 1);
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static void normalizeIntent(
+            Intent intent, String virtualPackage, String hostPackage, int depth) {
+        if (intent == null || depth > MAX_NESTED_IDENTITY_DEPTH) {
+            return;
+        }
+        try {
+            if (virtualPackage.equals(intent.getPackage())) {
+                intent.setPackage(hostPackage);
+            }
+            Bundle extras = intent.getExtras();
+            if (extras != null) {
+                normalizeBundle(extras, virtualPackage, hostPackage, depth + 1);
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static void normalizeNestedIdentity(
+            Object value, String virtualPackage, String hostPackage, int depth) {
+        if (value == null || depth > MAX_NESTED_IDENTITY_DEPTH) {
+            return;
+        }
+        try {
+            if (value instanceof Bundle) {
+                normalizeBundle((Bundle) value, virtualPackage, hostPackage, depth);
+            } else if (value instanceof Intent) {
+                normalizeIntent((Intent) value, virtualPackage, hostPackage, depth);
+            } else if (value instanceof Object[]) {
+                Object[] array = (Object[]) value;
+                for (int i = 0; i < array.length; i++) {
+                    Object item = array[i];
+                    if (item instanceof String && virtualPackage.equals(item)) {
+                        array[i] = hostPackage;
+                        continue;
+                    }
+                    normalizeNestedIdentity(item, virtualPackage, hostPackage, depth + 1);
+                }
+            } else if (value instanceof java.util.ArrayList) {
+                java.util.ArrayList<?> list = (java.util.ArrayList<?>) value;
+                for (int i = 0; i < list.size(); i++) {
+                    Object item = list.get(i);
+                    if (item instanceof String && virtualPackage.equals(item)) {
+                        ((java.util.ArrayList) list).set(i, hostPackage);
+                        continue;
+                    }
+                    normalizeNestedIdentity(item, virtualPackage, hostPackage, depth + 1);
+                }
+            } else if ("android.content.AttributionSource".equals(value.getClass().getName())) {
+                ContextCompat.fixAttributionSourceState(value, BlackBoxCore.getHostUid());
             }
         } catch (Throwable ignored) {
         }

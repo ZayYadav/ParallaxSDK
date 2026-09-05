@@ -8,6 +8,7 @@ import com.onecore.loader.BuildConfig;
 import org.json.JSONObject;
 import org.lsposed.lsparanoid.Obfuscate;
 
+import java.io.IOException;
 import java.net.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -19,6 +20,8 @@ import java.util.Locale;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
+
+import javax.net.ssl.SSLException;
 
 import okhttp3.ConnectionSpec;
 import okhttp3.HttpUrl;
@@ -83,8 +86,14 @@ public final class HostedLicenseClient {
                 .build();
     }
 
-    /** Activates or revalidates a key and persists only a cryptographically bound response. */
+    /** Activates a key and persists only a cryptographically bound response. */
     public String activate(String activationKey) {
+        return activateInternal(activationKey, false);
+    }
+
+    private String activateInternal(
+            String activationKey,
+            boolean preserveValidLicenseOnTransientFailure) {
         try {
             // Native pre-flight: endpoint/config + tracer/injection/interception checks.
             NativeLicenseGuard.assertSecure(context, apiPublicKey);
@@ -152,7 +161,13 @@ public final class HostedLicenseClient {
             clearLicense();
             return exception.getMessage();
         } catch (Exception exception) {
-            clearLicense();
+            boolean keepExistingLicense =
+                    preserveValidLicenseOnTransientFailure
+                            && isTransientTransportFailure(exception)
+                            && hasActiveLicense();
+            if (!keepExistingLicense) {
+                clearLicense();
+            }
             return userFacingError(exception);
         }
     }
@@ -163,7 +178,13 @@ public final class HostedLicenseClient {
             clearLicense();
             return "Sign in again to verify your key";
         }
-        return activate(key);
+        return activateInternal(key, true);
+    }
+
+    /** Returns the securely stored Loader activation key for the SDK activation bridge. */
+    public String getStoredActivationKey() {
+        String key = new SecurePreferences(context).getString(LICENSE_KEY, "");
+        return isSupportedActivationKey(key) ? normalizeActivationKey(key) : "";
     }
 
     public boolean hasActiveLicense() {
@@ -329,6 +350,22 @@ public final class HostedLicenseClient {
             throw new IllegalStateException("Licensing public key is not configured");
         }
         return value;
+    }
+
+    private static boolean isTransientTransportFailure(Exception exception) {
+        Throwable current = exception;
+        int depth = 0;
+        while (current != null && depth++ < 8) {
+            // TLS identity/protocol failures stay fail-closed even during background renewal.
+            if (current instanceof SSLException) {
+                return false;
+            }
+            if (current instanceof IOException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private static String userFacingError(Exception exception) {

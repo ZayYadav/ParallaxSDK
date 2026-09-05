@@ -32,8 +32,11 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
         val EMPTY_JAR = File(BEnvironment.getCacheDir(), "empty.apk")
 
         private const val MAX_RETRIES = 3
+        private const val MIN_RENEW_DELAY_SECONDS = 15L
+        private const val TRANSIENT_RENEW_RETRY_SECONDS = 30L
         private val exe: ExecutorService = Executors.newSingleThreadExecutor()
         private val renewalExecutor = Executors.newSingleThreadScheduledExecutor()
+        private val activationLock = Any()
         @Volatile private var renewalTask: ScheduledFuture<*>? = null
 
         @Volatile
@@ -51,6 +54,12 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
         @Volatile
         var sHideXposed: Boolean = true
 
+        @Volatile
+        private var activationInProgress: Boolean = false
+
+        @Volatile
+        private var lastActivationSucceeded: Boolean = false
+
         @JvmStatic
         fun getInstance(): RemoteManager {
             return instance ?: synchronized(this) {
@@ -60,55 +69,145 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
     }
 
     override fun activateSdk(userkey: String?) {
-        renewalTask?.cancel(false)
+        requestActivation(userkey, false)
+    }
+
+    private fun requestActivation(userkey: String?, renewal: Boolean) {
         val normalizedKey = userkey?.trim().orEmpty()
         if (normalizedKey.isEmpty()) {
-            nk.clearActivation("Activation key is required")
+            if (!renewal) {
+                lastActivationSucceeded = false
+                nk.clearActivation("Activation key is required")
+            }
             return
         }
 
-        exe.execute {
-            val context = BlackBoxCore.getContext()
-            val packageName = BlackBoxCore.getHostPkg().orEmpty()
-            if (packageName.isEmpty()) {
-                nk.clearActivation("Host package is unavailable")
-                return@execute
+        synchronized(activationLock) {
+            if (activationInProgress) {
+                return
             }
-
-            val client = SecureSdkApiClient(context)
-            var lastFailure = "Secure activation failed"
-            for (attempt in 0..MAX_RETRIES) {
+            if (!renewal && lastActivationSucceeded) {
                 try {
-                    val response = client.activate(
-                        normalizedKey,
-                        packageName,
-                        getAppName(context, packageName),
-                        deviceId(),
-                    )
-                    applySecureResponse(context, response, normalizedKey)
-                    return@execute
-                } catch (throwable: Throwable) {
-                    lastFailure = throwable.message ?: "Secure activation failed"
-                    nk.clearActivation(lastFailure)
-                    if (attempt < MAX_RETRIES && isRetryable(throwable)) {
-                        nk.Msg = "Secure connection retry ${attempt + 1}/$MAX_RETRIES"
-                        try {
-                            Thread.sleep(1_000L shl attempt)
-                        } catch (_: InterruptedException) {
-                            Thread.currentThread().interrupt()
-                            break
-                        }
-                    } else {
-                        break
+                    if (nk.getActivatedSdk()) {
+                        return
                     }
+                } catch (_: Throwable) {
                 }
             }
-            // Do not expose panel/security failure details in notifications.
-            showNotificationSafe("SDK ACTIVATE FAILED", "SDK NOT ACTIVATED")
+            activationInProgress = true
+            if (!renewal) {
+                lastActivationSucceeded = false
+            }
+        }
+
+        exe.execute {
+            var completedSuccessfully = false
+            var sawRetryableFailure = false
+            try {
+                val context = BlackBoxCore.getContext()
+                val packageName = BlackBoxCore.getHostPkg().orEmpty()
+                if (packageName.isEmpty()) {
+                    nk.clearActivation("Host package is unavailable")
+                    return@execute
+                }
+
+                val client = SecureSdkApiClient(context)
+                var lastFailure = "Secure activation failed"
+                for (attempt in 0..MAX_RETRIES) {
+                    try {
+                        val response = client.activate(
+                            normalizedKey,
+                            packageName,
+                            getAppName(context, packageName),
+                            deviceId(),
+                        )
+                        applySecureResponse(context, response, normalizedKey, renewal)
+                        completedSuccessfully = nk.getActivatedSdk()
+                        lastActivationSucceeded = completedSuccessfully
+                        if (completedSuccessfully) {
+                            return@execute
+                        }
+                        lastFailure = nk.getServerMessage().ifBlank { "Secure activation failed" }
+                        break
+                    } catch (throwable: Throwable) {
+                        lastFailure = throwable.message ?: "Secure activation failed"
+                        val retryable = isRetryable(throwable)
+                        if (!retryable) {
+                            nk.clearActivation(lastFailure)
+                            lastActivationSucceeded = false
+                            break
+                        }
+
+                        sawRetryableFailure = true
+                        if (attempt < MAX_RETRIES) {
+                            nk.Msg = "Secure connection retry ${attempt + 1}/$MAX_RETRIES"
+                            try {
+                                Thread.sleep(1_000L shl attempt)
+                            } catch (_: InterruptedException) {
+                                Thread.currentThread().interrupt()
+                                break
+                            }
+                        } else {
+                            break
+                        }
+                    }
+                }
+
+                if (!completedSuccessfully) {
+                    if (sawRetryableFailure) {
+                        val leaseStillValid = try {
+                            nk.getActivatedSdk()
+                        } catch (_: Throwable) {
+                            false
+                        }
+                        if (leaseStillValid) {
+                            lastActivationSucceeded = true
+                            nk.Msg = "Activation lease valid; renewal retry scheduled"
+                            scheduleTransientRetry(normalizedKey)
+                            return@execute
+                        }
+                    }
+
+                    nk.Msg = lastFailure
+                    if (!renewal) {
+                        showNotificationSafe("SDK ACTIVATE FAILED", "SDK NOT ACTIVATED")
+                    }
+                }
+            } finally {
+                synchronized(activationLock) {
+                    activationInProgress = false
+                }
+            }
         }
     }
 
-    private fun applySecureResponse(context: Context, data: JSONObject, licenseKey: String) {
+    fun awaitActivation(timeoutMillis: Long): Boolean {
+        val timeout = timeoutMillis.coerceIn(1_000L, 120_000L)
+        val deadline = android.os.SystemClock.elapsedRealtime() + timeout
+
+        while (activationInProgress
+            && android.os.SystemClock.elapsedRealtime() < deadline) {
+            try {
+                Thread.sleep(100L)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return false
+            }
+        }
+
+        return !activationInProgress && lastActivationSucceeded && nk.getActivatedSdk()
+    }
+
+    fun isActivationInProgress(): Boolean {
+        return activationInProgress
+    }
+
+    private fun applySecureResponse(
+        context: Context,
+        data: JSONObject,
+        licenseKey: String,
+        isRenewal: Boolean,
+    ) {
         val serverMode = data.optString("server_mode", "offline").lowercase(Locale.ROOT)
         val message = data.optString("message", "Activation rejected")
         if (data.optString("status") != "success" || serverMode != "online") {
@@ -177,15 +276,13 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
             .apply()
 
         nk.setHidden("online")
-        nk.Msg = "SDK activated - YOUR SDK ACTIVATED"
-        renewalTask?.cancel(false)
-        val renewAfter = maxOf(60L, leaseExpiresAt - serverTime - 60L)
-        renewalTask = renewalExecutor.schedule({ activateSdk(licenseKey) }, renewAfter, TimeUnit.SECONDS)
+        nk.Msg = "Secure activation lease active"
+        scheduleRenewal(licenseKey, leaseExpiresAt, serverTime)
 
         isDaemon(data.optInt("feature1", 0) == 1)
         ishideRoot(data.optInt("feature2", 0) == 1)
 
-        if (data.has("server_notification")) {
+        if (!isRenewal && data.has("server_notification")) {
             val notification = data.optJSONObject("server_notification")
             if (notification?.optInt("enabled", 0) == 1) {
                 showServerNotification(
@@ -195,14 +292,40 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
                 )
             }
         }
-        showNotificationSafe("SDK ACTIVATED", "YOUR SDK ACTIVATED")
+    }
+
+    private fun scheduleRenewal(licenseKey: String, leaseExpiresAt: Long, serverTime: Long) {
+        val leaseSeconds = maxOf(1L, leaseExpiresAt - serverTime)
+        val renewAfter = if (leaseSeconds <= 120L) {
+            maxOf(MIN_RENEW_DELAY_SECONDS, leaseSeconds / 2L)
+        } else {
+            maxOf(MIN_RENEW_DELAY_SECONDS, leaseSeconds - 60L)
+        }
+
+        renewalTask?.cancel(false)
+        renewalTask = renewalExecutor.schedule(
+            { requestActivation(licenseKey, true) },
+            renewAfter,
+            TimeUnit.SECONDS,
+        )
+    }
+
+    private fun scheduleTransientRetry(licenseKey: String) {
+        renewalTask?.cancel(false)
+        renewalTask = renewalExecutor.schedule(
+            { requestActivation(licenseKey, true) },
+            TRANSIENT_RENEW_RETRY_SECONDS,
+            TimeUnit.SECONDS,
+        )
     }
 
     private fun isRetryable(throwable: Throwable): Boolean {
+        // Keep ordinary connectivity failures retryable so a short network hiccup does not
+        // invalidate a still-valid signed lease. TLS failures are deliberately excluded:
+        // certificate/hostname/protocol failures must remain fail-closed.
         return throwable is java.net.SocketTimeoutException
             || throwable is java.net.ConnectException
             || throwable is java.net.UnknownHostException
-            || throwable is javax.net.ssl.SSLException
     }
 
     override fun getActivatedSdk(): Boolean {
