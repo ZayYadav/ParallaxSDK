@@ -91,6 +91,7 @@ def main():
             "parts": [
                 {
                     "name": part.name,
+                    "size": part.stat().st_size,
                     "url": f"{cdn_base}/{urllib.parse.quote(part.name)}",
                 }
                 for part in parts
