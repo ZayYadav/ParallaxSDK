@@ -28,9 +28,11 @@ import androidx.work.WorkManager;
 import androidx.work.Worker;
 import androidx.work.WorkerParameters;
 
+import com.onecore.loader.BoxApplication;
 import com.onecore.loader.R;
 import com.onecore.loader.activity.MainActivity;
 import com.onecore.loader.libhelper.FileCopyTask;
+import com.onecore.loader.security.HostedLicenseClient;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -83,6 +85,9 @@ public final class ServerInstallWorker extends Worker {
     private static final String INPUT_PACKAGE = "expected_package";
     private static final String PREFS = "server_install_state";
     private static final String PREF_RUNNING = "running";
+    private static final String PREF_STATE = "state";
+    private static final String PREF_DETAIL = "detail";
+    private static final String PREF_PERCENT = "percent";
     private static final String INSTALL_PREFS = "install_status";
 
     private static final String CHANNEL_ID = "onecore_server_download";
@@ -143,7 +148,7 @@ public final class ServerInstallWorker extends Worker {
                 .addTag(TAG)
                 .build();
 
-        setRunning(app, true);
+        setSnapshot(app, true, "QUEUED", "Waiting for network", 0);
         try {
             WorkManager.getInstance(app).enqueueUniqueWork(
                     UNIQUE_WORK_NAME,
@@ -151,7 +156,7 @@ public final class ServerInstallWorker extends Worker {
                     request);
             return true;
         } catch (Throwable error) {
-            setRunning(app, false);
+            setSnapshot(app, false, "FAILED", ServerInstallStrings.START_FAILED_TOAST, 0);
             return false;
         }
     }
@@ -162,11 +167,60 @@ public final class ServerInstallWorker extends Worker {
                 .getBoolean(PREF_RUNNING, false);
     }
 
+    public static ProgressSnapshot getProgressSnapshot(Context context) {
+        SharedPreferences preferences = context.getApplicationContext()
+                .getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        return new ProgressSnapshot(
+                preferences.getBoolean(PREF_RUNNING, false),
+                preferences.getString(PREF_STATE, "IDLE"),
+                preferences.getString(PREF_DETAIL, ""),
+                preferences.getInt(PREF_PERCENT, 0));
+    }
+
+    public static void cancel(Context context) {
+        Context app = context.getApplicationContext();
+        try {
+            WorkManager.getInstance(app).cancelUniqueWork(UNIQUE_WORK_NAME);
+        } catch (Throwable ignored) {
+        }
+        setSnapshot(app, false, "CANCELLED", ServerInstallStrings.CANCELLED,
+                getProgressSnapshot(app).percent);
+    }
+
     private static void setRunning(Context context, boolean running) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        SharedPreferences preferences = context.getApplicationContext()
+                .getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        preferences.edit().putBoolean(PREF_RUNNING, running).apply();
+    }
+
+    private static void setSnapshot(
+            Context context,
+            boolean running,
+            String state,
+            String detail,
+            int percent) {
+        context.getApplicationContext()
+                .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .edit()
                 .putBoolean(PREF_RUNNING, running)
+                .putString(PREF_STATE, state == null ? "" : state)
+                .putString(PREF_DETAIL, detail == null ? "" : detail)
+                .putInt(PREF_PERCENT, Math.max(0, Math.min(100, percent)))
                 .apply();
+    }
+
+    public static final class ProgressSnapshot {
+        public final boolean running;
+        public final String state;
+        public final String detail;
+        public final int percent;
+
+        ProgressSnapshot(boolean running, String state, String detail, int percent) {
+            this.running = running;
+            this.state = state == null ? "" : state;
+            this.detail = detail == null ? "" : detail;
+            this.percent = Math.max(0, Math.min(100, percent));
+        }
     }
 
     @NonNull
@@ -185,7 +239,7 @@ public final class ServerInstallWorker extends Worker {
             return Result.failure();
         }
 
-        setRunning(appContext, true);
+        setSnapshot(appContext, true, "PREPARING", "Connecting to OneCore server", 0);
         ensureNotificationChannel();
 
         try {
@@ -201,7 +255,7 @@ public final class ServerInstallWorker extends Worker {
                     .apply();
 
             publishProgress("READY", "BGMI installed successfully", 100, true);
-            setRunning(appContext, false);
+            setSnapshot(appContext, false, "READY", "BGMI installed successfully", 100);
             notifyCompletion(true, "BGMI is ready inside OneCore.");
             return Result.success(new Data.Builder()
                     .putString("message", "BGMI installed successfully.")
@@ -222,8 +276,23 @@ public final class ServerInstallWorker extends Worker {
                 return Result.retry();
             }
 
-            setRunning(appContext, false);
-            notifyCompletion(false, message);
+            if (isStopped()) {
+                setSnapshot(
+                        appContext,
+                        false,
+                        "CANCELLED",
+                        ServerInstallStrings.CANCELLED,
+                        Math.max(0, readPublishedPercent()));
+                notifyCompletion(false, ServerInstallStrings.CANCELLED);
+            } else {
+                setSnapshot(
+                        appContext,
+                        false,
+                        "FAILED",
+                        message,
+                        Math.max(0, readPublishedPercent()));
+                notifyCompletion(false, message);
+            }
             return Result.failure(new Data.Builder()
                     .putString("message", message)
                     .build());
@@ -316,6 +385,15 @@ public final class ServerInstallWorker extends Worker {
 
         publishProgress("VERIFYING APK", "Checking downloaded BGMI package", 74, true);
         validateArchivePackage(apkFile, spec.packageName);
+
+        publishProgress("ACTIVATING SDK", "Verifying OneCore SDK access", 76, true);
+        HostedLicenseClient loaderLicense = new HostedLicenseClient(appContext);
+        String storedKey = loaderLicense.getStoredActivationKey();
+        BoxApplication application = BoxApplication.get();
+        if (application == null || !application.activateSdkWithFallback(storedKey)) {
+            throw new IOException(
+                    "OneCore SDK activation failed. Reopen the loader and verify your key.");
+        }
 
         publishProgress("INSTALLING APK", "Installing BGMI inside OneCore", 77, true);
         InstallResult installResult = BlackBoxCore.get().installPackageAsUser(apkFile, 0);
@@ -842,6 +920,7 @@ public final class ServerInstallWorker extends Worker {
             boolean forceNotification) {
         int safePercent = Math.max(0, Math.min(100, percent));
         lastPublishedPercent = safePercent;
+        setSnapshot(appContext, true, state, detail, safePercent);
 
         setProgressAsync(new Data.Builder()
                 .putString("state", state)
@@ -905,10 +984,13 @@ public final class ServerInstallWorker extends Worker {
                 openIntent,
                 pendingFlags);
 
+        PendingIntent cancelIntent =
+                WorkManager.getInstance(appContext).createCancelPendingIntent(getId());
+
         NotificationCompat.Builder builder = new NotificationCompat.Builder(
                 appContext, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_license_timer)
-                .setContentTitle("OneCore BGMI Server Install")
+                .setContentTitle(ServerInstallStrings.NOTIFICATION_TITLE)
                 .setContentText(detail)
                 .setSubText(state)
                 .setContentIntent(pendingIntent)
@@ -918,6 +1000,13 @@ public final class ServerInstallWorker extends Worker {
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setCategory(NotificationCompat.CATEGORY_PROGRESS)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC);
+
+        if (percent < 100) {
+            builder.addAction(
+                    android.R.drawable.ic_menu_close_clear_cancel,
+                    ServerInstallStrings.CANCEL_DOWNLOAD,
+                    cancelIntent);
+        }
 
         if (indeterminate) {
             builder.setProgress(100, 0, true);
@@ -953,8 +1042,10 @@ public final class ServerInstallWorker extends Worker {
                 appContext, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_license_timer)
                 .setContentTitle(success
-                        ? "BGMI install complete"
-                        : "BGMI server install failed")
+                        ? ServerInstallStrings.NOTIFICATION_COMPLETE_TITLE
+                        : (ServerInstallStrings.CANCELLED.equals(detail)
+                                ? ServerInstallStrings.NOTIFICATION_CANCELLED_TITLE
+                                : ServerInstallStrings.NOTIFICATION_FAILED_TITLE))
                 .setContentText(detail)
                 .setContentIntent(pendingIntent)
                 .setOnlyAlertOnce(false)
@@ -977,10 +1068,10 @@ public final class ServerInstallWorker extends Worker {
                 && notificationManager != null) {
             NotificationChannel channel = new NotificationChannel(
                     CHANNEL_ID,
-                    "BGMI server downloads",
+                    ServerInstallStrings.NOTIFICATION_CHANNEL,
                     NotificationManager.IMPORTANCE_LOW);
             channel.setDescription(
-                    "Background progress for OneCore BGMI server installation");
+                    ServerInstallStrings.NOTIFICATION_CHANNEL_DESCRIPTION);
             channel.setShowBadge(false);
             notificationManager.createNotificationChannel(channel);
         }
