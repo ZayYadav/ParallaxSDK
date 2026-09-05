@@ -192,12 +192,20 @@ public final class ServerInstallManager {
             downloadedParts.add(partFile);
         }
 
-        updateUi("PREPARING OBB", "Joining multipart archive", 74);
-        File archive = new File(workspace, safeName(spec.archiveName));
-        joinParts(downloadedParts, archive);
-
-        // Once the complete archive exists, individual chunks are no longer needed.
-        deleteRecursively(partsDir);
+        File archive;
+        if ("split_zip".equals(spec.mode)) {
+            updateUi("PREPARING OBB", "Opening split ZIP archive", 78);
+            archive = new File(partsDir, safeName(spec.archiveName));
+            if (!archive.isFile() || archive.length() <= 0L) {
+                throw new IOException("Final split ZIP file is missing: " + spec.archiveName);
+            }
+        } else {
+            updateUi("PREPARING OBB", "Joining multipart archive", 74);
+            archive = new File(workspace, safeName(spec.archiveName));
+            joinParts(downloadedParts, archive);
+            // Joined-parts mode no longer needs the individual chunks.
+            deleteRecursively(partsDir);
+        }
 
         File extractDir = new File(workspace, "extract");
         deleteRecursively(extractDir);
@@ -206,15 +214,21 @@ public final class ServerInstallManager {
         }
 
         updateUi("EXTRACTING OBB", "Unpacking game data", 84);
-        new ZipFile(archive).extractAll(extractDir.getAbsolutePath());
+        ZipFile zipFile = new ZipFile(archive);
+        if ("split_zip".equals(spec.mode) && !zipFile.isSplitArchive()) {
+            throw new IOException("The downloaded OBB set is not a valid split ZIP archive.");
+        }
+        zipFile.extractAll(extractDir.getAbsolutePath());
 
         File extractedObb = findFile(extractDir, spec.outputName);
         if (extractedObb == null || !extractedObb.isFile() || extractedObb.length() <= 0L) {
             throw new IOException("Expected OBB file was not found inside the archive.");
         }
 
-        // Free the reconstructed ZIP before moving the large extracted OBB.
-        if (archive.exists() && !archive.delete()) {
+        // Free reconstructed/split ZIP payloads before moving the extracted OBB.
+        if ("split_zip".equals(spec.mode)) {
+            deleteRecursively(partsDir);
+        } else if (archive.exists() && !archive.delete()) {
             archive.deleteOnExit();
         }
 
@@ -273,6 +287,10 @@ public final class ServerInstallManager {
             if (apkFileName.isEmpty()) apkFileName = "bgmi.apk";
 
             JSONObject obb = root.getJSONObject("obb");
+            String mode = obb.optString("mode", "joined_parts").trim().toLowerCase(Locale.US);
+            if (!"joined_parts".equals(mode) && !"split_zip".equals(mode)) {
+                throw new IOException("Unsupported OBB mode: " + mode);
+            }
             String archiveName = obb.optString("archive_name", "bgmi_obb.zip").trim();
             String outputName = required(obb, "output_name");
             JSONArray partsJson = obb.getJSONArray("parts");
@@ -291,8 +309,21 @@ public final class ServerInstallManager {
                 parts.add(new PartSpec(name, partUrl, size));
             }
 
+            if ("split_zip".equals(mode)) {
+                boolean hasFinalZip = false;
+                for (PartSpec part : parts) {
+                    if (archiveName.equals(part.name)) {
+                        hasFinalZip = true;
+                        break;
+                    }
+                }
+                if (!hasFinalZip) {
+                    throw new IOException("Split ZIP manifest must include the final .zip file in parts.");
+                }
+            }
+
             return new ManifestSpec(packageName, apkFileName, apkUrl,
-                    archiveName, outputName, parts);
+                    mode, archiveName, outputName, parts);
         }
     }
 
@@ -339,12 +370,20 @@ public final class ServerInstallManager {
             if (existing > 0L) builder.header("Range", "bytes=" + existing + "-");
 
             try (Response response = HTTP.newCall(builder.build()).execute()) {
-                if (response.code() == 416 && !retried) {
-                    if (!destination.delete()) {
-                        throw new IOException(label + " resume state could not be reset.");
+                if (response.code() == 416) {
+                    long remoteTotal = parseUnsatisfiedRangeTotal(response.header("Content-Range"));
+                    if (existing > 0L && remoteTotal > 0L && existing == remoteTotal) {
+                        updateUi(label.toUpperCase(Locale.US),
+                                humanBytes(existing) + " ready", overallEnd);
+                        return;
                     }
-                    retried = true;
-                    continue;
+                    if (!retried) {
+                        if (!destination.delete()) {
+                            throw new IOException(label + " resume state could not be reset.");
+                        }
+                        retried = true;
+                        continue;
+                    }
                 }
                 if (!response.isSuccessful()) {
                     throw new IOException(label + " download failed: HTTP " + response.code());
@@ -497,6 +536,18 @@ public final class ServerInstallManager {
         if (value == null) return "file";
         String name = new File(value).getName().replaceAll("[^A-Za-z0-9._-]", "_");
         return name.isEmpty() ? "file" : name;
+    }
+
+    private static long parseUnsatisfiedRangeTotal(String value) {
+        if (value == null) return -1L;
+        // RFC 9110 example: Content-Range: bytes */419430400
+        int slash = value.lastIndexOf('/');
+        if (slash < 0 || slash >= value.length() - 1) return -1L;
+        try {
+            return Long.parseLong(value.substring(slash + 1).trim());
+        } catch (NumberFormatException ignored) {
+            return -1L;
+        }
     }
 
     private static String humanBytes(long bytes) {
@@ -666,15 +717,17 @@ public final class ServerInstallManager {
         final String packageName;
         final String apkFileName;
         final String apkUrl;
+        final String mode;
         final String archiveName;
         final String outputName;
         final List<PartSpec> parts;
 
         ManifestSpec(String packageName, String apkFileName, String apkUrl,
-                     String archiveName, String outputName, List<PartSpec> parts) {
+                     String mode, String archiveName, String outputName, List<PartSpec> parts) {
             this.packageName = packageName;
             this.apkFileName = apkFileName;
             this.apkUrl = apkUrl;
+            this.mode = mode;
             this.archiveName = archiveName;
             this.outputName = outputName;
             this.parts = parts;
