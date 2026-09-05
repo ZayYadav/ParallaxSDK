@@ -85,6 +85,11 @@ public class LoginActivity extends AppCompatActivity {
     private boolean isShowingDenied = false;
     private LinearLayout deniedOverlay = null;
     private ProgressBar loadingSpinner;
+    private boolean nativeClipboardLoginInFlight = false;
+    private boolean awaitingPortalClipboardKey = false;
+    private String lastNativeClipboardKey = "";
+
+    private native String nativeClipboardKey();
     
     public static class PremiumBackgroundDrawable extends Drawable {
         private int angle = 0;
@@ -326,11 +331,7 @@ public class LoginActivity extends AppCompatActivity {
             getKeyBtn.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
             getKeyBtn.setPadding(40, 15, 40, 15);
             getKeyBtn.setBackgroundResource(R.drawable.premium_button_border);
-            getKeyBtn.setOnClickListener(v -> {
-                Intent intent = new Intent(Intent.ACTION_VIEW);
-                intent.setData(Uri.parse(getString(R.string.key_portal_url)));
-                startActivity(intent);
-            });
+            getKeyBtn.setOnClickListener(v -> openKeyPortalForClipboardAutoLogin());
             
             // Try Again Button
             TextView tryAgainBtn = new TextView(LoginActivity.this);
@@ -423,12 +424,8 @@ public class LoginActivity extends AppCompatActivity {
             String normalizedKey = HostedLicenseClient.normalizeActivationKey(key);
             inputKey.setText(normalizedKey);
             inputKey.setSelection(normalizedKey.length());
-            try {
-                securePreferences.putString(USER, normalizedKey);
-            } catch (IllegalStateException exception) {
-                inputKey.setError("Secure storage is unavailable");
-                return;
-            }
+            // Persist only after the panel and OneCore SDK both accept the key.
+            // This prevents a mistyped/manual key from replacing the last known-good key.
             // Hide denied overlay if showing
             if (isShowingDenied) {
                 hideAccessDeniedAnimation();
@@ -473,11 +470,90 @@ public class LoginActivity extends AppCompatActivity {
         });
         
         TextView timg = findViewById(R.id.telegram);
-        timg.setOnClickListener(view -> {
+        timg.setOnClickListener(view -> openKeyPortalForClipboardAutoLogin());
+    }
+
+    private void openKeyPortalForClipboardAutoLogin() {
+        awaitingPortalClipboardKey = true;
+        lastNativeClipboardKey = "";
+        if (isShowingDenied) {
+            hideAccessDeniedAnimation();
+        }
+        try {
             Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setData(Uri.parse(getString(R.string.key_portal_url)));
             startActivity(intent);
-        });
+        } catch (Throwable error) {
+            awaitingPortalClipboardKey = false;
+            FLog.warning("Unable to open key portal");
+        }
+    }
+
+    private void tryNativeClipboardAutoLogin() {
+        if (nativeClipboardLoginInFlight
+                || isFinishing()
+                || btnSignIn == null
+                || loadingOverlay != null) {
+            return;
+        }
+
+        String clipboardKey;
+        try {
+            clipboardKey = nativeClipboardKey();
+        } catch (Throwable error) {
+            FLog.warning("Native clipboard key read unavailable");
+            return;
+        }
+
+        if (!HostedLicenseClient.isSupportedActivationKey(clipboardKey)) {
+            // Do not permanently mark the read as attempted. If the user opens the
+            // key portal, copies a key and returns, foreground focus will check again.
+            return;
+        }
+
+        String normalizedKey = HostedLicenseClient.normalizeActivationKey(clipboardKey);
+        if (normalizedKey.equals(lastNativeClipboardKey)) {
+            return;
+        }
+
+        String savedKey = "";
+        try {
+            savedKey = new SecurePreferences(this).getString(USER, "");
+        } catch (IllegalStateException error) {
+            FLog.warning("Secure storage unavailable while checking clipboard key");
+        }
+
+        // On an ordinary cold/resume launch, never let syntax-only clipboard text replace
+        // a different saved working key. A different copied key is auto-tried only after
+        // the user explicitly leaves this screen through the key portal.
+        boolean portalReturn = awaitingPortalClipboardKey;
+        if (!portalReturn
+                && savedKey != null
+                && !savedKey.isEmpty()
+                && !normalizedKey.equals(HostedLicenseClient.normalizeActivationKey(savedKey))) {
+            return;
+        }
+
+        EditText inputKey = findViewById(R.id.textUsername);
+        if (inputKey == null) {
+            return;
+        }
+
+        nativeClipboardLoginInFlight = true;
+        awaitingPortalClipboardKey = false;
+        lastNativeClipboardKey = normalizedKey;
+
+        if (isShowingDenied) {
+            hideAccessDeniedAnimation();
+        }
+
+        inputKey.setText(normalizedKey);
+        inputKey.setSelection(normalizedKey.length());
+        btnSignIn.setEnabled(false);
+
+        FLog.info("Valid clipboard license candidate detected; starting automatic verification");
+        showLoadingAnimation("✦ VERIFYING LICENSE ✦");
+        Login(this, normalizedKey);
     }
 
     private static void Login(LoginActivity activity, String key) {
@@ -485,6 +561,10 @@ public class LoginActivity extends AppCompatActivity {
             public void handleMessage(Message msg) {
                 // Hide loading animation first
                 activity.hideLoadingAnimation();
+                activity.nativeClipboardLoginInFlight = false;
+                if (activity.btnSignIn != null) {
+                    activity.btnSignIn.setEnabled(true);
+                }
                 
                 if (msg.what == 0) {
                     // Success - show success message and go to main
@@ -515,6 +595,13 @@ public class LoginActivity extends AppCompatActivity {
                     boolean sdkActivated = application != null
                             && application.activateSdkWithFallback(key);
                     if (sdkActivated) {
+                        try {
+                            new SecurePreferences(activity).putString(
+                                    USER,
+                                    HostedLicenseClient.normalizeActivationKey(key));
+                        } catch (IllegalStateException storageError) {
+                            FLog.warning("Secure storage unavailable after successful login");
+                        }
                         msg.what = 0;
                     } else {
                         msg.what = 1;
@@ -724,6 +811,16 @@ public class LoginActivity extends AppCompatActivity {
                     View.SYSTEM_UI_FLAG_FULLSCREEN |
                     View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
             getWindow().setFlags(1024, 1024);
+        }
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {
+            // Android 10+ restricts clipboard reads while an app is backgrounded.
+            // Read once after the login window actually owns foreground focus.
+            tryNativeClipboardAutoLogin();
         }
     }
 

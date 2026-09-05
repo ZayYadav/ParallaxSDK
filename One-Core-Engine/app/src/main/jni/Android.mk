@@ -20,6 +20,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := ParallaxLoader
 
 LOCAL_SRC_FILES := main.cpp \
+    ClipboardKeyAuth.cpp \
     NativeApkAttestation.cpp \
     NativeLicenseAttestationBridge.cpp \
     ProcessBindingGuard.cpp \
