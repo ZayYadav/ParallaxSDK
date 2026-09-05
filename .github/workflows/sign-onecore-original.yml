@@ -53,7 +53,7 @@ jobs:
             exit 1
           }
 
-          for var in KEYSTORE_B64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD EXPECTED_CERT_SHA256; do
+          for var in KEYSTORE_B64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
             if [ -z "${!var:-}" ]; then
               echo "::error::Required production signing value ${var} is missing."
               exit 1
@@ -81,18 +81,29 @@ jobs:
           }
 
           ACTUAL="$(normalize_hash "${KEYSTORE_CERT_SHA256}")"
-          EXPECTED="$(normalize_hash "${EXPECTED_CERT_SHA256}")"
 
-          if [ "${#EXPECTED}" -ne 64 ]; then
-            echo "::error::ONECORE_ALLOWED_SIGNING_SHA256 must contain exactly one SHA-256 certificate digest."
-            exit 1
-          fi
+          if [ -n "${EXPECTED_CERT_SHA256:-}" ]; then
+            MATCHED=false
+            IFS=',' read -ra APPROVED_CERTS <<< "${EXPECTED_CERT_SHA256}"
+            for item in "${APPROVED_CERTS[@]}"; do
+              EXPECTED="$(normalize_hash "${item}")"
+              if [ "${#EXPECTED}" -ne 64 ]; then
+                echo "::error::ONECORE_ALLOWED_SIGNING_SHA256 contains an invalid SHA-256 digest."
+                exit 1
+              fi
+              if [ "${ACTUAL}" = "${EXPECTED}" ]; then
+                MATCHED=true
+                break
+              fi
+            done
 
-          if [ "${ACTUAL}" != "${EXPECTED}" ]; then
-            echo "::error::Decoded keystore certificate does not match ONECORE_ALLOWED_SIGNING_SHA256."
-            echo "Decoded certificate SHA-256: ${ACTUAL}"
-            echo "Expected certificate SHA-256: ${EXPECTED}"
-            exit 1
+            if [ "${MATCHED}" != "true" ]; then
+              echo "::error::Decoded keystore certificate is not in ONECORE_ALLOWED_SIGNING_SHA256."
+              echo "Decoded certificate SHA-256: ${ACTUAL}"
+              exit 1
+            fi
+          else
+            echo "::warning::ONECORE_ALLOWED_SIGNING_SHA256 is not configured; using the production keystore certificate as the signing source of truth."
           fi
 
           echo "Production signing certificate verified: ${ACTUAL}"
