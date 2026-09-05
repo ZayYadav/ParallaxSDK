@@ -232,9 +232,11 @@ public class MainActivity extends Activity {
             return;
         }
 
-        // Once installed, the same button remains a direct UNINSTALL action.
+        // Once installed, the same button remains an UNINSTALL action, but keep
+        // the SDK activation gate so BlackBox package operations cannot race startup.
         if (getInstallationStatus(selectedGamePkg)) {
-            handleInstallUninstall(BGMI_INDEX, installIndia);
+            runAfterSdkActivation(() ->
+                    handleInstallUninstall(BGMI_INDEX, installIndia));
             return;
         }
 
