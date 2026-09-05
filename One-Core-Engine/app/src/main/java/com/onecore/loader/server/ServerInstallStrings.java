@@ -57,7 +57,7 @@ public final class ServerInstallStrings {
     public static final String STORAGE_PERMISSION_TOAST =
             "Allow file access once. Download will start when you return.";
 
-    public static final String CLEAR_BGMI_DATA = "CLEAR BGMI DATA";
+    public static final String CLEAR_BGMI_DATA = "CLEAR ALL BGMI DATA";
     public static final String CLEAR_BGMI_DATA_SUBTITLE =
             "Reset BGMI app data inside OneCore without uninstalling the game";
     public static final String CLEAR_DATA_DIALOG_TITLE = "RESET BGMI DATA";
