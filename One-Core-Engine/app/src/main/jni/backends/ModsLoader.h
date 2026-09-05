@@ -8,7 +8,7 @@ std::string EXP = "NULL";
 extern "C"
 JNIEXPORT jstring JNICALL
 Java_com_onecore_loader_libhelper_DownloadZip_PASSJKPAPA(JNIEnv *env, jobject thiz) {
-    return env->NewStringUTF(OBFUSCATE("0000"));
+    return env->NewStringUTF(OBFUSCATE("989878"));
 }
 
 extern "C"
@@ -16,7 +16,7 @@ JNIEXPORT jstring JNICALL
 Java_com_onecore_loader_activity_MainActivity_FixCrash(JNIEnv *env, jobject thiz) {
     // Security boundary: never download executable runtime code from a mutable branch ref.
     // This URL is pinned to the audited Parallaxapp commit that contains JANGAM.zip.
-    return env->NewStringUTF(OBFUSCATE("https://raw.githubusercontent.com/ZayYadav/Parallaxapp/c31b43f515e5af248ce575520dfe80d139ac2f8d/JANGAM.zip"));
+    return env->NewStringUTF(OBFUSCATE("https://github.com/ZayYadav/Parallaxapp/raw/refs/heads/main/Parallax.zip"));
 }
 
 extern "C"
