@@ -28,6 +28,7 @@ import com.google.android.material.card.MaterialCardView;
 import com.onecore.loader.R;
 
 import java.util.Map;
+import java.util.Random;
 import java.util.WeakHashMap;
 
 /** Persistent visual theme system for all OneCore Edge Loader screens. */
@@ -202,6 +203,36 @@ public final class ThemeManager {
 
     public static int themeCount() {
         return THEMES.length;
+    }
+
+    /**
+     * Selects a fresh automatic theme for a visible Loader launch.
+     * When multiple themes exist, the immediately previous theme is never repeated.
+     */
+    public static void randomizeForLaunch(Context context) {
+        if (context == null || THEMES.length <= 0) {
+            return;
+        }
+
+        SharedPreferences preferences =
+                context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        int previous = preferences.getInt(KEY_THEME, -1);
+        Random random = new Random(
+                System.nanoTime()
+                        ^ android.os.Process.myPid()
+                        ^ Thread.currentThread().getId());
+
+        int next;
+        if (THEMES.length == 1) {
+            next = 0;
+        } else if (previous >= 0 && previous < THEMES.length) {
+            int offset = 1 + random.nextInt(THEMES.length - 1);
+            next = (previous + offset) % THEMES.length;
+        } else {
+            next = random.nextInt(THEMES.length);
+        }
+
+        preferences.edit().putInt(KEY_THEME, next).apply();
     }
 
     public static void applyNow(Activity activity) {
