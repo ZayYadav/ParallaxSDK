@@ -326,6 +326,30 @@
                         android:textSize="11sp" />
                 </LinearLayout>
 
+                <TextView
+                    android:id="@+id/installFromServer"
+                    android:layout_width="match_parent"
+                    android:layout_height="54dp"
+                    android:layout_marginTop="14dp"
+                    android:background="@drawable/premium_primary_button"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="sans-serif-black"
+                    android:gravity="center"
+                    android:letterSpacing="0.05"
+                    android:text="INSTALL FROM SERVER"
+                    android:textColor="@color/premium_ink"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="7dp"
+                    android:gravity="center"
+                    android:text="Downloads APK + multipart OBB, then prepares OneCore automatically"
+                    android:textColor="@color/premium_text_muted"
+                    android:textSize="10sp" />
+
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
