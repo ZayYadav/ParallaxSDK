@@ -144,8 +144,11 @@ public final class ServerInstallManager {
             throw new IOException("Manifest package does not match the selected BGMI profile.");
         }
 
-        File workspace = new File(activity.getNoBackupFilesDir(),
-                "server-install/" + safeName(spec.packageName));
+        File stagingRoot = activity.getExternalFilesDir("server-install");
+        if (stagingRoot == null) {
+            stagingRoot = new File(activity.getNoBackupFilesDir(), "server-install");
+        }
+        File workspace = new File(stagingRoot, safeName(spec.packageName));
         if (!workspace.exists() && !workspace.mkdirs()) {
             throw new IOException("Unable to create server-install workspace.");
         }
@@ -162,6 +165,12 @@ public final class ServerInstallManager {
             throw new IOException(reason == null || reason.trim().isEmpty()
                     ? "OneCore could not install the downloaded APK."
                     : "OneCore install failed: " + reason);
+        }
+
+        // installByStorage copies the APK into OneCore, so release the large staging APK
+        // before the OBB download starts.
+        if (apkFile.exists() && !apkFile.delete()) {
+            apkFile.deleteOnExit();
         }
 
         File partsDir = new File(workspace, "parts");
