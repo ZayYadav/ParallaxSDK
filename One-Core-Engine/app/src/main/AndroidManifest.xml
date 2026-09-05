@@ -90,5 +90,11 @@
         
         <service android:name=".floating.Overlay" android:stopWithTask="true" />
 
+        <!-- WorkManager foreground service for user-initiated BGMI data downloads. -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
+
     </application>
 </manifest>
