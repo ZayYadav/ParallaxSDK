@@ -10,6 +10,7 @@ import androidx.appcompat.app.AppCompatDelegate;
 
 import com.Jagdish.tastytoast.TastyToast;
 import com.google.android.material.color.DynamicColors;
+import com.onecore.loader.security.HostedLicenseClient;
 import com.onecore.loader.security.IntegrityEnforcer;
 import com.onecore.loader.security.SecurityIncidentDispatcher;
 import com.onecore.loader.ui.AdvancedUiStyler;
@@ -33,6 +34,7 @@ public class BoxApplication extends Application {
     private native String BoxApp();
     public static BoxApplication gApp;
 
+    private final Object sdkActivationLock = new Object();
     private boolean isNetworkConnected = false;
 
     public static BoxApplication get() {
@@ -100,7 +102,9 @@ public class BoxApplication extends Application {
 
         new Thread(() -> {
             try {
-                MetaActivationManager.activateSdk(BoxApp());
+                String storedKey = new HostedLicenseClient(this).getStoredActivationKey();
+                boolean activated = activateSdkWithFallback(storedKey);
+                FLog.info("Startup SDK activation result: " + activated);
             } catch (Throwable error) {
                 FLog.error("Background SDK activation failed", error);
             }
@@ -122,6 +126,54 @@ public class BoxApplication extends Application {
         }
 
         FLog.info("Startup: Application.onCreate complete");
+    }
+
+    /**
+     * Ensures the embedded SDK is actually activated before OneCore package operations run.
+     *
+     * The native bootstrap key remains the primary SDK-panel credential. If that key is no
+     * longer provisioned, the securely verified Loader key is tried as a compatibility fallback.
+     * Calls are serialized so startup/login/install cannot race each other.
+     */
+    public boolean activateSdkWithFallback(String loaderKey) {
+        synchronized (sdkActivationLock) {
+            try {
+                if (MetaActivationManager.getActivatedStatus()) {
+                    return true;
+                }
+
+                String bootstrapKey = "";
+                try {
+                    String value = BoxApp();
+                    bootstrapKey = value == null ? "" : value.trim();
+                } catch (Throwable error) {
+                    FLog.warning("Native SDK bootstrap key is unavailable");
+                }
+
+                if (!bootstrapKey.isEmpty()) {
+                    boolean ok = MetaActivationManager.activateSdkAndWait(bootstrapKey, 45_000L);
+                    if (ok) {
+                        return true;
+                    }
+                    if (MetaActivationManager.isActivationInProgress()) {
+                        return false;
+                    }
+                }
+
+                String fallback = loaderKey == null ? "" : loaderKey.trim();
+                if (!fallback.isEmpty() && !fallback.equalsIgnoreCase(bootstrapKey)) {
+                    boolean ok = MetaActivationManager.activateSdkAndWait(fallback, 45_000L);
+                    if (ok) {
+                        return true;
+                    }
+                }
+
+                return MetaActivationManager.getActivatedStatus();
+            } catch (Throwable error) {
+                FLog.error("SDK activation bridge failed", error);
+                return false;
+            }
+        }
     }
 
     private void selectRandomThemeForLaunch() {
