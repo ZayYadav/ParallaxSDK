@@ -72,6 +72,7 @@ public class MainActivity extends Activity {
 
     private TextView installIndia;
     private TextView btnStartGame;
+    private TextView btnClearBgmiData;
     private RadioButton tvHideEsp;
 
     private Dialog serverDownloadDialog;
@@ -136,7 +137,12 @@ public class MainActivity extends Activity {
 
         installIndia = findViewById(R.id.installIndia);
         btnStartGame = findViewById(R.id.btn_start_game);
+        btnClearBgmiData = findViewById(R.id.btn_clear_bgmi_data);
         tvHideEsp = findViewById(R.id.tv_hide_esp);
+
+        if (btnClearBgmiData != null) {
+            btnClearBgmiData.setText(ServerInstallStrings.CLEAR_BGMI_DATA);
+        }
 
         TextView deviceStatus = findViewById(R.id.tv_device_status);
         deviceStatus.setText("Android API " + Build.VERSION.SDK_INT
@@ -154,6 +160,10 @@ public class MainActivity extends Activity {
             }
             showInstallSourceDialog();
         });
+
+        if (btnClearBgmiData != null) {
+            btnClearBgmiData.setOnClickListener(v -> showClearBgmiDataDialog());
+        }
 
         btnStartGame.setOnClickListener(v -> {
             if (!ensureLicenseActive()) {
@@ -252,52 +262,79 @@ public class MainActivity extends Activity {
 
         GradientDrawable shell = new GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
-                new int[]{theme.surfaceAlt, theme.surface});
-        shell.setCornerRadius(dp(theme.cardRadiusDp));
+                new int[]{
+                        ThemeManager.withAlpha(theme.surfaceAlt, 252),
+                        ThemeManager.withAlpha(theme.surface, 252)});
+        shell.setCornerRadius(dp(Math.max(22f, theme.cardRadiusDp)));
         shell.setStroke(
                 dp(Math.max(1f, theme.strokeDp)),
-                ThemeManager.withAlpha(theme.accent, 190));
+                ThemeManager.withAlpha(theme.accent, 175));
         root.setBackground(shell);
+
+        TextView eyebrow = new TextView(this);
+        eyebrow.setText("ONECORE • GAME INSTALLER");
+        eyebrow.setTextColor(theme.accent);
+        eyebrow.setTextSize(9f);
+        eyebrow.setLetterSpacing(0.13f);
+        eyebrow.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        root.addView(eyebrow, matchWrapParams(0));
 
         TextView title = new TextView(this);
         title.setText(ServerInstallStrings.CHOOSER_TITLE);
         title.setTextColor(theme.text);
-        title.setTextSize(20f);
+        title.setTextSize(23f);
         title.setTypeface(android.graphics.Typeface.create(
                 theme.headingFont, android.graphics.Typeface.BOLD));
-        title.setLetterSpacing(0.05f);
-        root.addView(title, matchWrapParams(0));
+        title.setLetterSpacing(0.035f);
+        LinearLayout.LayoutParams titleParams = matchWrapParams(0);
+        titleParams.topMargin = dp(6);
+        root.addView(title, titleParams);
 
         TextView subtitle = new TextView(this);
         subtitle.setText(ServerInstallStrings.CHOOSER_SUBTITLE);
         subtitle.setTextColor(theme.muted);
         subtitle.setTextSize(12f);
+        subtitle.setLineSpacing(dp(2), 1f);
         LinearLayout.LayoutParams subtitleParams = matchWrapParams(0);
         subtitleParams.topMargin = dp(5);
-        subtitleParams.bottomMargin = dp(15);
+        subtitleParams.bottomMargin = dp(18);
         root.addView(subtitle, subtitleParams);
 
-        TextView installedGame = makeInstallChoice(
+        TextView section = new TextView(this);
+        section.setText("SELECT INSTALL SOURCE");
+        section.setTextColor(ThemeManager.withAlpha(theme.text, 190));
+        section.setTextSize(10f);
+        section.setLetterSpacing(0.10f);
+        section.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        LinearLayout.LayoutParams sectionParams = matchWrapParams(0);
+        sectionParams.bottomMargin = dp(9);
+        root.addView(section, sectionParams);
+
+        LinearLayout installedGame = makeModernInstallChoiceCard(
+                "DEVICE",
                 ServerInstallStrings.INSTALL_FROM_DEVICE,
                 ServerInstallStrings.INSTALL_FROM_DEVICE_SUBTITLE,
+                "Uses the BGMI files already present on this phone",
                 theme,
                 false);
-        root.addView(installedGame, matchWrapParams(10));
+        root.addView(installedGame, matchWrapParams(11));
 
-        TextView oneCoreServer = makeInstallChoice(
+        LinearLayout oneCoreServer = makeModernInstallChoiceCard(
+                "ONECORE CDN",
                 ServerInstallStrings.INSTALL_FROM_SERVER,
                 ServerInstallStrings.INSTALL_FROM_SERVER_SUBTITLE,
+                "Background download • resumable • notification progress",
                 theme,
                 true);
         root.addView(oneCoreServer, matchWrapParams(0));
 
         TextView footer = new TextView(this);
         footer.setText(ServerInstallStrings.TAP_OUTSIDE_TO_CANCEL);
-        footer.setTextColor(theme.muted);
+        footer.setTextColor(ThemeManager.withAlpha(theme.muted, 210));
         footer.setTextSize(10f);
         footer.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams footerParams = matchWrapParams(0);
-        footerParams.topMargin = dp(13);
+        footerParams.topMargin = dp(14);
         root.addView(footer, footerParams);
 
         installedGame.setOnClickListener(v -> {
@@ -319,14 +356,116 @@ public class MainActivity extends Activity {
             window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
             WindowManager.LayoutParams attrs = window.getAttributes();
-            attrs.dimAmount = 0.78f;
+            attrs.dimAmount = 0.82f;
             window.setAttributes(attrs);
             int width = getResources().getDisplayMetrics().widthPixels;
             window.setLayout(
-                    (int) (width * 0.90f),
+                    (int) (width * 0.92f),
                     WindowManager.LayoutParams.WRAP_CONTENT);
             window.setGravity(Gravity.CENTER);
         }
+
+        root.setAlpha(0f);
+        root.setScaleX(0.96f);
+        root.setScaleY(0.96f);
+        root.setTranslationY(dp(8));
+        root.animate()
+                .alpha(1f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .translationY(0f)
+                .setDuration(220L)
+                .start();
+    }
+
+    private LinearLayout makeModernInstallChoiceCard(
+            String badge,
+            String title,
+            String subtitle,
+            String hint,
+            ThemeManager.ThemeSpec theme,
+            boolean primary) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(16), dp(14), dp(16), dp(14));
+        card.setClickable(true);
+        card.setFocusable(true);
+
+        GradientDrawable background;
+        if (primary) {
+            background = new GradientDrawable(
+                    GradientDrawable.Orientation.TL_BR,
+                    new int[]{
+                            ThemeManager.withAlpha(theme.accent, 242),
+                            ThemeManager.withAlpha(theme.accent2, 242)});
+            background.setStroke(
+                    dp(1),
+                    ThemeManager.withAlpha(theme.text, 75));
+        } else {
+            background = new GradientDrawable(
+                    GradientDrawable.Orientation.TL_BR,
+                    new int[]{
+                            ThemeManager.withAlpha(theme.surfaceAlt, 252),
+                            ThemeManager.withAlpha(theme.surface, 252)});
+            background.setStroke(
+                    dp(Math.max(1f, theme.strokeDp)),
+                    ThemeManager.withAlpha(theme.accent, 135));
+        }
+        background.setCornerRadius(dp(Math.max(16f, theme.buttonRadiusDp)));
+        card.setBackground(background);
+
+        TextView badgeView = new TextView(this);
+        badgeView.setText(badge);
+        badgeView.setTextColor(primary
+                ? ThemeManager.contrastInk(theme.accent)
+                : theme.accent);
+        badgeView.setTextSize(9f);
+        badgeView.setLetterSpacing(0.12f);
+        badgeView.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        card.addView(badgeView, matchWrapParams(0));
+
+        TextView titleView = new TextView(this);
+        titleView.setText(title);
+        titleView.setTextColor(primary
+                ? ThemeManager.contrastInk(theme.accent)
+                : theme.text);
+        titleView.setTextSize(14f);
+        titleView.setTypeface(android.graphics.Typeface.create(
+                theme.headingFont, android.graphics.Typeface.BOLD));
+        LinearLayout.LayoutParams titleParams = matchWrapParams(0);
+        titleParams.topMargin = dp(5);
+        card.addView(titleView, titleParams);
+
+        TextView subtitleView = new TextView(this);
+        subtitleView.setText(subtitle);
+        subtitleView.setTextColor(primary
+                ? ThemeManager.withAlpha(
+                        ThemeManager.contrastInk(theme.accent), 205)
+                : theme.muted);
+        subtitleView.setTextSize(11f);
+        subtitleView.setLineSpacing(dp(2), 1f);
+        LinearLayout.LayoutParams subtitleParams = matchWrapParams(0);
+        subtitleParams.topMargin = dp(5);
+        card.addView(subtitleView, subtitleParams);
+
+        TextView hintView = new TextView(this);
+        hintView.setText(hint + "   →");
+        hintView.setTextColor(primary
+                ? ThemeManager.withAlpha(
+                        ThemeManager.contrastInk(theme.accent), 230)
+                : ThemeManager.withAlpha(theme.accent, 230));
+        hintView.setTextSize(9.5f);
+        hintView.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        LinearLayout.LayoutParams hintParams = matchWrapParams(0);
+        hintParams.topMargin = dp(9);
+        card.addView(hintView, hintParams);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            card.setElevation(dp(primary
+                    ? Math.max(8f, theme.elevationDp * 0.75f)
+                    : Math.max(3f, theme.elevationDp * 0.35f)));
+        }
+        return card;
     }
 
     private TextView makeInstallChoice(
@@ -365,6 +504,201 @@ public class MainActivity extends Activity {
         option.setClickable(true);
         option.setFocusable(true);
         return option;
+    }
+
+    private void showClearBgmiDataDialog() {
+        if (!ensureLicenseActive()) {
+            return;
+        }
+        if (selectedGamePkg == null || selectedGamePkg.isEmpty()) {
+            BoxApplication.get().showToastWithImage(
+                    ServerInstallStrings.CLEAR_DATA_NOT_INSTALLED,
+                    TastyToast.WARNING);
+            return;
+        }
+        if (ServerInstallWorker.isRunning(this)) {
+            BoxApplication.get().showToastWithImage(
+                    "Finish or cancel the current BGMI download first.",
+                    TastyToast.WARNING);
+            showServerDownloadDialog();
+            return;
+        }
+
+        boolean installed;
+        try {
+            installed = ApkEnv.getInstance().isInstalled(selectedGamePkg);
+        } catch (Throwable error) {
+            installed = getInstallationStatus(selectedGamePkg);
+        }
+        if (!installed) {
+            BoxApplication.get().showToastWithImage(
+                    ServerInstallStrings.CLEAR_DATA_NOT_INSTALLED,
+                    TastyToast.WARNING);
+            return;
+        }
+
+        ThemeManager.ThemeSpec theme = ThemeManager.current(this);
+        Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        dialog.setCancelable(true);
+        dialog.setCanceledOnTouchOutside(true);
+
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(22), dp(20), dp(22), dp(18));
+
+        GradientDrawable shell = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{
+                        ThemeManager.withAlpha(theme.surfaceAlt, 252),
+                        ThemeManager.withAlpha(theme.surface, 252)});
+        shell.setCornerRadius(dp(Math.max(22f, theme.cardRadiusDp)));
+        shell.setStroke(
+                dp(Math.max(1f, theme.strokeDp)),
+                ThemeManager.withAlpha(theme.error, 180));
+        root.setBackground(shell);
+
+        TextView eyebrow = new TextView(this);
+        eyebrow.setText("BGMI • ONECORE STORAGE");
+        eyebrow.setTextColor(theme.error);
+        eyebrow.setTextSize(9f);
+        eyebrow.setLetterSpacing(0.12f);
+        eyebrow.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        root.addView(eyebrow, matchWrapParams(0));
+
+        TextView title = new TextView(this);
+        title.setText(ServerInstallStrings.CLEAR_DATA_DIALOG_TITLE);
+        title.setTextColor(theme.text);
+        title.setTextSize(21f);
+        title.setTypeface(android.graphics.Typeface.create(
+                theme.headingFont, android.graphics.Typeface.BOLD));
+        LinearLayout.LayoutParams titleParams = matchWrapParams(0);
+        titleParams.topMargin = dp(6);
+        root.addView(title, titleParams);
+
+        TextView message = new TextView(this);
+        message.setText(ServerInstallStrings.CLEAR_DATA_DIALOG_MESSAGE);
+        message.setTextColor(theme.muted);
+        message.setTextSize(12f);
+        message.setLineSpacing(dp(3), 1f);
+        LinearLayout.LayoutParams messageParams = matchWrapParams(0);
+        messageParams.topMargin = dp(8);
+        messageParams.bottomMargin = dp(17);
+        root.addView(message, messageParams);
+
+        TextView clear = makeDialogActionButton(
+                ServerInstallStrings.CLEAR_DATA_CONFIRM,
+                theme,
+                true);
+        root.addView(clear, matchWrapParams(10));
+
+        TextView keep = makeDialogActionButton(
+                ServerInstallStrings.CLEAR_DATA_CANCEL,
+                theme,
+                false);
+        root.addView(keep, matchWrapParams(0));
+
+        clear.setOnClickListener(v -> {
+            dialog.dismiss();
+            runAfterSdkActivation(this::clearBgmiDataAsync);
+        });
+        keep.setOnClickListener(v -> dialog.dismiss());
+
+        dialog.setContentView(root);
+        dialog.show();
+
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            WindowManager.LayoutParams attrs = window.getAttributes();
+            attrs.dimAmount = 0.82f;
+            window.setAttributes(attrs);
+            int width = getResources().getDisplayMetrics().widthPixels;
+            window.setLayout(
+                    (int) (width * 0.90f),
+                    WindowManager.LayoutParams.WRAP_CONTENT);
+            window.setGravity(Gravity.CENTER);
+        }
+
+        root.setAlpha(0f);
+        root.setScaleX(0.97f);
+        root.setScaleY(0.97f);
+        root.animate()
+                .alpha(1f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(200L)
+                .start();
+    }
+
+    private TextView makeDialogActionButton(
+            String text,
+            ThemeManager.ThemeSpec theme,
+            boolean destructive) {
+        TextView button = new TextView(this);
+        button.setText(text);
+        button.setTextSize(12f);
+        button.setGravity(Gravity.CENTER);
+        button.setMinHeight(dp(52));
+        button.setPadding(dp(16), dp(12), dp(16), dp(12));
+        button.setTypeface(android.graphics.Typeface.create(
+                theme.headingFont, android.graphics.Typeface.BOLD));
+        button.setLetterSpacing(0.07f);
+        button.setClickable(true);
+        button.setFocusable(true);
+
+        GradientDrawable background = new GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                destructive
+                        ? new int[]{
+                                ThemeManager.withAlpha(theme.error, 235),
+                                ThemeManager.withAlpha(theme.error, 185)}
+                        : new int[]{
+                                ThemeManager.withAlpha(theme.surfaceAlt, 250),
+                                ThemeManager.withAlpha(theme.surface, 250)});
+        background.setCornerRadius(dp(Math.max(14f, theme.buttonRadiusDp)));
+        background.setStroke(
+                dp(Math.max(1f, theme.strokeDp)),
+                destructive
+                        ? ThemeManager.withAlpha(theme.error, 235)
+                        : ThemeManager.withAlpha(theme.accent, 145));
+        button.setBackground(background);
+        button.setTextColor(destructive
+                ? ThemeManager.contrastInk(theme.error)
+                : theme.accent);
+        return button;
+    }
+
+    private void clearBgmiDataAsync() {
+        final String packageName = selectedGamePkg;
+        if (packageName == null || packageName.isEmpty()) {
+            return;
+        }
+
+        if (btnClearBgmiData != null) {
+            btnClearBgmiData.setEnabled(false);
+            btnClearBgmiData.setText("CLEARING BGMI DATA…");
+        }
+
+        new Thread(() -> {
+            boolean cleared = ApkEnv.getInstance().clearAppData(packageName);
+            runOnUiThread(() -> {
+                if (btnClearBgmiData != null) {
+                    btnClearBgmiData.setEnabled(true);
+                    btnClearBgmiData.setText(ServerInstallStrings.CLEAR_BGMI_DATA);
+                }
+                if (cleared) {
+                    BoxApplication.get().showToastWithImage(
+                            ServerInstallStrings.CLEAR_DATA_SUCCESS,
+                            TastyToast.SUCCESS);
+                } else {
+                    BoxApplication.get().showToastWithImage(
+                            ServerInstallStrings.CLEAR_DATA_FAILED,
+                            TastyToast.ERROR);
+                }
+            });
+        }, "OneCore-ClearBgmiData").start();
     }
 
     private void showServerDownloadDialog() {
