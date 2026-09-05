@@ -984,8 +984,15 @@ public final class ServerInstallWorker extends Worker {
                 openIntent,
                 pendingFlags);
 
-        PendingIntent cancelIntent =
-                WorkManager.getInstance(appContext).createCancelPendingIntent(getId());
+        Intent cancelBroadcast = new Intent(
+                appContext,
+                ServerInstallCancelReceiver.class);
+        cancelBroadcast.setAction(ServerInstallCancelReceiver.ACTION_CANCEL);
+        PendingIntent cancelIntent = PendingIntent.getBroadcast(
+                appContext,
+                6106,
+                cancelBroadcast,
+                pendingFlags);
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(
                 appContext, CHANNEL_ID)
