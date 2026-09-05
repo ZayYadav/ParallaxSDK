@@ -191,8 +191,64 @@ public class BActivityThread extends IBActivityThread.Stub {
         }
     }
 
+    /**
+     * True only after the guest Application is fully created and published back
+     * to the real framework ActivityThread.
+     *
+     * Android 16 calls ConfigurationController from handleLaunchActivity before
+     * Activity.onCreate(). ClientTransactionListenerController expects
+     * ActivityThread.currentApplication() to be non-null there, so treating a
+     * partially-populated AppBindData as "initialized" can crash the process.
+     */
     public boolean isInit() {
-        return this.mBoundApplication != null;
+        return this.mBoundApplication != null
+                && this.mInitialApplication != null
+                && ensureFrameworkInitialApplication();
+    }
+
+    /**
+     * Keep ActivityThread.currentApplication() usable while BlackBox swaps the
+     * host process over to the guest Application.
+     *
+     * Before the guest is created we preserve/restore the Loader Application as
+     * a temporary fallback. Once the guest exists, it becomes the authoritative
+     * framework initial Application.
+     */
+    public boolean ensureFrameworkInitialApplication() {
+        try {
+            Object activityThread = BlackBoxCore.mainThread();
+            if (activityThread == null) {
+                return false;
+            }
+
+            Application desiredApplication = this.mInitialApplication;
+            if (desiredApplication == null) {
+                Context hostContext = BlackBoxCore.getContext();
+                Context hostApplicationContext =
+                        hostContext == null ? null : hostContext.getApplicationContext();
+                if (hostApplicationContext instanceof Application) {
+                    desiredApplication = (Application) hostApplicationContext;
+                }
+            }
+
+            Application frameworkApplication =
+                    BRActivityThread.get(activityThread).mInitialApplication();
+
+            if (desiredApplication != null
+                    && (frameworkApplication == null
+                    || (this.mInitialApplication != null
+                    && frameworkApplication != this.mInitialApplication))) {
+                BRActivityThread.get(activityThread)
+                        ._set_mInitialApplication(desiredApplication);
+                frameworkApplication =
+                        BRActivityThread.get(activityThread).mInitialApplication();
+            }
+
+            return frameworkApplication != null;
+        } catch (Throwable error) {
+            Log.e(TAG, "Unable to ensure framework initial Application", error);
+            return false;
+        }
     }
 
     public Service createService(ServiceInfo serviceInfo, IBinder token) {
@@ -313,6 +369,14 @@ public class BActivityThread extends IBActivityThread.Stub {
     public synchronized void handleBindApplication(String packageName, String processName) {
         if (isInit())
             return;
+
+        // Android 16 configuration dispatch assumes the process has a live
+        // Application even while a virtual guest is being rebound. Preserve
+        // the host Application until the guest Application is ready.
+        if (Build.VERSION.SDK_INT >= 36 && !ensureFrameworkInitialApplication()) {
+            Log.w(TAG, "Framework initial Application is unavailable before guest bind");
+        }
+
         try {
             CrashHandler.create();
         } catch (Throwable ignored) {
@@ -374,13 +438,26 @@ public class BActivityThread extends IBActivityThread.Stub {
         try {
             onBeforeCreateApplication(packageName, processName, packageContext);
             application = BRLoadedApk.get(loadedApk).makeApplication(false, null);
+            if (application == null) {
+                throw new IllegalStateException("LoadedApk.makeApplication returned null for " + packageName);
+            }
+
+            // Publish the guest Application immediately. Do this before context
+            // repair/provider work because Android 16 may run configuration
+            // bookkeeping during those calls and dereference currentApplication().
+            mInitialApplication = application;
+            BRActivityThread.get(BlackBoxCore.mainThread())
+                    ._set_mInitialApplication(mInitialApplication);
+            if (!ensureFrameworkInitialApplication()) {
+                throw new IllegalStateException(
+                        "Unable to publish guest Application to ActivityThread for " + packageName);
+            }
+
             ContextCompat.fix(application);
             ContextCompat.fix((Context) BRActivityThread.get(BlackBoxCore.mainThread()).getSystemContext());
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && "com.tencent.mm:recovery".equals(processName)) {
-                fixWeChatRecovery(mInitialApplication);
+                fixWeChatRecovery(application);
             }
-            mInitialApplication = application;
-            BRActivityThread.get(BlackBoxCore.mainThread())._set_mInitialApplication(mInitialApplication);
             List<ProviderInfo> providers;
             installProviders(mInitialApplication, bindData.processName, bindData.providers);
             try {

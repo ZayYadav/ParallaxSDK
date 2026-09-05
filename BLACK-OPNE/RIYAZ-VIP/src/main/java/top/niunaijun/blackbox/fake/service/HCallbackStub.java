@@ -178,6 +178,15 @@ public class HCallbackStub implements IInjectHook, Handler.Callback {
         }
 
         Intent targetIntent = stubRecord.mTarget;
+        BActivityThread activityThread = BActivityThread.currentActivityThread();
+
+        // Android 16's ConfigurationController calls
+        // ClientTransactionListenerController before Activity.onCreate() and
+        // dereferences ActivityThread.currentApplication(). Repair that framework
+        // invariant before the launch transaction is allowed to execute.
+        if (BuildCompat.isS() && !activityThread.ensureFrameworkInitialApplication()) {
+            Slog.e(TAG, "Framework Application is not ready for virtual launch");
+        }
 
         if (BActivityThread.getAppConfig() == null) {
             BlackBoxCore.getBActivityManager().restartProcess(
@@ -209,10 +218,22 @@ public class HCallbackStub implements IInjectHook, Handler.Callback {
             return true;
         }
 
-        if (!BActivityThread.currentActivityThread().isInit()) {
-            BActivityThread.currentActivityThread().bindApplication(
+        if (!activityThread.isInit()) {
+            activityThread.bindApplication(
                     activityInfo.packageName, activityInfo.processName);
+
+            // Re-queue only after binding has completed. isInit() now verifies
+            // both the guest Application and the real ActivityThread field.
+            if (!activityThread.isInit()) {
+                Slog.e(TAG, "Guest Application bind did not reach a launch-ready state");
+                return false;
+            }
             return true;
+        }
+
+        if (!activityThread.ensureFrameworkInitialApplication()) {
+            Slog.e(TAG, "Refusing virtual launch without a framework Application");
+            return false;
         }
 
         // This is the critical Android 16 guard. Missing/corrupt proxy metadata
