@@ -55,6 +55,7 @@ import android.graphics.PixelFormat;
 import android.widget.LinearLayout;
 import android.view.ViewGroup;
 
+import com.onecore.loader.BoxApplication;
 import com.onecore.loader.R;
 import com.onecore.loader.utils.CrashHandler;
 import com.onecore.loader.utils.FLog;
@@ -501,9 +502,24 @@ public class LoginActivity extends AppCompatActivity {
         new Thread(() -> {
             Message msg = new Message();
             try {
-                String result = new HostedLicenseClient(activity).activate(key);
+                HostedLicenseClient loaderLicense = new HostedLicenseClient(activity);
+                String result = loaderLicense.activate(key);
                 if ("OK".equals(result)) {
-                    msg.what = 0;
+                    activity.runOnUiThread(() -> {
+                        if (activity.loadingText != null) {
+                            activity.loadingText.setText("✦ ACTIVATING ONECORE SDK ✦");
+                        }
+                    });
+
+                    BoxApplication application = BoxApplication.get();
+                    boolean sdkActivated = application != null
+                            && application.activateSdkWithFallback(key);
+                    if (sdkActivated) {
+                        msg.what = 0;
+                    } else {
+                        msg.what = 1;
+                        msg.obj = "License verified, but OneCore SDK activation failed";
+                    }
                 } else {
                     msg.what = 1;
                     msg.obj = result != null && !result.isEmpty() ? result : "USER OR GAME NOT REGISTERED";
