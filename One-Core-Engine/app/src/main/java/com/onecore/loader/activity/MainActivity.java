@@ -89,6 +89,7 @@ public class MainActivity extends Activity {
     private Runnable countdownRunnable;
     private HostedLicenseClient licenseClient;
     private boolean pendingServerInstall;
+    private boolean notificationPermissionRequestInFlight;
     private boolean accessClosed;
     private boolean revalidationInProgress;
 
@@ -390,9 +391,12 @@ public class MainActivity extends Activity {
                 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
                 != PackageManager.PERMISSION_GRANTED) {
             pendingServerInstall = true;
-            requestPermissions(
-                    new String[]{Manifest.permission.POST_NOTIFICATIONS},
-                    REQUEST_SERVER_NOTIFICATIONS);
+            if (!notificationPermissionRequestInFlight) {
+                notificationPermissionRequestInFlight = true;
+                requestPermissions(
+                        new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                        REQUEST_SERVER_NOTIFICATIONS);
+            }
             return;
         }
 
@@ -415,7 +419,11 @@ public class MainActivity extends Activity {
             String[] permissions,
             int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode != REQUEST_SERVER_NOTIFICATIONS || !pendingServerInstall) {
+        if (requestCode != REQUEST_SERVER_NOTIFICATIONS) {
+            return;
+        }
+        notificationPermissionRequestInFlight = false;
+        if (!pendingServerInstall) {
             return;
         }
 
