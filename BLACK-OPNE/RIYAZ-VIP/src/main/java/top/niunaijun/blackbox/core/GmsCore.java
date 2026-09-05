@@ -135,15 +135,10 @@ public class GmsCore {
             return info;
         }
 
-        // FirebaseInitProvider initializes FirebaseApp before Application.onCreate,
-        // and FirebaseApp initializes Analytics for the process. On Android 16 a
-        // virtual package cannot safely initialize real GMS measurement under the
-        // host UID, so remove this automatic bootstrap. Google/Facebook/X auth is
-        // handled by the dedicated external/native auth bridge and does not depend
-        // on Firebase Analytics startup.
-        if (FIREBASE_INIT_PROVIDER.equals(info.name)) {
-            return null;
-        }
+        // Keep FirebaseInitProvider alive. BGMI/IMSDK calls Firebase APIs during
+        // Google sign-in and fails with "Default FirebaseApp is not initialized"
+        // if this bootstrap is removed. Android 16 safety is handled below by
+        // stripping only measurement/analytics components and metadata.
         return isMeasurementComponentName(info.name) ? null : info;
     }
 

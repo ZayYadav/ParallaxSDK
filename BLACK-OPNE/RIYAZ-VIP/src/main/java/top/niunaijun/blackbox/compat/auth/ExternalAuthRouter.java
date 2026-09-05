@@ -98,6 +98,10 @@ public final class ExternalAuthRouter {
 
     private static final String GCLOUD_TWITTER_WEB_ACTIVITY =
             "com.itop.twitterwrapper.TwitterWebActivity";
+    private static final String TWITTER_KIT_OAUTH_ACTIVITY =
+            "com.twitter.sdk.android.core.identity.OAuthActivity";
+    private static final String IMSDK_PROXY_ACTIVITY =
+            "com.itop.imsdk.android.base.IMSDKProxyActivity";
 
     private static final Set<String> TRUSTED_PROVIDER_PACKAGES = new HashSet<>(Arrays.asList(
             "com.google.android.gms",
@@ -197,12 +201,13 @@ public final class ExternalAuthRouter {
             return null;
         }
 
-        // Stock BGMI/GCloud starts TwitterWebActivity explicitly rather than
-        // dispatching the OAuth URL with ACTION_VIEW. If its launch extras already
-        // carry that URL, convert only that one URL to a real-provider ACTION_VIEW.
-        // Failure is intentionally non-destructive: returning null below lets the
-        // original TwitterWebActivity continue exactly as before.
-        Intent embeddedTwitterAuth = extractGCloudTwitterAuthIntent(source);
+        // Stock BGMI/GCloud and Twitter Kit sometimes start an explicit wrapper
+        // Activity instead of dispatching the OAuth URL with ACTION_VIEW. If that
+        // launch payload already carries a Twitter/X OAuth URL, convert only that
+        // one URL to a real-provider ACTION_VIEW. Failure is intentionally
+        // non-destructive: returning null below lets the original Activity
+        // continue exactly as before.
+        Intent embeddedTwitterAuth = extractEmbeddedTwitterAuthIntent(source);
         if (embeddedTwitterAuth != null) {
             Intent nativeBridge = createTwitterNativeResultBridgeIntent(
                     embeddedTwitterAuth, resultTo, resultWho, requestCode, virtualPackage);
@@ -386,8 +391,8 @@ public final class ExternalAuthRouter {
         return null;
     }
 
-    private static Intent extractGCloudTwitterAuthIntent(Intent source) {
-        if (!isGCloudTwitterWebActivity(source)) {
+    private static Intent extractEmbeddedTwitterAuthIntent(Intent source) {
+        if (!isEmbeddedTwitterAuthActivity(source)) {
             return null;
         }
 
@@ -403,17 +408,24 @@ public final class ExternalAuthRouter {
         return auth;
     }
 
-    private static boolean isGCloudTwitterWebActivity(Intent source) {
+    private static boolean isEmbeddedTwitterAuthActivity(Intent source) {
         if (source == null) return false;
         ComponentName component = source.getComponent();
         return component != null
-                && GCLOUD_TWITTER_WEB_ACTIVITY.equals(component.getClassName());
+                && isEmbeddedTwitterAuthClass(component.getClassName());
+    }
+
+    private static boolean isEmbeddedTwitterAuthClass(String className) {
+        return GCLOUD_TWITTER_WEB_ACTIVITY.equals(className)
+                || TWITTER_KIT_OAUTH_ACTIVITY.equals(className)
+                || IMSDK_PROXY_ACTIVITY.equals(className);
     }
 
     /**
-     * Search only the GCloud launch payload for an already-created Twitter/X OAuth
-     * URL. The value is never persisted or logged. Recursion is intentionally
-     * shallow to avoid walking arbitrary app object graphs.
+     * Search only known Twitter auth wrapper launch payloads for an already
+     * created Twitter/X OAuth URL. The value is never persisted or logged.
+     * Recursion is intentionally shallow to avoid walking arbitrary app object
+     * graphs.
      */
     private static Uri findTwitterOAuthUri(Uri direct, Bundle extras, int depth) {
         if (isTrustedTwitterOAuthUri(direct)) {
