@@ -18,6 +18,14 @@ public final class ServerInstallStrings {
     public static final String CHOOSER_TITLE = "INSTALL BGMI";
     public static final String CHOOSER_SUBTITLE =
             "Choose where OneCore should get the game files";
+    public static final String INSTALLER_EYEBROW = "ONECORE • GAME INSTALLER";
+    public static final String SELECT_INSTALL_SOURCE = "SELECT INSTALL SOURCE";
+    public static final String DEVICE_SOURCE_BADGE = "DEVICE";
+    public static final String SERVER_SOURCE_BADGE = "ONECORE CDN";
+    public static final String DEVICE_SOURCE_HINT =
+            "Uses the BGMI files already present on this phone";
+    public static final String SERVER_SOURCE_HINT =
+            "Background download • resumable • notification progress";
 
     public static final String INSTALL_FROM_DEVICE =
             "INSTALL FROM YOUR INSTALLED GAME";
@@ -68,4 +76,7 @@ public final class ServerInstallStrings {
     public static final String CLEAR_DATA_SUCCESS = "BGMI data cleared successfully";
     public static final String CLEAR_DATA_FAILED = "Unable to clear BGMI data";
     public static final String CLEAR_DATA_NOT_INSTALLED = "Install BGMI first";
+    public static final String CLEAR_DATA_DOWNLOAD_RUNNING =
+            "Finish or cancel the current BGMI download first.";
+    public static final String CLEAR_DATA_WORKING = "CLEARING BGMI DATA…";
 }
