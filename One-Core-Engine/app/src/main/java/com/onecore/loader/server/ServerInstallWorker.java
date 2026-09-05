@@ -51,7 +51,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.ConnectionPool;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -116,6 +115,7 @@ public final class ServerInstallWorker extends Worker {
     private final Context appContext;
     private NotificationManager notificationManager;
     private volatile long lastNotificationUpdate;
+    private volatile int lastPublishedPercent;
 
     public ServerInstallWorker(@NonNull Context appContext, @NonNull WorkerParameters workerParams) {
         super(appContext, workerParams);
@@ -469,7 +469,6 @@ public final class ServerInstallWorker extends Worker {
             Request.Builder request = new Request.Builder()
                     .url(job.url)
                     .header("Accept-Encoding", "identity")
-                    .header("Cache-Control", "no-cache")
                     .get();
 
             if (existing > 0L) {
@@ -624,7 +623,7 @@ public final class ServerInstallWorker extends Worker {
             remainingDownload += Math.max(0L, job.expectedLength - existing);
         }
 
-        if (remainingDownload <= 0L || archiveBytes <= 0L) {
+        if (archiveBytes <= 0L) {
             return;
         }
 
@@ -842,6 +841,7 @@ public final class ServerInstallWorker extends Worker {
             int percent,
             boolean forceNotification) {
         int safePercent = Math.max(0, Math.min(100, percent));
+        lastPublishedPercent = safePercent;
 
         setProgressAsync(new Data.Builder()
                 .putString("state", state)
@@ -864,7 +864,7 @@ public final class ServerInstallWorker extends Worker {
     }
 
     private int readPublishedPercent() {
-        return getProgress().getInt("percent", 1);
+        return Math.max(1, lastPublishedPercent);
     }
 
     private ForegroundInfo buildForegroundInfo(
