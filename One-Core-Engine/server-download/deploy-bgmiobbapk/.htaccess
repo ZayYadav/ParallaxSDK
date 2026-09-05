@@ -1,0 +1,43 @@
+# OneCore BGMI static payload origin
+# Upload this file as:
+# /home/parallax/bgmiobbapk.parallaxserver.online/.htaccess
+
+<IfModule mod_autoindex.c>
+    Options -Indexes
+</IfModule>
+
+<IfModule mod_mime.c>
+    AddType application/vnd.android.package-archive .apk
+    AddType application/zip .zip
+</IfModule>
+
+# Split ZIP segments must be served byte-for-byte.
+<IfModule mod_setenvif.c>
+    SetEnvIfNoCase Request_URI "\.(apk|zip|z[0-9]{2})$" no-gzip=1
+</IfModule>
+
+<IfModule mod_headers.c>
+    # Large immutable/static payloads:
+    # browser = 1 day, shared/CDN = 30 days.
+    <FilesMatch "\.(apk|zip|z[0-9]{2})$">
+        Header always set Cache-Control "public, max-age=86400, s-maxage=2592000, stale-if-error=86400, no-transform"
+        Header always set Accept-Ranges "bytes"
+        Header always unset Set-Cookie
+    </FilesMatch>
+
+    # Manifest must update immediately when URLs/version change.
+    <Files "manifest.json">
+        Header always set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        Header always set Pragma "no-cache"
+        Header always set Expires "0"
+        Header always unset Set-Cookie
+    </Files>
+</IfModule>
+
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType application/vnd.android.package-archive "access plus 1 day"
+    ExpiresByType application/zip "access plus 1 day"
+</IfModule>
+
+FileETag MTime Size
