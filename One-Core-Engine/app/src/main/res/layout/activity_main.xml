@@ -429,5 +429,20 @@
                 android:textColor="@color/premium_text_muted"
                 android:textSize="11sp" />
         </LinearLayout>
+
+        <TextView
+            android:id="@+id/btn_clear_bgmi_data"
+            android:layout_width="match_parent"
+            android:layout_height="58dp"
+            android:layout_marginTop="18dp"
+            android:background="@drawable/premium_outline_button"
+            android:clickable="true"
+            android:focusable="true"
+            android:fontFamily="sans-serif-black"
+            android:gravity="center"
+            android:letterSpacing="0.075"
+            android:text="CLEAR BGMI DATA"
+            android:textColor="@color/premium_gold"
+            android:textSize="13sp" />
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>
