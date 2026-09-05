@@ -272,7 +272,7 @@ public class MainActivity extends Activity {
         root.setBackground(shell);
 
         TextView eyebrow = new TextView(this);
-        eyebrow.setText("ONECORE • GAME INSTALLER");
+        eyebrow.setText(ServerInstallStrings.INSTALLER_EYEBROW);
         eyebrow.setTextColor(theme.accent);
         eyebrow.setTextSize(9f);
         eyebrow.setLetterSpacing(0.13f);
@@ -301,7 +301,7 @@ public class MainActivity extends Activity {
         root.addView(subtitle, subtitleParams);
 
         TextView section = new TextView(this);
-        section.setText("SELECT INSTALL SOURCE");
+        section.setText(ServerInstallStrings.SELECT_INSTALL_SOURCE);
         section.setTextColor(ThemeManager.withAlpha(theme.text, 190));
         section.setTextSize(10f);
         section.setLetterSpacing(0.10f);
@@ -311,19 +311,19 @@ public class MainActivity extends Activity {
         root.addView(section, sectionParams);
 
         LinearLayout installedGame = makeModernInstallChoiceCard(
-                "DEVICE",
+                ServerInstallStrings.DEVICE_SOURCE_BADGE,
                 ServerInstallStrings.INSTALL_FROM_DEVICE,
                 ServerInstallStrings.INSTALL_FROM_DEVICE_SUBTITLE,
-                "Uses the BGMI files already present on this phone",
+                ServerInstallStrings.DEVICE_SOURCE_HINT,
                 theme,
                 false);
         root.addView(installedGame, matchWrapParams(11));
 
         LinearLayout oneCoreServer = makeModernInstallChoiceCard(
-                "ONECORE CDN",
+                ServerInstallStrings.SERVER_SOURCE_BADGE,
                 ServerInstallStrings.INSTALL_FROM_SERVER,
                 ServerInstallStrings.INSTALL_FROM_SERVER_SUBTITLE,
-                "Background download • resumable • notification progress",
+                ServerInstallStrings.SERVER_SOURCE_HINT,
                 theme,
                 true);
         root.addView(oneCoreServer, matchWrapParams(0));
@@ -518,7 +518,7 @@ public class MainActivity extends Activity {
         }
         if (ServerInstallWorker.isRunning(this)) {
             BoxApplication.get().showToastWithImage(
-                    "Finish or cancel the current BGMI download first.",
+                    ServerInstallStrings.CLEAR_DATA_DOWNLOAD_RUNNING,
                     TastyToast.WARNING);
             showServerDownloadDialog();
             return;
@@ -678,7 +678,7 @@ public class MainActivity extends Activity {
 
         if (btnClearBgmiData != null) {
             btnClearBgmiData.setEnabled(false);
-            btnClearBgmiData.setText("CLEARING BGMI DATA…");
+            btnClearBgmiData.setText(ServerInstallStrings.CLEAR_DATA_WORKING);
         }
 
         new Thread(() -> {
