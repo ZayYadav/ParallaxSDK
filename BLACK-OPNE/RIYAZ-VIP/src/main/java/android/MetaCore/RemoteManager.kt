@@ -320,10 +320,12 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
     }
 
     private fun isRetryable(throwable: Throwable): Boolean {
+        // Keep ordinary connectivity failures retryable so a short network hiccup does not
+        // invalidate a still-valid signed lease. TLS failures are deliberately excluded:
+        // certificate/hostname/protocol failures must remain fail-closed.
         return throwable is java.net.SocketTimeoutException
             || throwable is java.net.ConnectException
             || throwable is java.net.UnknownHostException
-            || throwable is javax.net.ssl.SSLException
     }
 
     override fun getActivatedSdk(): Boolean {
