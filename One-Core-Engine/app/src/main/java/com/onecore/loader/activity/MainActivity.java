@@ -101,6 +101,7 @@ public class MainActivity extends Activity {
     private boolean notificationPermissionRequestInFlight;
     private boolean accessClosed;
     private boolean revalidationInProgress;
+    private boolean activityForeground;
 
     public static MainActivity get() {
         return instance;
@@ -1086,6 +1087,11 @@ public class MainActivity extends Activity {
         countdownRunnable = new Runnable() {
             @Override
             public void run() {
+                if (!activityForeground || isFinishing()
+                        || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1
+                        && isDestroyed())) {
+                    return;
+                }
                 try {
                     long expiryMillis = licenseClient.expiresAtEpochSeconds() * 1000L;
                     long distance = licenseClient.remainingMillis();
@@ -1120,7 +1126,9 @@ public class MainActivity extends Activity {
                     FLog.warning("Unable to update subscription countdown");
                     renderLicenseUnavailable();
                 }
-                countdownHandler.postDelayed(this, 1000L);
+                if (activityForeground) {
+                    countdownHandler.postDelayed(this, 1000L);
+                }
             }
         };
         countdownHandler.post(countdownRunnable);
@@ -1262,6 +1270,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        activityForeground = true;
         if (licenseClient != null && licenseClient.hasActiveLicense()) {
             countDownStart();
             if (licenseClient.needsOnlineRevalidation(ONLINE_REVALIDATION_INTERVAL_MS)) {
@@ -1283,12 +1292,17 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onPause() {
+        activityForeground = false;
         serverStateHandler.removeCallbacks(serverStateRunnable);
+        if (countdownRunnable != null) {
+            countdownHandler.removeCallbacks(countdownRunnable);
+        }
         super.onPause();
     }
 
     @Override
     public void onDestroy() {
+        activityForeground = false;
         if (countdownRunnable != null) {
             countdownHandler.removeCallbacks(countdownRunnable);
         }
@@ -1308,7 +1322,8 @@ public class MainActivity extends Activity {
     }
 
     private void revalidateLicenseAsync() {
-        if (revalidationInProgress || accessClosed || licenseClient == null) {
+        if (revalidationInProgress || accessClosed || licenseClient == null
+                || !activityForeground) {
             return;
         }
         revalidationInProgress = true;
@@ -1317,7 +1332,11 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> {
                 revalidationInProgress = false;
                 if (!"OK".equals(result)) {
-                    closeExpiredAccess();
+                    if (activityForeground && !licenseClient.hasActiveLicense()) {
+                        closeExpiredAccess();
+                    } else {
+                        FLog.warning("License revalidation deferred; current session remains valid");
+                    }
                 }
             });
         }, "LicenseRevalidation").start();

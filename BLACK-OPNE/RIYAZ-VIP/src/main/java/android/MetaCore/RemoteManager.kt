@@ -32,8 +32,11 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
         val EMPTY_JAR = File(BEnvironment.getCacheDir(), "empty.apk")
 
         private const val MAX_RETRIES = 3
+        private const val MIN_RENEW_DELAY_SECONDS = 15L
+        private const val TRANSIENT_RENEW_RETRY_SECONDS = 30L
         private val exe: ExecutorService = Executors.newSingleThreadExecutor()
         private val renewalExecutor = Executors.newSingleThreadScheduledExecutor()
+        private val activationLock = Any()
         @Volatile private var renewalTask: ScheduledFuture<*>? = null
 
         @Volatile
@@ -66,19 +69,40 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
     }
 
     override fun activateSdk(userkey: String?) {
-        renewalTask?.cancel(false)
+        requestActivation(userkey, false)
+    }
+
+    private fun requestActivation(userkey: String?, renewal: Boolean) {
         val normalizedKey = userkey?.trim().orEmpty()
         if (normalizedKey.isEmpty()) {
-            lastActivationSucceeded = false
-            activationInProgress = false
-            nk.clearActivation("Activation key is required")
+            if (!renewal) {
+                lastActivationSucceeded = false
+                nk.clearActivation("Activation key is required")
+            }
             return
         }
 
-        activationInProgress = true
-        lastActivationSucceeded = false
+        synchronized(activationLock) {
+            if (activationInProgress) {
+                return
+            }
+            if (!renewal && lastActivationSucceeded) {
+                try {
+                    if (nk.getActivatedSdk()) {
+                        return
+                    }
+                } catch (_: Throwable) {
+                }
+            }
+            activationInProgress = true
+            if (!renewal) {
+                lastActivationSucceeded = false
+            }
+        }
 
         exe.execute {
+            var completedSuccessfully = false
+            var sawRetryableFailure = false
             try {
                 val context = BlackBoxCore.getContext()
                 val packageName = BlackBoxCore.getHostPkg().orEmpty()
@@ -97,18 +121,25 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
                             getAppName(context, packageName),
                             deviceId(),
                         )
-                        applySecureResponse(context, response, normalizedKey)
-                        lastActivationSucceeded = nk.getActivatedSdk()
-                        if (lastActivationSucceeded) {
+                        applySecureResponse(context, response, normalizedKey, renewal)
+                        completedSuccessfully = nk.getActivatedSdk()
+                        lastActivationSucceeded = completedSuccessfully
+                        if (completedSuccessfully) {
                             return@execute
                         }
                         lastFailure = nk.getServerMessage().ifBlank { "Secure activation failed" }
                         break
                     } catch (throwable: Throwable) {
                         lastFailure = throwable.message ?: "Secure activation failed"
-                        nk.clearActivation(lastFailure)
-                        lastActivationSucceeded = false
-                        if (attempt < MAX_RETRIES && isRetryable(throwable)) {
+                        val retryable = isRetryable(throwable)
+                        if (!retryable) {
+                            nk.clearActivation(lastFailure)
+                            lastActivationSucceeded = false
+                            break
+                        }
+
+                        sawRetryableFailure = true
+                        if (attempt < MAX_RETRIES) {
                             nk.Msg = "Secure connection retry ${attempt + 1}/$MAX_RETRIES"
                             try {
                                 Thread.sleep(1_000L shl attempt)
@@ -121,12 +152,31 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
                         }
                     }
                 }
-                if (!lastActivationSucceeded) {
+
+                if (!completedSuccessfully) {
+                    if (sawRetryableFailure) {
+                        val leaseStillValid = try {
+                            nk.getActivatedSdk()
+                        } catch (_: Throwable) {
+                            false
+                        }
+                        if (leaseStillValid) {
+                            lastActivationSucceeded = true
+                            nk.Msg = "Activation lease valid; renewal retry scheduled"
+                            scheduleTransientRetry(normalizedKey)
+                            return@execute
+                        }
+                    }
+
                     nk.Msg = lastFailure
-                    showNotificationSafe("SDK ACTIVATE FAILED", "SDK NOT ACTIVATED")
+                    if (!renewal) {
+                        showNotificationSafe("SDK ACTIVATE FAILED", "SDK NOT ACTIVATED")
+                    }
                 }
             } finally {
-                activationInProgress = false
+                synchronized(activationLock) {
+                    activationInProgress = false
+                }
             }
         }
     }
@@ -152,7 +202,12 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
         return activationInProgress
     }
 
-    private fun applySecureResponse(context: Context, data: JSONObject, licenseKey: String) {
+    private fun applySecureResponse(
+        context: Context,
+        data: JSONObject,
+        licenseKey: String,
+        isRenewal: Boolean,
+    ) {
         val serverMode = data.optString("server_mode", "offline").lowercase(Locale.ROOT)
         val message = data.optString("message", "Activation rejected")
         if (data.optString("status") != "success" || serverMode != "online") {
@@ -221,15 +276,13 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
             .apply()
 
         nk.setHidden("online")
-        nk.Msg = "SDK activated - YOUR SDK ACTIVATED"
-        renewalTask?.cancel(false)
-        val renewAfter = maxOf(60L, leaseExpiresAt - serverTime - 60L)
-        renewalTask = renewalExecutor.schedule({ activateSdk(licenseKey) }, renewAfter, TimeUnit.SECONDS)
+        nk.Msg = "Secure activation lease active"
+        scheduleRenewal(licenseKey, leaseExpiresAt, serverTime)
 
         isDaemon(data.optInt("feature1", 0) == 1)
         ishideRoot(data.optInt("feature2", 0) == 1)
 
-        if (data.has("server_notification")) {
+        if (!isRenewal && data.has("server_notification")) {
             val notification = data.optJSONObject("server_notification")
             if (notification?.optInt("enabled", 0) == 1) {
                 showServerNotification(
@@ -239,7 +292,31 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
                 )
             }
         }
-        showNotificationSafe("SDK ACTIVATED", "YOUR SDK ACTIVATED")
+    }
+
+    private fun scheduleRenewal(licenseKey: String, leaseExpiresAt: Long, serverTime: Long) {
+        val leaseSeconds = maxOf(1L, leaseExpiresAt - serverTime)
+        val renewAfter = if (leaseSeconds <= 120L) {
+            maxOf(MIN_RENEW_DELAY_SECONDS, leaseSeconds / 2L)
+        } else {
+            maxOf(MIN_RENEW_DELAY_SECONDS, leaseSeconds - 60L)
+        }
+
+        renewalTask?.cancel(false)
+        renewalTask = renewalExecutor.schedule(
+            { requestActivation(licenseKey, true) },
+            renewAfter,
+            TimeUnit.SECONDS,
+        )
+    }
+
+    private fun scheduleTransientRetry(licenseKey: String) {
+        renewalTask?.cancel(false)
+        renewalTask = renewalExecutor.schedule(
+            { requestActivation(licenseKey, true) },
+            TRANSIENT_RENEW_RETRY_SECONDS,
+            TimeUnit.SECONDS,
+        )
     }
 
     private fun isRetryable(throwable: Throwable): Boolean {
