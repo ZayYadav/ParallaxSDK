@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "package_name": "com.pubg.imobile",
+  "apk": {
+    "filename": "BGMI.apk",
+    "url": "https://cdn.yourdomain.com/bgmi/4.2/BGMI.apk"
+  },
+  "obb": {
+    "archive_name": "bgmi_obb.zip",
+    "output_name": "main.12345.com.pubg.imobile.obb",
+    "parts": [
+      {
+        "name": "bgmi_obb.zip.part00",
+        "url": "https://cdn.yourdomain.com/bgmi/4.2/bgmi_obb.zip.part00"
+      },
+      {
+        "name": "bgmi_obb.zip.part01",
+        "url": "https://cdn.yourdomain.com/bgmi/4.2/bgmi_obb.zip.part01"
+      },
+      {
+        "name": "bgmi_obb.zip.part02",
+        "url": "https://cdn.yourdomain.com/bgmi/4.2/bgmi_obb.zip.part02"
+      },
+      {
+        "name": "bgmi_obb.zip.part03",
+        "url": "https://cdn.yourdomain.com/bgmi/4.2/bgmi_obb.zip.part03"
+      }
+    ]
+  }
+}
