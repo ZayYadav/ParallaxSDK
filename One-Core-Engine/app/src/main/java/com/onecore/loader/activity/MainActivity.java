@@ -29,6 +29,7 @@ import com.onecore.loader.libhelper.ApkEnv;
 import com.onecore.loader.libhelper.DownloadZip;
 import com.onecore.loader.libhelper.FileCopyTask;
 import com.onecore.loader.security.HostedLicenseClient;
+import com.onecore.loader.server.ServerInstallManager;
 import com.onecore.loader.utils.Constants;
 import com.onecore.loader.utils.CrashHandler;
 import com.onecore.loader.utils.FLog;
@@ -58,6 +59,7 @@ public class MainActivity extends Activity {
     public String CURRENT_PACKAGE;
 
     private TextView installIndia;
+    private TextView installFromServer;
     private TextView btnStartGame;
     private RadioButton tvHideEsp;
 
@@ -66,6 +68,7 @@ public class MainActivity extends Activity {
     private final Handler countdownHandler = new Handler(Looper.getMainLooper());
     private Runnable countdownRunnable;
     private HostedLicenseClient licenseClient;
+    private ServerInstallManager serverInstallManager;
     private boolean accessClosed;
     private boolean revalidationInProgress;
 
@@ -103,7 +106,9 @@ public class MainActivity extends Activity {
         gameType = 5;
 
         installIndia = findViewById(R.id.installIndia);
+        installFromServer = findViewById(R.id.installFromServer);
         btnStartGame = findViewById(R.id.btn_start_game);
+        serverInstallManager = new ServerInstallManager(this);
         tvHideEsp = findViewById(R.id.tv_hide_esp);
 
         TextView deviceStatus = findViewById(R.id.tv_device_status);
@@ -114,9 +119,54 @@ public class MainActivity extends Activity {
 
         installIndia.setOnClickListener(view -> {
             if (ensureLicenseActive()) {
+                if (serverInstallManager != null && serverInstallManager.isBusy()) {
+                    BoxApplication.get().showToastWithImage(
+                            "Server installation is already running.", TastyToast.INFO);
+                    return;
+                }
                 handleInstallUninstall(BGMI_INDEX, installIndia);
             }
         });
+
+        if (installFromServer != null) {
+            installFromServer.setOnClickListener(view -> {
+                if (!ensureLicenseActive()) {
+                    return;
+                }
+                if (selectedGamePkg == null || selectedGamePkg.isEmpty()) {
+                    BoxApplication.get().showToastWithImage(
+                            "BGMI profile is unavailable in this build.", TastyToast.ERROR);
+                    return;
+                }
+                if (serverInstallManager == null || serverInstallManager.isBusy()) {
+                    BoxApplication.get().showToastWithImage(
+                            "Server installation is already running.", TastyToast.INFO);
+                    return;
+                }
+
+                installFromServer.setEnabled(false);
+                installFromServer.setAlpha(0.72f);
+                installFromServer.setText("SERVER INSTALL RUNNING");
+
+                serverInstallManager.start(selectedGamePkg, (success, message) -> {
+                    if (installFromServer != null) {
+                        installFromServer.setEnabled(true);
+                        installFromServer.setAlpha(1f);
+                        installFromServer.setText("INSTALL FROM SERVER");
+                    }
+
+                    if (success) {
+                        saveInstallationStatus(selectedGamePkg, true);
+                        updateButtonState(BGMI_INDEX, installIndia);
+                        BoxApplication.get().showToastWithImage(
+                                "BGMI installed from server.", TastyToast.SUCCESS);
+                    } else {
+                        BoxApplication.get().showToastWithImage(
+                                message, TastyToast.ERROR);
+                    }
+                });
+            });
+        }
 
         btnStartGame.setOnClickListener(v -> {
             if (!ensureLicenseActive()) {
