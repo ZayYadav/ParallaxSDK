@@ -276,7 +276,7 @@ class RemoteManager private constructor() : IRemoteManager.Stub() {
             .apply()
 
         nk.setHidden("online")
-        nk.Msg = "SDK activated - YOUR SDK ACTIVATED"
+        nk.Msg = "Secure activation lease active"
         scheduleRenewal(licenseKey, leaseExpiresAt, serverTime)
 
         isDaemon(data.optInt("feature1", 0) == 1)
