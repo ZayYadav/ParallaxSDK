@@ -207,12 +207,18 @@ public class BActivityThread extends IBActivityThread.Stub {
     }
 
     /**
-     * Keep ActivityThread.currentApplication() usable while BlackBox swaps the
-     * host process over to the guest Application.
+     * Android 16 ConfigurationController does not stop at
+     * ActivityThread.currentApplication(). During launch it also calls
+     * app.getApplicationContext().getResources(). ContextImpl#getApplicationContext()
+     * resolves through LoadedApk.mApplication, so all three references must agree:
      *
-     * Before the guest is created we preserve/restore the Loader Application as
-     * a temporary fallback. Once the guest exists, it becomes the authoritative
-     * framework initial Application.
+     *   ActivityThread.mInitialApplication
+     *   LoadedApk.mApplication
+     *   Application base ContextImpl.mPackageInfo
+     *
+     * Old virtualization code can leave the second reference null even though the
+     * Application object itself is already alive. That produces the framework NPE
+     * in updateLocaleListFromAppContext().
      */
     public boolean ensureFrameworkInitialApplication() {
         try {
@@ -221,7 +227,13 @@ public class BActivityThread extends IBActivityThread.Stub {
                 return false;
             }
 
+            Application frameworkApplication =
+                    BRActivityThread.get(activityThread).mInitialApplication();
             Application desiredApplication = this.mInitialApplication;
+
+            if (desiredApplication == null) {
+                desiredApplication = frameworkApplication;
+            }
             if (desiredApplication == null) {
                 Context hostContext = BlackBoxCore.getContext();
                 Context hostApplicationContext =
@@ -230,23 +242,69 @@ public class BActivityThread extends IBActivityThread.Stub {
                     desiredApplication = (Application) hostApplicationContext;
                 }
             }
-
-            Application frameworkApplication =
-                    BRActivityThread.get(activityThread).mInitialApplication();
-
-            if (desiredApplication != null
-                    && (frameworkApplication == null
-                    || (this.mInitialApplication != null
-                    && frameworkApplication != this.mInitialApplication))) {
-                BRActivityThread.get(activityThread)
-                        ._set_mInitialApplication(desiredApplication);
-                frameworkApplication =
-                        BRActivityThread.get(activityThread).mInitialApplication();
+            if (desiredApplication == null) {
+                return false;
             }
 
-            return frameworkApplication != null;
+            // Repair the LoadedApk used by the virtual bind data.
+            if (mBoundApplication != null) {
+                publishApplicationToLoadedApk(mBoundApplication.info, desiredApplication);
+            }
+
+            // Repair the LoadedApk actually backing Application.getBaseContext().
+            // ContextImpl#getApplicationContext() returns that LoadedApk's
+            // mApplication, and Android 16 dereferences it during launch config.
+            Context baseContext = desiredApplication.getBaseContext();
+            if (baseContext != null) {
+                try {
+                    Object baseLoadedApk = BRContextImpl.get(baseContext).mPackageInfo();
+                    publishApplicationToLoadedApk(baseLoadedApk, desiredApplication);
+                } catch (Throwable error) {
+                    Log.w(TAG, "Unable to repair Application base LoadedApk", error);
+                }
+            }
+
+            if (frameworkApplication != desiredApplication) {
+                BRActivityThread.get(activityThread)
+                        ._set_mInitialApplication(desiredApplication);
+            }
+
+            return isApplicationContextReady(desiredApplication);
         } catch (Throwable error) {
-            Log.e(TAG, "Unable to ensure framework initial Application", error);
+            Log.e(TAG, "Unable to ensure framework Application context", error);
+            return false;
+        }
+    }
+
+    private void publishApplicationToLoadedApk(Object loadedApk, Application application) {
+        if (loadedApk == null || application == null) {
+            return;
+        }
+        try {
+            Application current = BRLoadedApk.get(loadedApk).mApplication();
+            if (current != application) {
+                // Use the existing hidden-API reflector instead of depending on
+                // a generated setter name. Reflection is already unsealed by
+                // BlackBoxCore during attachBaseContext().
+                Reflector.with(loadedApk).field("mApplication").set(application);
+            }
+        } catch (Throwable error) {
+            Log.w(TAG, "Unable to publish Application into LoadedApk", error);
+        }
+    }
+
+    private boolean isApplicationContextReady(Application application) {
+        if (application == null) {
+            return false;
+        }
+        try {
+            if (application.getResources() == null) {
+                return false;
+            }
+            Context appContext = application.getApplicationContext();
+            return appContext != null && appContext.getResources() != null;
+        } catch (Throwable error) {
+            Log.w(TAG, "Application context/resources are not launch-ready", error);
             return false;
         }
     }
@@ -442,15 +500,17 @@ public class BActivityThread extends IBActivityThread.Stub {
                 throw new IllegalStateException("LoadedApk.makeApplication returned null for " + packageName);
             }
 
-            // Publish the guest Application immediately. Do this before context
-            // repair/provider work because Android 16 may run configuration
-            // bookkeeping during those calls and dereference currentApplication().
+            // Publish the guest Application immediately and repair LoadedApk's
+            // back-reference before any context/configuration work. On Android 16
+            // Application.getApplicationContext() is resolved through
+            // LoadedApk.mApplication during launch-time locale handling.
             mInitialApplication = application;
+            publishApplicationToLoadedApk(loadedApk, application);
             BRActivityThread.get(BlackBoxCore.mainThread())
                     ._set_mInitialApplication(mInitialApplication);
             if (!ensureFrameworkInitialApplication()) {
                 throw new IllegalStateException(
-                        "Unable to publish guest Application to ActivityThread for " + packageName);
+                        "Unable to publish launch-ready guest Application context for " + packageName);
             }
 
             ContextCompat.fix(application);
