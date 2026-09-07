@@ -87,7 +87,7 @@ jobs:
           grep -F -- 'ConnectionSpec.MODERN_TLS' "$CLIENT" >/dev/null
           grep -F -- '.followRedirects(false)' "$CLIENT" >/dev/null
           grep -F -- '.followSslRedirects(false)' "$CLIENT" >/dev/null
-          grep -F -- 'KESHAVXOWNER_API_PUBLIC_KEY_B64' "$BUILD" >/dev/null
+          grep -F -- 'TeamDark_API_PUBLIC_KEY_B64' "$BUILD" >/dev/null
 
       - name: Enforce immutable DPT trust chain
         shell: bash
