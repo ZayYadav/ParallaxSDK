@@ -1,0 +1,81 @@
+name: Build TeamDark SDK AAR
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - TeamDarkSDK
+    paths:
+      - 'TeamDarkSDK/BLACK-OPNE/**'
+      - '.github/workflows/build-teamdark-sdk-aar.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-aar:
+    name: Build TeamDarkCore release AAR
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SDK_PROJECT_DIR: TeamDarkSDK/BLACK-OPNE
+      NDK_VERSION: 27.2.12479018
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager --install \
+            'platforms;android-36' \
+            'build-tools;36.0.0' \
+            "ndk;${NDK_VERSION}"
+
+      - name: Configure SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > "${SDK_PROJECT_DIR}/local.properties"
+          chmod +x "${SDK_PROJECT_DIR}/gradlew"
+
+      - name: Build TeamDarkCore release AAR
+        working-directory: ${{ env.SDK_PROJECT_DIR }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew :TeamDarkCore:assembleRelease --no-daemon --stacktrace
+
+      - name: Verify TeamDark AAR and native library name
+        shell: bash
+        run: |
+          set -euo pipefail
+          AAR="${SDK_PROJECT_DIR}/RIYAZ-VIP/build/outputs/aar/TeamDarkCore-release.aar"
+          test -s "$AAR"
+          unzip -tq "$AAR"
+          unzip -Z1 "$AAR" | grep -q 'jni/arm64-v8a/libTeamDarkCore.so'
+          if unzip -Z1 "$AAR" | grep -q 'libKESHAVXOWNERCore\.so'; then
+            echo 'Old SDK library name is still packaged.' >&2
+            exit 1
+          fi
+          sha256sum "$AAR"
+
+      - name: Upload TeamDark AAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: TeamDarkCore-release-aar
+          path: ${{ env.SDK_PROJECT_DIR }}/RIYAZ-VIP/build/outputs/aar/TeamDarkCore-release.aar
+          if-no-files-found: error
+          retention-days: 30
