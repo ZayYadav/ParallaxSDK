@@ -28,10 +28,10 @@ jobs:
 
     env:
       LOADER_PROJECT_DIR: One-Core-Engine
-      LOADER_AAR_PATH: One-Core-Engine/app/libs/KESHAVXOWNERCore-release.aar
+      LOADER_AAR_PATH: One-Core-Engine/app/libs/TeamDarkCore-release.aar
       NDK_VERSION: 27.2.12479018
       BUILD_LOG_DIR: loader-only-build-logs
-      KESHAVXOWNER_API_PUBLIC_KEY_B64: ${{ vars.KESHAVXOWNER_API_PUBLIC_KEY_B64 }}
+      KESHAVXOWNER_API_PUBLIC_KEY_B64: ${{ vars.KESHAVXOWNER_API_PUBLIC_KEY_B64 }}\n      TeamDark_API_PUBLIC_KEY_B64: ${{ vars.KESHAVXOWNER_API_PUBLIC_KEY_B64 }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -69,7 +69,7 @@ jobs:
           chmod +x "${LOADER_PROJECT_DIR}/gradlew"
           mkdir -p "${BUILD_LOG_DIR}"
 
-      - name: Validate bundled KESHAVXOWNERCore AAR
+      - name: Validate bundled TeamDarkCore AAR
         shell: bash
         run: |
           set -euo pipefail
