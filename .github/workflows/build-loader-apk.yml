@@ -1,5 +1,5 @@
 name: Build Loader APK
-# KESHAVXOWNER branch CI
+# TeamDarkSDK branch CI
 
 on:
   workflow_dispatch:
@@ -138,13 +138,13 @@ jobs:
 
     env:
       SDK_PROJECT_DIR: BLACK-OPNE
-      SDK_MODULE: KESHAVXOWNERCore
+      SDK_MODULE: TeamDarkCore
       SDK_MODULE_DIR: RIYAZ-VIP
       LOADER_PROJECT_DIR: One-Core-Engine
-      LOADER_AAR_PATH: One-Core-Engine/app/libs/KESHAVXOWNERCore-release.aar
+      LOADER_AAR_PATH: One-Core-Engine/app/libs/TeamDarkCore-release.aar
       NDK_VERSION: 27.2.12479018
       BUILD_LOG_DIR: build-logs
-      KESHAVXOWNER_API_PUBLIC_KEY_B64: ${{ vars.KESHAVXOWNER_API_PUBLIC_KEY_B64 }}
+      KESHAVXOWNER_API_PUBLIC_KEY_B64: ${{ vars.KESHAVXOWNER_API_PUBLIC_KEY_B64 }}\n      TeamDark_API_PUBLIC_KEY_B64: ${{ vars.KESHAVXOWNER_API_PUBLIC_KEY_B64 }}
       KESHAVXOWNER_TLS_PINS: ${{ vars.KESHAVXOWNER_TLS_PINS }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -246,7 +246,7 @@ jobs:
           set -o pipefail
           ./gradlew :${{ env.SDK_MODULE }}:assembleRelease --stacktrace 2>&1 | tee "../${BUILD_LOG_DIR}/sdk-release-aar.log"
 
-      - name: Replace loader KESHAVXOWNERCore AAR with freshly built SDK AAR
+      - name: Replace loader TeamDarkCore AAR with freshly built SDK AAR
         run: |
           set -euo pipefail
           SDK_AAR="${SDK_PROJECT_DIR}/${SDK_MODULE_DIR}/build/outputs/aar/${SDK_MODULE}-release.aar"
