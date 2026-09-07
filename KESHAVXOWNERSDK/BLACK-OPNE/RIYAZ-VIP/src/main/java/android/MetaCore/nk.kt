@@ -17,6 +17,21 @@ class nk {
         @Volatile
         private var is_False: Boolean = false
 
+        // Keep high-frequency framework status queries cheap. The cache is deliberately
+        // short and never outlives the verified lease, so it cannot extend activation.
+        @Volatile
+        private var cachedActivationStatus: Boolean = false
+
+        @Volatile
+        private var cachedActivationUntilElapsed: Long = 0L
+
+        @Volatile
+        private var lastBlockedPopupElapsed: Long = 0L
+
+        private const val ACTIVATION_FAST_CACHE_MS = 2_000L
+        private const val ACTIVATION_FAILURE_CACHE_MS = 250L
+        private const val BLOCKED_POPUP_INTERVAL_MS = 60_000L
+
         @JvmField
         @Volatile
         var Msg: String = "Ready"
@@ -24,33 +39,121 @@ class nk {
         const val PREFERENCE_NAME: String = "license_cache"
         @JvmStatic
         fun getActivatedSdk(): Boolean {
-            val context = BlackBoxCore.getContext() ?: return false
-            val sp = context.getSharedPreferences(PREFERENCE_NAME, Context.MODE_PRIVATE)
-            if (!GAH() || !sp.getBoolean("activated", false)) {
-                Msg = "SDK not activated"
-                return false
+            val firstElapsed = android.os.SystemClock.elapsedRealtime()
+            if (firstElapsed >= 0L && firstElapsed < cachedActivationUntilElapsed) {
+                return cachedActivationStatus
             }
-            val leaseExpiry = sp.getLong("lease_expires_at", 0L)
-            val verifiedServerTime = sp.getLong("verified_server_time", 0L)
-            val verifiedElapsed = sp.getLong("verified_elapsed_realtime", 0L)
-            val elapsedNow = android.os.SystemClock.elapsedRealtime()
-            if (leaseExpiry <= 0L || verifiedServerTime <= 0L || verifiedElapsed <= 0L || elapsedNow < verifiedElapsed) {
-                clearActivation("Activation lease is invalid")
-                return false
+
+            // Status can be queried repeatedly by the virtual package/framework layer.
+            // Serialize only the slow refresh; callers inside the short cache window
+            // return immediately without SharedPreferences/native work.
+            return synchronized(nk::class.java) {
+                val elapsedNow = android.os.SystemClock.elapsedRealtime()
+                if (elapsedNow >= 0L && elapsedNow < cachedActivationUntilElapsed) {
+                    return@synchronized cachedActivationStatus
+                }
+
+                val context = BlackBoxCore.getContext()
+                    ?: return@synchronized cacheActivation(
+                        false,
+                        elapsedNow,
+                        ACTIVATION_FAILURE_CACHE_MS,
+                    )
+                val sp = context.getSharedPreferences(PREFERENCE_NAME, Context.MODE_PRIVATE)
+                if (!GAH() || !sp.getBoolean("activated", false)) {
+                    Msg = "SDK not activated"
+                    return@synchronized cacheActivation(
+                        false,
+                        elapsedNow,
+                        ACTIVATION_FAILURE_CACHE_MS,
+                    )
+                }
+
+                val leaseExpiry = sp.getLong("lease_expires_at", 0L)
+                val verifiedServerTime = sp.getLong("verified_server_time", 0L)
+                val verifiedElapsed = sp.getLong("verified_elapsed_realtime", 0L)
+                if (leaseExpiry <= 0L
+                    || verifiedServerTime <= 0L
+                    || verifiedElapsed <= 0L
+                    || elapsedNow < verifiedElapsed) {
+                    clearActivation("Activation lease is invalid")
+                    return@synchronized cacheActivation(
+                        false,
+                        elapsedNow,
+                        ACTIVATION_FAILURE_CACHE_MS,
+                    )
+                }
+
+                val monotonicServerNow =
+                    verifiedServerTime + (elapsedNow - verifiedElapsed) / 1000L
+                val effectiveNow =
+                    maxOf(System.currentTimeMillis() / 1000L, monotonicServerNow)
+                if (effectiveNow >= leaseExpiry || !RNative.isSdkSessionValid(effectiveNow)) {
+                    clearActivation("Activation lease expired; reconnect to the panel")
+                    return@synchronized cacheActivation(
+                        false,
+                        elapsedNow,
+                        ACTIVATION_FAILURE_CACHE_MS,
+                    )
+                }
+
+                val remainingSeconds = (leaseExpiry - effectiveNow).coerceAtLeast(0L)
+                val remainingMs = if (remainingSeconds > Long.MAX_VALUE / 1000L) {
+                    Long.MAX_VALUE
+                } else {
+                    remainingSeconds * 1000L
+                }
+                val cacheMs = minOf(ACTIVATION_FAST_CACHE_MS, remainingMs)
+
+                Msg = "Secure activation lease valid"
+                cacheActivation(true, elapsedNow, cacheMs)
             }
-            val monotonicServerNow = verifiedServerTime + (elapsedNow - verifiedElapsed) / 1000L
-            val effectiveNow = maxOf(System.currentTimeMillis() / 1000L, monotonicServerNow)
-            if (effectiveNow >= leaseExpiry || !RNative.isSdkSessionValid(effectiveNow)) {
-                clearActivation("Activation lease expired; reconnect to the panel")
-                return false
+        }
+
+        private fun cacheActivation(
+            value: Boolean,
+            elapsedNow: Long,
+            durationMs: Long,
+        ): Boolean {
+            cachedActivationStatus = value
+            cachedActivationUntilElapsed =
+                elapsedNow + durationMs.coerceAtLeast(0L)
+            return value
+        }
+
+        private fun invalidateActivationCache() {
+            cachedActivationStatus = false
+            cachedActivationUntilElapsed = 0L
+        }
+
+        private fun showBlockedPopupThrottled() {
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (lastBlockedPopupElapsed != 0L
+                && now >= lastBlockedPopupElapsed
+                && now - lastBlockedPopupElapsed < BLOCKED_POPUP_INTERVAL_MS) {
+                return
             }
-            Msg = "Secure activation lease valid"
-            return true
+
+            synchronized(nk::class.java) {
+                val again = android.os.SystemClock.elapsedRealtime()
+                if (lastBlockedPopupElapsed != 0L
+                    && again >= lastBlockedPopupElapsed
+                    && again - lastBlockedPopupElapsed < BLOCKED_POPUP_INTERVAL_MS) {
+                    return@synchronized
+                }
+                lastBlockedPopupElapsed = again
+            }
+
+            try {
+                AdvancedPopupHelper.showAuto()
+            } catch (_: Exception) {
+            }
         }
 
         @JvmStatic
         fun clearActivation(reason: String = "SDK not activated") {
             is_False = false
+            invalidateActivationCache()
             try {
                 RNative.clearSdkSession()
             } catch (_: Throwable) {
@@ -91,6 +194,7 @@ class nk {
             try {
                 val value = status.equals("online", ignoreCase = true)
                 is_False = value
+                invalidateActivationCache()
                 // ✅ SharedPreferences mein bhi save karo
                 val ctx = BlackBoxCore.getContext()
                 if (ctx != null) {
@@ -138,17 +242,13 @@ class nk {
             // 1. Server status check
             if (!GAH()) {
                 Msg = "❌ Server Offline - Functions Blocked"
-                try {
-                    AdvancedPopupHelper.showAuto()
-                } catch (_: Exception) {}
+                showBlockedPopupThrottled()
                 return false
             }
             // 2. Activation + Expiry check
             val isActivated = getActivatedSdk()
             if (!isActivated) {
-                try {
-                    AdvancedPopupHelper.showAuto()
-                } catch (_: Exception) {}
+                showBlockedPopupThrottled()
                 return false
             }
             // ✅ All checks passed
