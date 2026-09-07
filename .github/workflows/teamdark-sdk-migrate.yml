@@ -1,0 +1,116 @@
+name: TeamDark SDK migration
+
+on:
+  push:
+    branches:
+      - TeamDarkSDK
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout TeamDarkSDK
+        uses: actions/checkout@v4
+        with:
+          ref: TeamDarkSDK
+          fetch-depth: 0
+
+      - name: Rebrand SDK without touching panel or libbgmi.so
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          PANEL_BEFORE="$(git rev-parse HEAD:panels 2>/dev/null || true)"
+          BACKEND_BEFORE="$(git rev-parse HEAD:backend-api 2>/dev/null || true)"
+          LIBBGMI_BEFORE="$(git ls-files '*libbgmi.so' | while IFS= read -r f; do printf '%s  %s\n' "$(git hash-object "$f")" "$f"; done)"
+
+          if [ -d KESHAVXOWNERSDK ]; then
+            git mv KESHAVXOWNERSDK TeamDarkSDK
+          fi
+
+          python3 <<'PY'
+          from pathlib import Path
+          import subprocess
+
+          replacements = [
+              ("KESHAVXOWNERSDK", "TeamDarkSDK"),
+              ("KESHAVXOWNERCore", "TeamDarkCore"),
+              ("KESHAVXOWNER", "TeamDark"),
+              ("KeshavXOwner", "TeamDark"),
+              ("keshavxownercore", "teamdarkcore"),
+              ("keshavxownersdk", "teamdarksdk"),
+              ("keshavxowner", "teamdark"),
+          ]
+
+          skip_prefixes = ("panels/", "backend-api/")
+          text_ext = {
+              ".yml", ".yaml", ".gradle", ".kts", ".properties", ".xml",
+              ".java", ".kt", ".cpp", ".cc", ".c", ".h", ".hpp", ".mk",
+              ".md", ".html", ".json", ".pro", ".rules", ".txt", ".aidl"
+          }
+
+          tracked = subprocess.check_output(["git", "ls-files"], text=True).splitlines()
+
+          # Rename only branded paths. Keep all unrelated files and libbgmi.so intact.
+          for old in sorted(tracked, key=lambda s: s.count("/"), reverse=True):
+              if old.startswith(skip_prefixes) or old.endswith("libbgmi.so"):
+                  continue
+              new = old
+              for src, dst in replacements:
+                  new = new.replace(src, dst)
+              if new != old:
+                  Path(new).parent.mkdir(parents=True, exist_ok=True)
+                  subprocess.run(["git", "mv", old, new], check=True)
+
+          tracked = subprocess.check_output(["git", "ls-files"], text=True).splitlines()
+          for name in tracked:
+              if name.startswith(skip_prefixes) or name.endswith("libbgmi.so"):
+                  continue
+              p = Path(name)
+              if p.suffix.lower() not in text_ext:
+                  continue
+              # Historical raw logs are not SDK branding and can be very large.
+              if p.suffix.lower() == ".txt" and not (
+                  name.startswith(".github/")
+                  or "/BLACK-OPNE/" in f"/{name}"
+                  or name.startswith("BLACK-OPNE/")
+                  or name.startswith("TeamDarkSDK/")
+              ):
+                  continue
+              try:
+                  data = p.read_text(encoding="utf-8")
+              except (UnicodeDecodeError, OSError):
+                  continue
+              updated = data
+              for src, dst in replacements:
+                  updated = updated.replace(src, dst)
+              if updated != data:
+                  p.write_text(updated, encoding="utf-8")
+          PY
+
+          # Keep the permanent build workflow, but remove this one-shot migration workflow.
+          git rm -f .github/workflows/teamdark-sdk-migrate.yml
+
+          # Hard safety checks requested by owner.
+          test "$(git rev-parse HEAD:panels 2>/dev/null || true)" = "$PANEL_BEFORE"
+          test "$(git rev-parse HEAD:backend-api 2>/dev/null || true)" = "$BACKEND_BEFORE"
+          LIBBGMI_AFTER="$(git ls-files '*libbgmi.so' | while IFS= read -r f; do printf '%s  %s\n' "$(git hash-object "$f")" "$f"; done)"
+          test "$LIBBGMI_AFTER" = "$LIBBGMI_BEFORE"
+
+          if git grep -n -i 'keshavxowner' --               '.github/**' 'BLACK-OPNE/**' 'TeamDarkSDK/**'               ':!panels/**' ':!backend-api/**'; then
+            echo "Old KESHAVXOWNER branding remains in active SDK/build files."
+            exit 1
+          fi
+
+          git config user.name "TeamDark Branch Bot"
+          git config user.email "106445997+ZayYadav@users.noreply.github.com"
+          git add -A
+
+          if ! git diff --cached --quiet; then
+            git commit -m "Rebrand KESHAVXOWNER SDK as TeamDark"
+            git push origin HEAD:TeamDarkSDK
+          fi
