@@ -19,7 +19,7 @@ jobs:
           ref: TeamDarkSDK
           fetch-depth: 0
 
-      - name: Rebrand SDK without touching panel or libbgmi.so
+      - name: Rebrand SDK source without touching panel, root workflows, or libbgmi.so
         shell: bash
         run: |
           set -euo pipefail
@@ -46,7 +46,8 @@ jobs:
               ("keshavxowner", "teamdark"),
           ]
 
-          skip_prefixes = ("panels/", "backend-api/")
+          # Root workflow files are updated separately through the GitHub connector.
+          skip_prefixes = (".github/", "panels/", "backend-api/")
           text_ext = {
               ".yml", ".yaml", ".gradle", ".kts", ".properties", ".xml",
               ".java", ".kt", ".cpp", ".cc", ".c", ".h", ".hpp", ".mk",
@@ -54,8 +55,6 @@ jobs:
           }
 
           tracked = subprocess.check_output(["git", "ls-files"], text=True).splitlines()
-
-          # Rename only branded paths. Keep all unrelated files and libbgmi.so intact.
           for old in sorted(tracked, key=lambda s: s.count("/"), reverse=True):
               if old.startswith(skip_prefixes) or old.endswith("libbgmi.so"):
                   continue
@@ -73,10 +72,8 @@ jobs:
               p = Path(name)
               if p.suffix.lower() not in text_ext:
                   continue
-              # Historical raw logs are not SDK branding and can be very large.
               if p.suffix.lower() == ".txt" and not (
-                  name.startswith(".github/")
-                  or "/BLACK-OPNE/" in f"/{name}"
+                  "/BLACK-OPNE/" in f"/{name}"
                   or name.startswith("BLACK-OPNE/")
                   or name.startswith("TeamDarkSDK/")
               ):
@@ -92,17 +89,13 @@ jobs:
                   p.write_text(updated, encoding="utf-8")
           PY
 
-          # Keep the permanent build workflow, but remove this one-shot migration workflow.
-          git rm -f .github/workflows/teamdark-sdk-migrate.yml
-
-          # Hard safety checks requested by owner.
           test "$(git rev-parse HEAD:panels 2>/dev/null || true)" = "$PANEL_BEFORE"
           test "$(git rev-parse HEAD:backend-api 2>/dev/null || true)" = "$BACKEND_BEFORE"
           LIBBGMI_AFTER="$(git ls-files '*libbgmi.so' | while IFS= read -r f; do printf '%s  %s\n' "$(git hash-object "$f")" "$f"; done)"
           test "$LIBBGMI_AFTER" = "$LIBBGMI_BEFORE"
 
-          if git grep -n -i 'keshavxowner' --               '.github/**' 'BLACK-OPNE/**' 'TeamDarkSDK/**'               ':!panels/**' ':!backend-api/**'; then
-            echo "Old KESHAVXOWNER branding remains in active SDK/build files."
+          if git grep -n -i 'keshavxowner' -- 'BLACK-OPNE/**' 'TeamDarkSDK/**' ':!TeamDarkSDK/panels/**' ':!TeamDarkSDK/backend-api/**'; then
+            echo "Old KESHAVXOWNER branding remains in active SDK source."
             exit 1
           fi
 
@@ -110,7 +103,13 @@ jobs:
           git config user.email "106445997+ZayYadav@users.noreply.github.com"
           git add -A
 
+          # The root .github directory must remain untouched in this Actions push.
+          if git diff --cached --name-only | grep -q '^\.github/'; then
+            echo "Root workflow mutation detected; aborting."
+            exit 1
+          fi
+
           if ! git diff --cached --quiet; then
-            git commit -m "Rebrand KESHAVXOWNER SDK as TeamDark"
+            git commit -m "Rebrand KESHAVXOWNER SDK source as TeamDark"
             git push origin HEAD:TeamDarkSDK
           fi
