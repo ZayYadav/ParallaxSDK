@@ -10,8 +10,8 @@ plugins {
 
 apply from: '../signing.gradle'
 
-def keshavxownerApiPublicKey = providers.gradleProperty('keshavxownerApiPublicKey')
-        .orElse(System.getenv('KESHAVXOWNER_API_PUBLIC_KEY_B64') ?: '')
+def teamdarkApiPublicKey = providers.gradleProperty('teamdarkApiPublicKey')
+        .orElse(System.getenv('TeamDark_API_PUBLIC_KEY_B64') ?: '')
         .get()
 
 def oneCoreAllowedSigningSha256 = providers.gradleProperty('onecoreAllowedSigningSha256')
@@ -27,12 +27,12 @@ def releaseTaskRequested = gradle.startParameter.taskNames.any {
 if (releaseTaskRequested) {
     byte[] publicKeyDer
     try {
-        publicKeyDer = Base64.decoder.decode(keshavxownerApiPublicKey)
+        publicKeyDer = Base64.decoder.decode(teamdarkApiPublicKey)
     } catch (IllegalArgumentException error) {
-        throw new GradleException('KESHAVXOWNER_API_PUBLIC_KEY_B64 is invalid for release builds', error)
+        throw new GradleException('TeamDark_API_PUBLIC_KEY_B64 is invalid for release builds', error)
     }
     if (publicKeyDer.length < 256 || publicKeyDer.length > 1024) {
-        throw new GradleException('KESHAVXOWNER_API_PUBLIC_KEY_B64 has an invalid DER size')
+        throw new GradleException('TeamDark_API_PUBLIC_KEY_B64 has an invalid DER size')
     }
 }
 
@@ -139,7 +139,7 @@ lint {
         // Keep default resources plus the only explicitly supported translation.
         // This removes unused language packs contributed by dependencies.
         resourceConfigurations += ['en']
-        buildConfigField "String", "KESHAVXOWNER_API_PUBLIC_KEY_B64", javaString(keshavxownerApiPublicKey)
+        buildConfigField "String", "TeamDark_API_PUBLIC_KEY_B64", javaString(teamdarkApiPublicKey)
 
         ndk {
             abiFilters "arm64-v8a"

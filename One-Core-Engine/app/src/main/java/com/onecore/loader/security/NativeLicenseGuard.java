@@ -19,7 +19,7 @@ final class NativeLicenseGuard {
     static {
         boolean loaded;
         try {
-            System.loadLibrary("KESHAVXOWNERLoader");
+            System.loadLibrary("TeamDarkLoader");
             loaded = true;
         } catch (Throwable ignored) {
             loaded = false;

@@ -1,4 +1,0 @@
-include ':KESHAVXOWNERCore'
-project(':KESHAVXOWNERCore').projectDir = file('RIYAZ-VIP')
-
-rootProject.name = "KESHAVXOWNER SDK"

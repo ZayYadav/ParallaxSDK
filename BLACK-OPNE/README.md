@@ -1,6 +1,6 @@
-# KESHAVXOWNERCore Android SDK
+# TeamDarkCore Android SDK
 
-KESHAVXOWNERCore is the reusable Android library consumed by the KESHAVXOWNER Loader application.
+TeamDarkCore is the reusable Android library consumed by the TeamDark Loader application.
 The project is configured for the current Android toolchain while retaining
 runtime support back to Android 7.0 (API 24).
 
@@ -23,7 +23,7 @@ The native memory alignment logic uses the runtime page size instead of assuming
 
 ## Device social authentication
 
-KESHAVXOWNERCore routes supported authentication surfaces to the authoritative app
+TeamDarkCore routes supported authentication surfaces to the authoritative app
 or browser installed on the phone. Existing device sessions can therefore be
 offered by the provider without copying cookies, passwords, account-manager data,
 or access tokens into the virtual app.
@@ -43,7 +43,7 @@ external activities, PendingIntents, WebViews, and callback packages are rejecte
 
 Authentication depends on provider policy and the client application's own
 developer-console configuration. Repackaging or cloning changes the effective
-Android package/signing identity; KESHAVXOWNERCore does not forge signatures, defeat
+Android package/signing identity; TeamDarkCore does not forge signatures, defeat
 Play Integrity, or extract sessions from another app.
 
 ## Build
@@ -52,28 +52,28 @@ Install JDK 17, Android SDK Platform 36, Build Tools 36.0.0, and NDK
 27.2.12479018, then run:
 
 ```bash
-./gradlew :KESHAVXOWNERCore:assembleRelease
+./gradlew :TeamDarkCore:assembleRelease
 ```
 
 The release AAR is written to
-`RIYAZ-VIP/build/outputs/aar/KESHAVXOWNERCore-release.aar`.
+`RIYAZ-VIP/build/outputs/aar/TeamDarkCore-release.aar`.
 
 For encrypted storage or client delivery, generate a fresh 32-byte key per
 client, Base64-encode it, keep it outside Git, and run:
 
 ```bash
-export KESHAVXOWNER_AAR_ENCRYPTION_KEY="<base64-32-byte-client-key>"
-./gradlew :KESHAVXOWNERCore:encryptReleaseAar
+export TeamDark_AAR_ENCRYPTION_KEY="<base64-32-byte-client-key>"
+./gradlew :TeamDarkCore:encryptReleaseAar
 ```
 
 The authenticated AES-256-GCM envelope is written to
-`RIYAZ-VIP/build/outputs/encrypted-aar/KESHAVXOWNERCore-v3-release.aar.pxa`.
+`RIYAZ-VIP/build/outputs/encrypted-aar/TeamDarkCore-v3-release.aar.pxa`.
 Before Gradle can consume it, the authorized client must decrypt it locally:
 
 ```bash
-export KESHAVXOWNER_AAR_ENCRYPTION_KEY="<same-client-key>"
-./gradlew :KESHAVXOWNERCore:decryptReleaseAar \
-  -PkeshavxownerEncryptedAar=/secure/path/KESHAVXOWNERCore-v3-release.aar.pxa
+export TeamDark_AAR_ENCRYPTION_KEY="<same-client-key>"
+./gradlew :TeamDarkCore:decryptReleaseAar \
+  -PteamdarkEncryptedAar=/secure/path/TeamDarkCore-v3-release.aar.pxa
 ```
 
 Never reuse the panel encryption/signing private keys as an AAR delivery key.

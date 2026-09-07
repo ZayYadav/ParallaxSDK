@@ -45,7 +45,7 @@ public class DownloadZip {
     private static final int CONNECT_TIMEOUT_MILLIS = 15_000;
     private static final int READ_TIMEOUT_MILLIS = 30_000;
     private static final Set<String> ALLOWED_ARTIFACTS = new HashSet<>(Arrays.asList(
-            "KESHAVXOWNER.so",
+            "TeamDark.so",
             "libpubgm.so",
             "libkorea.so"));
 
