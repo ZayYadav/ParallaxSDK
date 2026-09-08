@@ -605,6 +605,7 @@ header {
     .device-meta { flex-direction:column; gap:5px; }
 }
 </style>
+<link rel="stylesheet" href="ui_v2.css?v=20260908">
 </head>
 <body>
 
