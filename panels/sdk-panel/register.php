@@ -193,6 +193,7 @@ html, body { height:100%; font-family:'Montserrat', -apple-system, BlinkMacSyste
 /* Watermark */
 .watermark { position:fixed; bottom:12px; left:0; right:0; text-align:center; font-size:.6rem; letter-spacing:.15em; text-transform:uppercase; color:rgba(255,255,255,0.07); z-index:1; pointer-events:none; }
 </style>
+<link rel="stylesheet" href="ui_v2.css?v=20260908">
 </head>
 <body>
 
