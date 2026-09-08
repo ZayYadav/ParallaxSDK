@@ -756,6 +756,7 @@ $mfaChallengeActive = !empty($_SESSION['pending_mfa_user_id'])
 .form-select option { background:#1e2a45; color:#fff; }
 
 </style>
+<link rel="stylesheet" href="ui_v2.css?v=20260908">
 </head>
 <body>
 
