@@ -31,8 +31,7 @@ SELECT
      WHERE d2.license_key = l.license_key ORDER BY d2.last_seen DESC LIMIT 1) as last_ip
 FROM licenses l
 LEFT JOIN devices d ON d.license_key = l.license_key
-GROUP BY l.id ORDER BY l.id DESC
-LIMIT 30");
+GROUP BY l.id ORDER BY l.id DESC");
 
 // Role check
 $roleStmt = $conn->prepare('SELECT role FROM users WHERE id = ? LIMIT 1');
@@ -679,19 +678,14 @@ function closeSidebar() {
 function countUp(el) {
     const target = parseInt(el.dataset.count, 10);
     if (!target || target < 1) return;
-    const duration = Math.min(900, Math.max(260, target * 24));
-    const started = performance.now();
-    const tick = now => {
-        const progress = Math.min(1, (now - started) / duration);
-        const eased = 1 - Math.pow(1 - progress, 3);
-        el.textContent = Math.round(target * eased);
-        if (progress < 1 && document.visibilityState === 'visible') {
-            requestAnimationFrame(tick);
-        } else {
-            el.textContent = target;
-        }
-    };
-    requestAnimationFrame(tick);
+    let start = 0;
+    const dur = Math.min(1200, target * 60);
+    const step = target / (dur / 16);
+    const timer = setInterval(() => {
+        start = Math.min(start + step, target);
+        el.textContent = Math.floor(start);
+        if (start >= target) { el.textContent = target; clearInterval(timer); }
+    }, 16);
 }
 document.querySelectorAll('.kpi-val[data-count]').forEach(countUp);
 
