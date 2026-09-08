@@ -756,27 +756,6 @@ $mfaChallengeActive = !empty($_SESSION['pending_mfa_user_id'])
 .form-select option { background:#1e2a45; color:#fff; }
 
 </style>
-
-<style id="panel-smooth-auth">
-html,body{overscroll-behavior:none;-webkit-tap-highlight-color:transparent}
-.bg-orb{filter:blur(64px)!important;animation-duration:30s!important;will-change:auto!important}
-.card,.login-card,.register-card{
-  background:linear-gradient(160deg,rgba(17,25,46,.9),rgba(7,12,25,.94))!important;
-  backdrop-filter:blur(12px) saturate(120%)!important;
-  -webkit-backdrop-filter:blur(12px) saturate(120%)!important;
-  box-shadow:0 20px 54px rgba(0,0,0,.42)!important;
-}
-form[data-submitting="1"]{pointer-events:none}
-form[data-submitting="1"] button[type="submit"]{opacity:.72;transform:none!important}
-button,input,a{touch-action:manipulation}
-@media (max-width:900px),(pointer:coarse){
-  .bg-orb{animation:none!important;filter:blur(48px)!important;opacity:.42!important}
-  .card,.login-card,.register-card{backdrop-filter:blur(8px)!important;-webkit-backdrop-filter:blur(8px)!important}
-}
-@media (prefers-reduced-motion:reduce){
-  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
-}
-</style>
 </head>
 <body>
 
@@ -923,32 +902,5 @@ button,input,a{touch-action:manipulation}
 })();
 </script>
 <style>@keyframes obRpl{to{transform:scale(4);opacity:0;}}</style>
-
-<script id="panel-submit-guard">
-document.querySelectorAll('form').forEach(function(form){
-  form.addEventListener('submit',function(event){
-    if(form.dataset.submitting==='1'){
-      event.preventDefault();
-      return;
-    }
-    form.dataset.submitting='1';
-    form.setAttribute('aria-busy','true');
-    var submitter=event.submitter;
-    if(submitter){
-      submitter.dataset.originalText=submitter.innerHTML;
-      submitter.innerHTML='<i class="fas fa-circle-notch fa-spin"></i> Processing…';
-    }
-    window.setTimeout(function(){
-      if(document.visibilityState==='visible'){
-        form.dataset.submitting='0';
-        form.removeAttribute('aria-busy');
-        if(submitter && submitter.dataset.originalText){
-          submitter.innerHTML=submitter.dataset.originalText;
-        }
-      }
-    },15000);
-  });
-});
-</script>
 </body>
 </html>
