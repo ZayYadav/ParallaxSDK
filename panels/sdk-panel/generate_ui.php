@@ -596,6 +596,7 @@ label { margin-bottom: 8px; font-weight: 600; font-size: 0.9rem; }
 ::-webkit-scrollbar-thumb { background:rgba(201,168,76,0.3); border-radius:10px; }
 ::-webkit-scrollbar-thumb:hover { background:rgba(201,168,76,0.55); }
 </style>
+<link rel="stylesheet" href="ui_v2.css?v=20260908">
 </head>
 <body>
 
