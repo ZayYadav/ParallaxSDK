@@ -69,7 +69,8 @@ if ($current_user !== 'ParallaxOwner') {
             .btn-back { position:relative; display:inline-flex; align-items:center; gap:9px; padding:13px 30px; background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.16); border-radius:50px; color:#fff; font-size:.95rem; font-weight:700; text-decoration:none; cursor:pointer; transition:all .25s; margin-top: 20px; }
             .btn-back:hover { background:rgba(255,255,255,.15); border-color:rgba(255,255,255,.3); transform:translateY(-3px); box-shadow:0 10px 24px rgba(0,0,0,.35); color:#fff; }
         </style>
-    </head>
+    <link rel="stylesheet" href="ui_v2.css?v=20260908">
+</head>
     <body>
         <div class="bg-orbs"><div class="orb orb1"></div><div class="orb orb2"></div></div>
         <div class="access-denied-card">
