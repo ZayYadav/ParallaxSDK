@@ -433,6 +433,7 @@ header {
 ::-webkit-scrollbar-thumb { background:rgba(201,168,76,0.3); border-radius:10px; }
 ::-webkit-scrollbar-thumb:hover { background:rgba(201,168,76,0.6); }
 </style>
+<link rel="stylesheet" href="ui_v2.css?v=20260908">
 </head>
 
 <body>
