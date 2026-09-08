@@ -77,23 +77,17 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['edit_id'])) {
 }
 
 /* ================= FETCH LICENSES ================= */
-$result = $conn->query("SELECT * FROM licenses ORDER BY id DESC");
+/* One grouped query replaces the previous per-card device COUNT query.
+   This keeps large license pages responsive even with hundreds of keys. */
+$result = $conn->query("
+    SELECT l.*,
+           COALESCE(SUM(CASE WHEN d.status = 'connected' THEN 1 ELSE 0 END), 0) AS connected_devices
+    FROM licenses l
+    LEFT JOIN devices d ON d.license_key = l.license_key
+    GROUP BY l.id
+    ORDER BY l.id DESC
+");
 $license_ids = []; // collect IDs for JS localStorage loop
-
-// Function to get connected devices count for a package
-function getConnectedDevices($conn, $license_key) {
-    $tableCheck = $conn->query("SHOW TABLES LIKE 'devices'");
-    if($tableCheck->num_rows == 0) {
-        return 0;
-    }
-
-    $stmt = $conn->prepare("SELECT COUNT(*) as count FROM devices WHERE license_key = ? AND status = 'connected'");
-    $stmt->bind_param("s", $license_key);
-    $stmt->execute();
-    $res = $stmt->get_result();
-    $row = $res->fetch_assoc();
-    return $row['count'] ?? 0;
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -686,8 +680,7 @@ header {
                 $statusClass = "status-pause-glass";
             }
 
-            // Get connected devices count
-            $devices_count = getConnectedDevices($conn, $r['license_key']);
+            $devices_count = (int)($r['connected_devices'] ?? 0);
     ?>
     <?php $license_ids[] = $r['id']; ?>
     <div class="card glass">
@@ -1050,7 +1043,18 @@ function showUsage(licenseId, packageName, btn) {
 
     document.getElementById('usageModal').classList.add('active');
 
-    fetch(`get_devices.php?license_id=${encodeURIComponent(licenseId)}`)
+    if (window.__usageAbortController) {
+        window.__usageAbortController.abort();
+    }
+    const controller = new AbortController();
+    window.__usageAbortController = controller;
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    if (btn) btn.disabled = true;
+
+    fetch(`get_devices.php?license_id=${encodeURIComponent(licenseId)}`, {
+        signal: controller.signal,
+        headers: {'Accept': 'application/json'}
+    })
         .then(response => {
             if (!response.ok) throw new Error('Network response was not ok');
             return response.json();
@@ -1088,14 +1092,22 @@ function showUsage(licenseId, packageName, btn) {
             }
         })
         .catch(error => {
+            const message = error.name === 'AbortError' ? 'Request timed out. Please try again.' : error.message;
             deviceList.innerHTML = `
                 <div class="text-center py-4">
                     <i class="fas fa-exclamation-triangle fa-2x mb-2" style="color:#f87171;"></i>
                     <p class="text-danger">Error loading devices</p>
-                    <p class="small opacity-50">${error.message}</p>
+                    <p class="small opacity-50">${escapeHtml(message)}</p>
                 </div>
             `;
             document.getElementById('usageDeviceCount').textContent = '0';
+        })
+        .finally(() => {
+            clearTimeout(timeoutId);
+            if (btn) btn.disabled = false;
+            if (window.__usageAbortController === controller) {
+                window.__usageAbortController = null;
+            }
         });
 }
 
