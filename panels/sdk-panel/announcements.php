@@ -346,6 +346,7 @@ header {
 .form-select option { background:#1e2a45; color:#fff; }
 
 </style>
+<link rel="stylesheet" href="ui_v2.css?v=20260908">
 </head>
 <body>
 <div class="bg-orbs"><div class="bg-orb ob1"></div><div class="bg-orb ob2"></div><div class="bg-orb ob3"></div></div>
