@@ -110,6 +110,7 @@ function panel_css_vars($P) {
     $bg2 = $safeColor($P['theme_bg2'] ?? '', '#0F172A');
     $bg3 = $safeColor($P['theme_bg3'] ?? '', '#1E3A8A');
     $bg4 = $safeColor($P['theme_bg4'] ?? '', '#312E81');
+
     return "
     :root {
         --p-primary:  {$primary};
@@ -118,6 +119,94 @@ function panel_css_vars($P) {
         --p-bg2:      {$bg2};
         --p-bg3:      {$bg3};
         --p-bg4:      {$bg4};
+        --p-surface: rgba(10,16,32,.88);
+        --p-surface-soft: rgba(15,23,42,.74);
+        --p-line: rgba(255,255,255,.10);
+        --p-shadow: 0 18px 48px rgba(0,0,0,.32);
+        --p-radius: 18px;
+    }
+
+    /* Smooth UI layer. Legacy pages define styles after this block, so the
+       critical performance overrides intentionally use !important. */
+    html { scroll-behavior: smooth; }
+    body {
+        background:
+            radial-gradient(circle at 12% -10%, color-mix(in srgb, var(--p-primary) 13%, transparent), transparent 34rem),
+            radial-gradient(circle at 92% 8%, color-mix(in srgb, var(--p-accent) 12%, transparent), transparent 32rem),
+            linear-gradient(145deg, var(--p-bg1), var(--p-bg2) 52%, var(--p-bg1)) !important;
+        background-size: 100% 100% !important;
+        animation: none !important;
+        overscroll-behavior-y: none;
+        text-rendering: optimizeLegibility;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .bg-orbs { opacity: .62 !important; contain: strict; }
+    .orb, .bg-orb {
+        filter: blur(72px) !important;
+        animation-duration: 36s !important;
+        animation-timing-function: ease-in-out !important;
+        will-change: auto !important;
+    }
+    .glass, .card, .cardx, .stat-card, .settings-card, .server-card,
+    .announcement-card, .user-card, .package-card, .form-card, .modal-content {
+        background: linear-gradient(160deg, rgba(17,25,46,.88), rgba(8,13,27,.92)) !important;
+        border: 1px solid var(--p-line) !important;
+        box-shadow: var(--p-shadow) !important;
+        backdrop-filter: blur(12px) saturate(125%) !important;
+        -webkit-backdrop-filter: blur(12px) saturate(125%) !important;
+    }
+    header, #sidebar {
+        backdrop-filter: blur(12px) saturate(120%) !important;
+        -webkit-backdrop-filter: blur(12px) saturate(120%) !important;
+    }
+    #overlay {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+    button, .btn, .glass-btn, .btn-glass, .btn-back, .btn-ios,
+    .menu-btn, .nav-btn, a {
+        touch-action: manipulation;
+    }
+    button, .btn, .glass-btn, .btn-glass, .btn-back, .btn-ios, .menu-btn, .nav-btn {
+        transition: transform .16s ease, border-color .16s ease, background-color .16s ease, box-shadow .16s ease, opacity .16s ease !important;
+    }
+    button:active, .btn:active, .glass-btn:active, .btn-glass:active, .btn-back:active, .btn-ios:active {
+        transform: translateY(1px) scale(.985) !important;
+    }
+    input, select, textarea {
+        transition: border-color .16s ease, box-shadow .16s ease, background-color .16s ease !important;
+    }
+    input:focus, select:focus, textarea:focus, button:focus-visible, a:focus-visible {
+        outline: none !important;
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--p-primary) 24%, transparent) !important;
+    }
+    .grid > .card, .license-card, .user-card, .announcement-card, .package-card {
+        content-visibility: auto;
+        contain-intrinsic-size: 1px 320px;
+    }
+    .table-responsive, #sidebar, .main, .page {
+        -webkit-overflow-scrolling: touch;
+    }
+    @media (max-width: 900px), (pointer: coarse) {
+        .orb, .bg-orb {
+            animation: none !important;
+            filter: blur(54px) !important;
+            opacity: .45 !important;
+        }
+        .glass, .card, .cardx, .stat-card, .settings-card, .server-card,
+        .announcement-card, .user-card, .package-card, .form-card, .modal-content,
+        header, #sidebar {
+            backdrop-filter: blur(8px) saturate(110%) !important;
+            -webkit-backdrop-filter: blur(8px) saturate(110%) !important;
+        }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+            animation-duration: .01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: .01ms !important;
+            scroll-behavior: auto !important;
+        }
     }";
 }
 
