@@ -434,6 +434,7 @@ header {
     .premium-table th, .premium-table td { padding: 12px 8px; font-size: 0.85rem; }
 }
 </style>
+<link rel="stylesheet" href="ui_v2.css?v=20260908">
 </head>
 <body>
 
