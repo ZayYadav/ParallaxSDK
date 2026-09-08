@@ -136,6 +136,7 @@ header { position:fixed; top:0; left:0; right:0; height:62px; z-index:1000; disp
 ::-webkit-scrollbar-thumb { background:rgba(201,168,76,0.3); border-radius:10px; }
 ::-webkit-scrollbar-thumb:hover { background:rgba(201,168,76,0.55); }
 </style>
+<link rel="stylesheet" href="ui_v2.css?v=20260908">
 </head>
 <body>
 
