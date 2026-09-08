@@ -995,7 +995,17 @@ function refreshAutoPreview() {
     const randomIndex = Math.floor(Math.random() * patterns.length);
     maskedElement.textContent = patterns[randomIndex];
 }
-setInterval(refreshAutoPreview, 3000);
+let autoPreviewTimer = null;
+function scheduleAutoPreview() {
+    clearTimeout(autoPreviewTimer);
+    if (document.visibilityState !== 'visible') return;
+    autoPreviewTimer = setTimeout(() => {
+        refreshAutoPreview();
+        scheduleAutoPreview();
+    }, 5000);
+}
+document.addEventListener('visibilitychange', scheduleAutoPreview, {passive:true});
+scheduleAutoPreview();
 
 /* SUCCESS MODAL */
 function closeSuccess() {
