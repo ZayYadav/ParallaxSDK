@@ -334,6 +334,7 @@ input[type="color"] { width:100%; height:44px; padding:4px 8px; border-radius:12
 .form-select option { background:#1e2a45; color:#fff; }
 
 </style>
+<link rel="stylesheet" href="ui_v2.css?v=20260908">
 </head>
 <body>
 
