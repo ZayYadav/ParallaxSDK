@@ -1,0 +1,29 @@
+name: Key Panel PHP Lint
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - ParallaxLoaderServerDonwnLoad
+    paths:
+      - "panels/key-panel/**"
+      - ".github/workflows/key-panel-php-lint.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          coverage: none
+      - name: Lint key panel PHP
+        shell: bash
+        run: |
+          set -euo pipefail
+          find panels/key-panel -type f -name '*.php' -print0 | xargs -0 -n1 php -l
