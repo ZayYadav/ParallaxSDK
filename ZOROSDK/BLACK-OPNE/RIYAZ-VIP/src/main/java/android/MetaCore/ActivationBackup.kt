@@ -20,7 +20,12 @@ object ActivationBackup {
     private const val TAG = "ActivationBackup"
     private const val VERSION = 1
     private const val BACKUP_FILE_NAME = "sdk_activation_backup.json"
-    private const val BACKUP_DIR_NAME = ".keshavxowner"
+    private const val BACKUP_DIR_NAME = ".zorosdk"
+    private const val LEGACY_BACKUP_DIR_NAME = ".keshavxowner"
+    private const val BACKUP_KEY_LABEL = "zorosdk-activation-backup-v1"
+    private const val LEGACY_BACKUP_KEY_LABEL = "keshavxowner-activation-backup-v1"
+    private const val ROOT_BACKUP_DIR = "ZOROSDK"
+    private const val LEGACY_ROOT_BACKUP_DIR = "KESHAVXOWNER"
     private const val FALLBACK_HOST_PACKAGE = "com.bgmi"
     private val random = SecureRandom()
 
@@ -36,7 +41,7 @@ object ActivationBackup {
 
         val encrypted = encrypt(context, payload.toString())
         var saved = false
-        for (file in backupFiles(context)) {
+        for (file in primaryBackupFiles(context)) {
             try {
                 file.parentFile?.mkdirs()
                 file.writeText(encrypted.toString(), StandardCharsets.UTF_8)
@@ -52,7 +57,7 @@ object ActivationBackup {
     }
 
     fun restore(context: Context): String? {
-        for (file in backupFiles(context)) {
+        for (file in restoreBackupFiles(context)) {
             try {
                 if (!file.isFile || file.length() <= 0L) continue
                 val payload = decrypt(context, JSONObject(file.readText(StandardCharsets.UTF_8)))
@@ -88,15 +93,27 @@ object ActivationBackup {
         }
         val iv = Base64.decode(envelope.getString("iv"), Base64.NO_WRAP)
         val encrypted = Base64.decode(envelope.getString("ciphertext"), Base64.NO_WRAP)
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(backupKey(context), "AES"), GCMParameterSpec(128, iv))
-        cipher.updateAAD(context.packageName.toByteArray(StandardCharsets.UTF_8))
-        return String(cipher.doFinal(encrypted), StandardCharsets.UTF_8)
+        var lastError: Throwable? = null
+        for (keyLabel in listOf(BACKUP_KEY_LABEL, LEGACY_BACKUP_KEY_LABEL)) {
+            try {
+                val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                cipher.init(
+                    Cipher.DECRYPT_MODE,
+                    SecretKeySpec(backupKey(context, keyLabel), "AES"),
+                    GCMParameterSpec(128, iv),
+                )
+                cipher.updateAAD(context.packageName.toByteArray(StandardCharsets.UTF_8))
+                return String(cipher.doFinal(encrypted), StandardCharsets.UTF_8)
+            } catch (throwable: Throwable) {
+                lastError = throwable
+            }
+        }
+        throw SecurityException("Activation backup decryption failed", lastError)
     }
 
-    private fun backupKey(context: Context): ByteArray {
+    private fun backupKey(context: Context, keyLabel: String = BACKUP_KEY_LABEL): ByteArray {
         val material = listOf(
-            "keshavxowner-activation-backup-v1",
+            keyLabel,
             context.packageName,
             androidId(context),
             signingSha256(context),
@@ -125,7 +142,7 @@ object ActivationBackup {
             .uppercase()
     }
 
-    private fun backupFiles(context: Context): List<File> {
+    private fun primaryBackupFiles(context: Context): List<File> {
         val result = ArrayList<File>()
         context.getExternalFilesDir(BACKUP_DIR_NAME)?.let { result.add(File(it, BACKUP_FILE_NAME)) }
 
@@ -134,7 +151,22 @@ object ActivationBackup {
         for (packageName in packageNames) {
             result.add(File(externalRoot, "Android/media/$packageName/$BACKUP_DIR_NAME/$BACKUP_FILE_NAME"))
         }
-        result.add(File(externalRoot, "KESHAVXOWNER/$BACKUP_FILE_NAME"))
+        result.add(File(externalRoot, "$ROOT_BACKUP_DIR/$BACKUP_FILE_NAME"))
+
+        return result.distinctBy { it.absolutePath }
+    }
+
+    private fun restoreBackupFiles(context: Context): List<File> {
+        val result = ArrayList<File>()
+        result.addAll(primaryBackupFiles(context))
+        context.getExternalFilesDir(LEGACY_BACKUP_DIR_NAME)?.let { result.add(File(it, BACKUP_FILE_NAME)) }
+
+        val externalRoot = Environment.getExternalStorageDirectory()
+        val packageNames = linkedSetOf(context.packageName, FALLBACK_HOST_PACKAGE)
+        for (packageName in packageNames) {
+            result.add(File(externalRoot, "Android/media/$packageName/$LEGACY_BACKUP_DIR_NAME/$BACKUP_FILE_NAME"))
+        }
+        result.add(File(externalRoot, "$LEGACY_ROOT_BACKUP_DIR/$BACKUP_FILE_NAME"))
 
         return result.distinctBy { it.absolutePath }
     }
