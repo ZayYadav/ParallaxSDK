@@ -32,6 +32,12 @@ final class App
             if ($path === '/api/v2/connect') {
                 $this->connectV2();
             }
+            if ($path === '/api/key-check/public-key') {
+                $this->keyCheckPublicKey();
+            }
+            if ($path === '/api/key-check') {
+                $this->keyCheck();
+            }
             if ($path === '/' || $path === '/login') {
                 $this->login();
             }
@@ -60,6 +66,9 @@ final class App
         } catch (Throwable $error) {
             error_log((string) $error);
             if ($path === '/api/v2/connect') {
+                $this->json(['status' => false, 'reason' => 'SERVER ERROR'], 500);
+            }
+            if ($path === '/api/key-check' || $path === '/api/key-check/public-key') {
                 $this->json(['status' => false, 'reason' => 'SERVER ERROR'], 500);
             }
             $message = Env::get('APP_ENV') === 'development'
@@ -504,6 +513,143 @@ final class App
             . View::input('confirm_password', 'Confirm new password', 'password', '', 'required minlength="12" autocomplete="new-password"')
             . '<button type="submit">Change password</button></div></form></section>';
         View::page('Account', $body, $user);
+    }
+
+    private function keyCheckPublicKey(): never
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
+            $this->json(['status' => false, 'reason' => 'METHOD NOT ALLOWED'], 405);
+        }
+        header('Cache-Control: public, max-age=300');
+        $this->json([
+            'status' => true,
+            'algorithm' => 'SHA256withRSA',
+            'public_key_b64' => ApiCrypto::publicKeyBase64(),
+        ]);
+    }
+
+    private function keyCheck(): never
+    {
+        if (!$this->isPost()) {
+            $this->signedKeyCheckJson(false, '', 'METHOD NOT ALLOWED', '', time(), 405);
+        }
+
+        header('Cache-Control: no-store, max-age=0');
+        $contentType = strtolower(trim(explode(';', (string) ($_SERVER['CONTENT_TYPE'] ?? ''))[0]));
+        if ($contentType !== 'application/x-www-form-urlencoded') {
+            $this->signedKeyCheckJson(false, '', 'UNSUPPORTED CONTENT TYPE', '', time(), 415);
+        }
+
+        $userKey = trim((string) ($_POST['user_key'] ?? ''));
+        $nonce = trim((string) ($_POST['nonce'] ?? ''));
+        $timestamp = (int) ($_POST['timestamp'] ?? 0);
+        $clientId = trim((string) ($_POST['client_id'] ?? ''));
+
+        if (preg_match('/^[A-Za-z0-9_-]{4,64}$/D', $userKey) !== 1
+            || preg_match('/^[A-Za-z0-9_-]{22,64}$/D', $nonce) !== 1
+            || abs(time() - $timestamp) > 90
+            || !hash_equals('PARALLAX_NATIVE_V1', $clientId)) {
+            $this->signedKeyCheckJson(false, '', 'INVALID REQUEST', $nonce, time(), 400);
+        }
+
+        if (!$this->allowConnectRequest($userKey)) {
+            $this->signedKeyCheckJson(false, '', 'TOO MANY REQUESTS', $nonce, time(), 429);
+        }
+
+        $this->db->exec('DELETE FROM api_nonces WHERE expires_at < UTC_TIMESTAMP()');
+        try {
+            $statement = $this->db->prepare(
+                'INSERT INTO api_nonces (nonce_hash,expires_at) VALUES (?,UTC_TIMESTAMP()+INTERVAL 10 MINUTE)'
+            );
+            $statement->execute([hash('sha256', 'key-check|' . $nonce)]);
+        } catch (Throwable) {
+            $this->signedKeyCheckJson(false, '', 'REPLAYED REQUEST', $nonce, time(), 409);
+        }
+
+        $statement = $this->db->prepare('SELECT * FROM keys_code WHERE user_key=? LIMIT 1 FOR UPDATE');
+        $this->db->beginTransaction();
+        try {
+            $statement->execute([$userKey]);
+            $key = $statement->fetch();
+
+            if (!$key) {
+                $this->db->rollBack();
+                $this->signedKeyCheckJson(false, '', 'WRONG KEY', $nonce, time(), 403);
+            }
+
+            if ((int) $key['status'] !== 1) {
+                $this->db->rollBack();
+                $this->signedKeyCheckJson(false, '', 'WRONG KEY', $nonce, time(), 403);
+            }
+
+            $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+            $expiry = $key['expired_date']
+                ? new DateTimeImmutable((string) $key['expired_date'], new DateTimeZone('UTC'))
+                : null;
+
+            if ($expiry !== null && $expiry <= $now) {
+                $this->db->rollBack();
+                $this->signedKeyCheckJson(false, '', 'WRONG KEY', $nonce, time(), 403);
+            }
+
+            if ($expiry === null) {
+                $expiry = $now->modify('+' . max(1, (int) $key['duration']) . ' hours');
+                $this->db->prepare('UPDATE keys_code SET expired_date=? WHERE id_keys=?')
+                    ->execute([$expiry->format('Y-m-d H:i:s'), $key['id_keys']]);
+            }
+
+            $maintenance = $this->db->query('SELECT status,myinput FROM onoff WHERE id=1')->fetch() ?: [];
+            $this->db->commit();
+
+            if (($maintenance['status'] ?? 'off') === 'on') {
+                $this->signedKeyCheckJson(
+                    false,
+                    '',
+                    (string) ($maintenance['myinput'] ?? 'Maintenance in progress'),
+                    $nonce,
+                    time(),
+                    503
+                );
+            }
+
+            $this->signedKeyCheckJson(
+                true,
+                $expiry->format('Y-m-d H:i:s'),
+                '',
+                $nonce,
+                time(),
+                200
+            );
+        } catch (Throwable $error) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $error;
+        }
+    }
+
+    private function signedKeyCheckJson(
+        bool $status,
+        string $expiredDate,
+        string $reason,
+        string $nonce,
+        int $serverTime,
+        int $httpStatus
+    ): never {
+        $canonical = ($status ? 'true' : 'false')
+            . '|' . $expiredDate
+            . '|' . $reason
+            . '|' . $nonce
+            . '|' . $serverTime;
+
+        $this->json([
+            'status' => $status,
+            'expired_date' => $expiredDate,
+            'reason' => $reason,
+            'nonce' => $nonce,
+            'server_time' => $serverTime,
+            'sig' => ApiCrypto::signBase64($canonical),
+        ], $httpStatus);
     }
 
     private function connectV2(): never
