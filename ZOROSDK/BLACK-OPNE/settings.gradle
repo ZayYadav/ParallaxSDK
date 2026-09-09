@@ -1,4 +1,4 @@
-include ':KESHAVXOWNERCore'
-project(':KESHAVXOWNERCore').projectDir = file('RIYAZ-VIP')
+include ':ZOROSDKCore'
+project(':ZOROSDKCore').projectDir = file('RIYAZ-VIP')
 
-rootProject.name = "KESHAVXOWNER SDK"
+rootProject.name = "ZOROSDK SDK"
