@@ -205,9 +205,13 @@ keystore `One-Core-Engine/app/ParallaxLoader-release.jks` with alias
 
 Configure this GitHub Actions secret:
 
-- `ANDROID_KEYSTORE_PASSWORD`: password for the repository release keystore
-- `ANDROID_KEY_PASSWORD`: optional; omit it when the key password is the same as
-  the keystore password
+- `ANDROID_KEYSTORE_PASSWORD`: password for both the repository release keystore
+  and its `ParallaxLoaderRelease` private key
+
+The workflow intentionally ignores the legacy `ANDROID_KEY_PASSWORD`,
+`ANDROID_KEY_ALIAS`, `ANDROID_KEYSTORE_BASE64`, and
+`ONECORE_ALLOWED_SIGNING_SHA256` secrets. The keystore path, alias, and
+certificate SHA-256 are now fixed/derived from the repository release key.
 
 The workflow derives the certificate SHA-256 directly from that keystore,
 exports it as `ONECORE_ALLOWED_SIGNING_SHA256` for the Java/native integrity
