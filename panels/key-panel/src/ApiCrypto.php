@@ -68,6 +68,25 @@ final class ApiCrypto
         return $value;
     }
 
+    public static function signBase64(string $message): string
+    {
+        self::ensureKeyPair();
+        [$privatePath] = self::keyPaths();
+        if (is_link($privatePath)) {
+            throw new RuntimeException('API private key path must not be a symbolic link.');
+        }
+        $privatePem = file_get_contents($privatePath);
+        $privateKey = is_string($privatePem) ? openssl_pkey_get_private($privatePem) : false;
+        $details = $privateKey === false ? false : openssl_pkey_get_details($privateKey);
+        if ($privateKey === false || !is_array($details)
+            || ($details['type'] ?? null) !== OPENSSL_KEYTYPE_RSA
+            || (int) ($details['bits'] ?? 0) < 3072
+            || !openssl_sign($message, $signature, $privateKey, OPENSSL_ALGO_SHA256)) {
+            throw new RuntimeException('Could not sign API response.');
+        }
+        return base64_encode($signature);
+    }
+
     /** @return array{payload:array<string,mixed>,key:string,nonce:string} */
     public static function decryptRequest(string $raw): array
     {
