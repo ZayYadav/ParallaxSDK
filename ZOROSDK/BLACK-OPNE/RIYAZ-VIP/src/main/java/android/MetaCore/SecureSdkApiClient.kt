@@ -29,7 +29,7 @@ import javax.crypto.spec.SecretKeySpec
 import javax.net.ssl.HttpsURLConnection
 
 /**
- * KESHAVXOWNER activation API v3.
+ * ZOROSDK activation API v3.
  *
  * The APK contains only server public keys. Every request uses a new ephemeral
  * ECDH key, every response is encrypted, and the panel signs the response with
@@ -115,7 +115,7 @@ internal class SecureSdkApiClient(private val context: Context) {
             connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
             connection.setRequestProperty("Accept", "application/json")
             connection.setRequestProperty("X-API-Version", "3")
-            connection.setRequestProperty("User-Agent", "KESHAVXOWNERSDK/3.0")
+            connection.setRequestProperty("User-Agent", "ZOROSDK/3.0")
             val bodyBytes = requestEnvelope.toString().toByteArray(StandardCharsets.UTF_8)
             connection.setFixedLengthStreamingMode(bodyBytes.size)
             connection.outputStream.use { it.write(bodyBytes) }
