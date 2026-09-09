@@ -1,23 +1,23 @@
-name: Build KESHAVXOWNER SDK AAR
+name: Build ZOROSDK SDK AAR
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - KESHAVXOWNER
+      - ZOROSDK
     paths:
-      - 'KESHAVXOWNERSDK/BLACK-OPNE/**'
-      - '.github/workflows/build-keshavxowner-aar.yml'
+      - 'ZOROSDK/BLACK-OPNE/**'
+      - '.github/workflows/build-zorosdk-aar.yml'
 
 permissions:
   contents: read
 
 jobs:
   build-aar:
-    name: Build KESHAVXOWNERCore release AAR
+    name: Build ZOROSDKCore release AAR
     runs-on: ubuntu-latest
     env:
-      SDK_PROJECT_DIR: KESHAVXOWNERSDK/BLACK-OPNE
+      SDK_PROJECT_DIR: ZOROSDK/BLACK-OPNE
       NDK_VERSION: 27.2.12479018
 
     steps:
@@ -55,21 +55,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ./gradlew :KESHAVXOWNERCore:assembleRelease --no-daemon --stacktrace
+          ./gradlew :ZOROSDKCore:assembleRelease --no-daemon --stacktrace
 
       - name: Verify AAR
         shell: bash
         run: |
           set -euo pipefail
-          AAR="${SDK_PROJECT_DIR}/RIYAZ-VIP/build/outputs/aar/KESHAVXOWNERCore-release.aar"
+          AAR="${SDK_PROJECT_DIR}/RIYAZ-VIP/build/outputs/aar/ZOROSDKCore-release.aar"
           test -s "$AAR"
           unzip -tq "$AAR"
           sha256sum "$AAR"
 
-      - name: Upload KESHAVXOWNER AAR
+      - name: Upload ZOROSDK AAR
         uses: actions/upload-artifact@v4
         with:
-          name: KESHAVXOWNERCore-release-aar
-          path: ${{ env.SDK_PROJECT_DIR }}/RIYAZ-VIP/build/outputs/aar/KESHAVXOWNERCore-release.aar
+          name: ZOROSDKCore-release-aar
+          path: ${{ env.SDK_PROJECT_DIR }}/RIYAZ-VIP/build/outputs/aar/ZOROSDKCore-release.aar
           if-no-files-found: error
           retention-days: 30
