@@ -23,14 +23,20 @@ public class RNative {
     
     public static final String TAG = "RNative";
     private static final String NATIVE_ARTIFACT_DIRECTORY = "native";
-    private static final String NATIVE_ARTIFACT_NAME = "KESHAVXOWNER.so";
+    private static final String NATIVE_ARTIFACT_NAME = "ZOROSDK.so";
+    // Legacy payload name retained as a compatibility fallback for existing deployments.
+    private static final String LEGACY_NATIVE_ARTIFACT_NAME = "KESHAVXOWNER.so";
     private static boolean isInjected = false;
 
     static {
-        System.loadLibrary("KESHAVXOWNERCore");
-        File file = new File(
-                new File(BlackBoxCore.getContext().getNoBackupFilesDir(), NATIVE_ARTIFACT_DIRECTORY),
-                NATIVE_ARTIFACT_NAME);
+        System.loadLibrary("ZOROSDKCore");
+        File nativeDir = new File(
+                BlackBoxCore.getContext().getNoBackupFilesDir(),
+                NATIVE_ARTIFACT_DIRECTORY);
+        File file = new File(nativeDir, NATIVE_ARTIFACT_NAME);
+        if (!file.isFile()) {
+            file = new File(nativeDir, LEGACY_NATIVE_ARTIFACT_NAME);
+        }
         if (file.isFile()) {
             System.load(file.getAbsolutePath());
         }
