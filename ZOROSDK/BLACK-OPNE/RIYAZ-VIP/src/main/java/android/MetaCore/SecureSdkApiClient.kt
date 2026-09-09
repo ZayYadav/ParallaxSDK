@@ -203,23 +203,28 @@ internal class SecureSdkApiClient(private val context: Context) {
 
     private fun getOrCreateDeviceKey(): java.security.KeyPair {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        if (!store.containsAlias(DEVICE_KEY_ALIAS)) {
-            KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore").apply {
-                initialize(
-                    KeyGenParameterSpec.Builder(
-                        DEVICE_KEY_ALIAS,
-                        KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY,
+        val activeAlias = when {
+            store.containsAlias(DEVICE_KEY_ALIAS) -> DEVICE_KEY_ALIAS
+            store.containsAlias(LEGACY_DEVICE_KEY_ALIAS) -> LEGACY_DEVICE_KEY_ALIAS
+            else -> {
+                KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore").apply {
+                    initialize(
+                        KeyGenParameterSpec.Builder(
+                            DEVICE_KEY_ALIAS,
+                            KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY,
+                        )
+                            .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
+                            .setDigests(KeyProperties.DIGEST_SHA256)
+                            .setUserAuthenticationRequired(false)
+                            .build()
                     )
-                        .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
-                        .setDigests(KeyProperties.DIGEST_SHA256)
-                        .setUserAuthenticationRequired(false)
-                        .build()
-                )
-            }.generateKeyPair()
+                }.generateKeyPair()
+                DEVICE_KEY_ALIAS
+            }
         }
-        val privateKey = store.getKey(DEVICE_KEY_ALIAS, null) as? java.security.PrivateKey
+        val privateKey = store.getKey(activeAlias, null) as? java.security.PrivateKey
             ?: throw SecurityException("Device proof private key is unavailable")
-        val publicKey = store.getCertificate(DEVICE_KEY_ALIAS)?.publicKey
+        val publicKey = store.getCertificate(activeAlias)?.publicKey
             ?: throw SecurityException("Device proof public key is unavailable")
         return java.security.KeyPair(publicKey, privateKey)
     }
@@ -297,7 +302,8 @@ internal class SecureSdkApiClient(private val context: Context) {
             0x2A, 0xBC.toByte(), 0x63, 0xA8.toByte(), 0xB4.toByte(), 0x99.toByte(), 0x8E.toByte(), 0x41,
             0x6A, 0xF1.toByte(), 0x1C, 0x02, 0xB7.toByte(), 0x29, 0x45, 0x6A,
         )
-        const val DEVICE_KEY_ALIAS = "keshavxowner_sdk_device_proof_v3"
+        const val DEVICE_KEY_ALIAS = "zorosdk_sdk_device_proof_v3"
+        const val LEGACY_DEVICE_KEY_ALIAS = "keshavxowner_sdk_device_proof_v3"
         const val CONNECT_TIMEOUT_MS = 15_000
         const val READ_TIMEOUT_MS = 20_000
         const val MAX_RESPONSE_BYTES = 64 * 1024
