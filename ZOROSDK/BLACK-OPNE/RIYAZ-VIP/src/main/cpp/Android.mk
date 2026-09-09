@@ -1,11 +1,11 @@
 LOCAL_PATH := $(call my-dir)
 MAIN_LOCAL_PATH := $(LOCAL_PATH)
 
-# ========== KESHAVXOWNERCore shared library ==========
+# ========== ZOROSDKCore shared library ==========
 include $(CLEAR_VARS)
 
 # --- Module Name ---
-LOCAL_MODULE := KESHAVXOWNERCore
+LOCAL_MODULE := ZOROSDKCore
 
 # -------- C FLAGS (SAFE) --------
 LOCAL_CFLAGS := \
@@ -52,21 +52,21 @@ LOCAL_C_INCLUDES += $(LOCAL_PATH)/KittyMemory   # <-- ADDED
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/libzip
 
 # --- Source Files ---
-KESHAVXOWNER_CORE_SRC := $(wildcard $(LOCAL_PATH)/*.cpp)
-KESHAVXOWNER_CORE_SRC += $(wildcard $(LOCAL_PATH)/Hook/*.cpp)
-KESHAVXOWNER_CORE_SRC += $(wildcard $(LOCAL_PATH)/IO/*.cpp)
-KESHAVXOWNER_CORE_SRC += $(wildcard $(LOCAL_PATH)/JniHook/*.cpp)
-KESHAVXOWNER_CORE_SRC += $(wildcard $(LOCAL_PATH)/SandHook/*.cpp)
-KESHAVXOWNER_CORE_SRC += $(wildcard $(LOCAL_PATH)/KittyMemory/*.cpp)   # <-- ADDED
+ZOROSDK_CORE_SRC := $(wildcard $(LOCAL_PATH)/*.cpp)
+ZOROSDK_CORE_SRC += $(wildcard $(LOCAL_PATH)/Hook/*.cpp)
+ZOROSDK_CORE_SRC += $(wildcard $(LOCAL_PATH)/IO/*.cpp)
+ZOROSDK_CORE_SRC += $(wildcard $(LOCAL_PATH)/JniHook/*.cpp)
+ZOROSDK_CORE_SRC += $(wildcard $(LOCAL_PATH)/SandHook/*.cpp)
+ZOROSDK_CORE_SRC += $(wildcard $(LOCAL_PATH)/KittyMemory/*.cpp)   # <-- ADDED
 
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/Riyaz
 
 # C Files (xdl - SandHook/xdl)
-KESHAVXOWNER_CORE_SRC += $(wildcard $(LOCAL_PATH)/SandHook/xdl/*.c)
+ZOROSDK_CORE_SRC += $(wildcard $(LOCAL_PATH)/SandHook/xdl/*.c)
 # C Files (libzip - SandHook/libzip)
-KESHAVXOWNER_CORE_SRC += $(wildcard $(LOCAL_PATH)/SandHook/libzip/*.c)
+ZOROSDK_CORE_SRC += $(wildcard $(LOCAL_PATH)/SandHook/libzip/*.c)
 
-LOCAL_SRC_FILES := $(KESHAVXOWNER_CORE_SRC:$(LOCAL_PATH)/%=%)
+LOCAL_SRC_FILES := $(ZOROSDK_CORE_SRC:$(LOCAL_PATH)/%=%)
 
 #LOCAL_STATIC_LIBRARIES := libdobby
 
