@@ -12,10 +12,13 @@ android {
                         System.console()?.readLine('\n' + prompt + ': ')
             }
 
+            def legacySharedPassword = properties?.get('keyPass')
             storeFile getString('storeFile', 'STORE_FILE', 'Store file')?.with(rootProject.&file)
-            storePassword getString('storePassword', 'STORE_PASSWORD', 'Store password')
+            storePassword (System.getenv('STORE_PASSWORD') ?: properties?.get('storePassword') ?: legacySharedPassword ?:
+                    System.console()?.readLine('\nStore password: '))
             keyAlias getString('keyAlias', 'KEY_ALIAS', 'Key alias')
-            keyPassword getString('keyPassword', 'KEY_PASSWORD', 'Key password')
+            keyPassword (System.getenv('KEY_PASSWORD') ?: properties?.get('keyPassword') ?: legacySharedPassword ?:
+                    System.console()?.readLine('\nKey password: '))
 
             // minSdk is 24, so every supported Android version understands APK
             // Signature Scheme v2. Dropping legacy JAR/v1 signatures removes the
@@ -35,12 +38,15 @@ android {
                         System.console()?.readLine('\n' + prompt + ': ')
             }
 
+            def legacySharedPassword = properties?.get('keyPass')
             def configuredStore = getString('storeFile', 'STORE_FILE', 'Store file')?.with(rootProject.&file)
             if (configuredStore != null && configuredStore.exists()) {
                 storeFile configuredStore
-                storePassword getString('storePassword', 'STORE_PASSWORD', 'Store password')
+                storePassword (System.getenv('STORE_PASSWORD') ?: properties?.get('storePassword') ?: legacySharedPassword ?:
+                        System.console()?.readLine('\nStore password: '))
                 keyAlias getString('keyAlias', 'KEY_ALIAS', 'Key alias')
-                keyPassword getString('keyPassword', 'KEY_PASSWORD', 'Key password')
+                keyPassword (System.getenv('KEY_PASSWORD') ?: properties?.get('keyPassword') ?: legacySharedPassword ?:
+                        System.console()?.readLine('\nKey password: '))
                 v1SigningEnabled true
                 v2SigningEnabled true
             }
