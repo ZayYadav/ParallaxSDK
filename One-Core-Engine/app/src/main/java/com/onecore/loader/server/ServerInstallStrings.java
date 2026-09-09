@@ -28,16 +28,16 @@ public final class ServerInstallStrings {
             "Background download • resumable • notification progress";
 
     public static final String INSTALL_FROM_DEVICE =
-            "INSTALL FROM YOUR INSTALLED GAME";
+            "Install from my Device";
     public static final String INSTALL_FROM_DEVICE_SUBTITLE =
-            "Copy the BGMI APK + OBB already available on this device";
+            "Agar aapke device me BGMI installed hai to mujhe select kare";
 
     public static final String INSTALL_FROM_SERVER =
-            "INSTALL BGMI FROM ONECORE SERVER";
+            "INSTALL FROM OneCore Server";
     public static final String INSTALL_FROM_SERVER_SUBTITLE =
-            "Fast resumable CDN download • runs in background with notification progress";
+            "Fully install from Server agar aapke phone me bgmi original BGMI installed nahi hai to mujhe select kare";
 
-    public static final String MANAGER_TITLE = "BGMI SERVER DOWNLOAD";
+    public static final String MANAGER_TITLE = "INTALLING BGMI FROM ONECORE SERVER";
     public static final String CANCEL_DOWNLOAD = "CANCEL DOWNLOAD";
     public static final String KEEP_DOWNLOADING = "KEEP DOWNLOADING";
     public static final String CANCEL_CONFIRM_TITLE = "Cancel BGMI download?";
