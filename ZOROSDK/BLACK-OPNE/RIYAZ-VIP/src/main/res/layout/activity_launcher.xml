@@ -2,14 +2,14 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/keshavxowner_runtime_background">
+    android:background="@drawable/zorosdk_runtime_background">
 
     <View
         android:id="@+id/runtime_glow"
         android:layout_width="420dp"
         android:layout_height="420dp"
         android:layout_gravity="center"
-        android:background="@drawable/keshavxowner_runtime_glow"
+        android:background="@drawable/zorosdk_runtime_glow"
         android:importantForAccessibility="no" />
 
     <LinearLayout
@@ -25,7 +25,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="32dp"
-            android:background="@drawable/keshavxowner_runtime_chip"
+            android:background="@drawable/zorosdk_runtime_chip"
             android:fontFamily="sans-serif-medium"
             android:gravity="center"
             android:letterSpacing="0.12"
@@ -44,7 +44,7 @@
             android:id="@+id/brand_panel"
             android:layout_width="210dp"
             android:layout_height="210dp"
-            android:background="@drawable/keshavxowner_runtime_card"
+            android:background="@drawable/zorosdk_runtime_card"
             android:elevation="16dp">
 
             <ImageView
@@ -63,7 +63,7 @@
             android:layout_marginTop="-220dp"
             android:contentDescription="@null"
             android:importantForAccessibility="no"
-            android:src="@drawable/keshavxowner_runtime_ring" />
+            android:src="@drawable/zorosdk_runtime_ring" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -94,7 +94,7 @@
             android:id="@+id/app_identity_card"
             android:layout_width="match_parent"
             android:layout_height="72dp"
-            android:background="@drawable/keshavxowner_runtime_chip"
+            android:background="@drawable/zorosdk_runtime_chip"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingStart="12dp"
@@ -147,7 +147,7 @@
                 android:id="@+id/runtime_status_dot"
                 android:layout_width="7dp"
                 android:layout_height="7dp"
-                android:background="@drawable/keshavxowner_runtime_status_dot" />
+                android:background="@drawable/zorosdk_runtime_status_dot" />
 
             <TextView
                 android:id="@+id/launch_status"
