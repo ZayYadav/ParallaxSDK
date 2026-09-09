@@ -199,18 +199,27 @@ release builds:
 - `PARALLAX_API_PUBLIC_KEY_B64`
 - `PARALLAX_TLS_PINS`
 
-Existing Android signing secrets remain required for a stable production
-identity:
+The `ParallaxLoaderServerDonwnLoad` release workflow is pinned to the repository
+keystore `One-Core-Engine/app/ParallaxLoader-release.jks` with alias
+`ParallaxLoaderRelease`. Do not commit its password.
 
-- `ANDROID_KEYSTORE_BASE64`
-- `ANDROID_KEYSTORE_PASSWORD`
-- `ANDROID_KEY_ALIAS`
-- `ANDROID_KEY_PASSWORD`
+Configure this GitHub Actions secret:
 
-After the first release build, download the `loader-signing-certificate`
-artifact, copy its SHA-256 certificate digest to
-`EXPECTED_ANDROID_CERT_SHA256` on hosting, and keep the same signing key for
-future releases.
+- `ANDROID_KEYSTORE_PASSWORD`: password for the repository release keystore
+- `ANDROID_KEY_PASSWORD`: optional; omit it when the key password is the same as
+  the keystore password
+
+The workflow derives the certificate SHA-256 directly from that keystore,
+exports it as `ONECORE_ALLOWED_SIGNING_SHA256` for the Java/native integrity
+guards, verifies that the finished APK has the same signer, and uploads two
+signing artifacts:
+
+- `loader-signing-certificate`: full APK signer information from `apksigner`
+- `panel-signing-config`: ready-to-copy `EXPECTED_ANDROID_PACKAGE`,
+  `EXPECTED_ANDROID_CERT_SHA256`, and `MIN_ANDROID_VERSION_CODE` values
+
+Copy the values from `panel-signing-config.env` into the live panel `.env`.
+Keep the same keystore for future releases.
 
 Pull requests use throwaway transport configuration only for compile/tests and
 do not publish loader APK artifacts. Production APK artifacts are uploaded only
