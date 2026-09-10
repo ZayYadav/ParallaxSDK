@@ -7,12 +7,23 @@ DirectoryIndex index.php
     Header always set Referrer-Policy "no-referrer"
 </IfModule>
 
-<FilesMatch "(^\.env|config\.local|\.example\.php$|\.sql$|\.md$|\.kt$|\.jsx$|hit\.txt$)">
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(.+)$ index.php [QSA,L]
+</IfModule>
+
+<FilesMatch "(^\.env|config\.local|\.example\.php$|.*-private\.pem|sdk-panel-config\.php|hit\.txt$)">
+    Require all denied
+</FilesMatch>
+
+<FilesMatch "\.(sql|md|log|bak|dist|kt|jsx)$">
     Require all denied
 </FilesMatch>
 
 <IfModule !mod_authz_core.c>
-    <FilesMatch "(^\.env|config\.local|\.example\.php$|\.sql$|\.md$|\.kt$|\.jsx$|hit\.txt$)">
+    <FilesMatch "(^\.env|config\.local|\.example\.php$|.*-private\.pem|sdk-panel-config\.php|hit\.txt$|\.(sql|md|log|bak|dist|kt|jsx)$)">
         Order allow,deny
         Deny from all
     </FilesMatch>
