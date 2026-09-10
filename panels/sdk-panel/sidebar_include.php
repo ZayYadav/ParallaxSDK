@@ -18,6 +18,7 @@ if (!isset($role_dash)) {
 }
 $current_user_si = $_SESSION['username'] ?? 'User';
 if (!isset($active_page)) $active_page = basename($_SERVER['PHP_SELF']);
+$route = static fn(string $path): string => function_exists('panel_route') ? panel_route($path) : $path;
 ?>
 <!-- HEADER -->
 <header>
@@ -25,10 +26,10 @@ if (!isset($active_page)) $active_page = basename($_SERVER['PHP_SELF']);
         <button class="menu-btn" onclick="toggleSidebar()" aria-label="Menu">
             <i class="fas fa-bars" id="menuIcon"></i>
         </button>
-        <span class="header-title"><i class="fas fa-tachometer-alt me-2" style="font-size:.85rem;"></i><?= htmlspecialchars($P['panel_name']) ?></span>
+        <span class="header-title"><i class="fas fa-layer-group me-2" style="font-size:.85rem;"></i><?= htmlspecialchars($P['panel_name']) ?></span>
     </div>
     <div class="user-badge">
-        <i class="fas fa-user-circle"></i>
+        <i class="fas fa-shield-halved"></i>
         <span><?= htmlspecialchars($current_user_si) ?></span>
     </div>
 </header>
@@ -48,18 +49,18 @@ if (!isset($active_page)) $active_page = basename($_SERVER['PHP_SELF']);
     </div>
 
     <div class="sidebar-nav-label">Main</div>
-    <a class="nav-btn <?= $active_page==='dashboard.php'?'active-page':'' ?>" href="dashboard.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
-    <a class="nav-btn <?= $active_page==='generate_ui.php'?'active-page':'' ?>" href="generate_ui.php"><i class="fas fa-key"></i> Generate License</a>
-    <a class="nav-btn <?= $active_page==='license_list.php'?'active-page':'' ?>" href="license_list.php"><i class="fas fa-code-branch"></i> List Licenses</a>
+    <a class="nav-btn <?= $active_page==='dashboard.php'?'active-page':'' ?>" href="<?= htmlspecialchars($route('dashboard')) ?>"><i class="fas fa-gauge-high"></i> Dashboard</a>
+    <a class="nav-btn <?= $active_page==='generate_ui.php'?'active-page':'' ?>" href="<?= htmlspecialchars($route('licenses/generate')) ?>"><i class="fas fa-key"></i> Generate License</a>
+    <a class="nav-btn <?= $active_page==='license_list.php'?'active-page':'' ?>" href="<?= htmlspecialchars($route('licenses')) ?>"><i class="fas fa-code-branch"></i> List Licenses</a>
     <?php if (in_array($role_dash, ['owner','admin'], true)): ?>
-    <a class="nav-btn <?= $active_page==='security_dashboard.php'?'active-page':'' ?>" href="security_dashboard.php"><i class="fas fa-shield-alt"></i> API Security</a>
+    <a class="nav-btn <?= $active_page==='security_dashboard.php'?'active-page':'' ?>" href="<?= htmlspecialchars($route('security')) ?>"><i class="fas fa-shield-alt"></i> API Security</a>
     <?php endif; ?>
 
     <div class="sidebar-nav-label">Management</div>
-    <a class="nav-btn <?= $active_page==='manage_users.php'?'active-page':'' ?>" href="manage_users.php"><i class="fas fa-circle-user"></i> Manage Users</a>
-    <a class="nav-btn <?= $active_page==='manage_referrals.php'?'active-page':'' ?>" href="manage_referrals.php"><i class="fas fa-file-pen"></i> Manage Referrals</a>
-    <a class="nav-btn <?= $active_page==='online_server.php'?'active-page':'' ?>" href="online_server.php"><i class="fas fa-circle-check"></i> Sdk Online Server</a>
-    <a class="nav-btn <?= $active_page==='announcements.php'?'active-page':'' ?>" href="announcements.php" style="position:relative;">
+    <a class="nav-btn <?= $active_page==='manage_users.php'?'active-page':'' ?>" href="<?= htmlspecialchars($route('users')) ?>"><i class="fas fa-circle-user"></i> Manage Users</a>
+    <a class="nav-btn <?= $active_page==='manage_referrals.php'?'active-page':'' ?>" href="<?= htmlspecialchars($route('referrals')) ?>"><i class="fas fa-file-pen"></i> Manage Referrals</a>
+    <a class="nav-btn <?= $active_page==='online_server.php'?'active-page':'' ?>" href="<?= htmlspecialchars($route('server')) ?>"><i class="fas fa-circle-check"></i> Sdk Online Server</a>
+    <a class="nav-btn <?= $active_page==='announcements.php'?'active-page':'' ?>" href="<?= htmlspecialchars($route('announcements')) ?>" style="position:relative;">
         <i class="fas fa-bullhorn"></i> Announcements
         <?php if ($unread_ann_count > 0): ?>
         <span class="nav-badge"><?= min($unread_ann_count,9) ?></span>
@@ -68,8 +69,8 @@ if (!isset($active_page)) $active_page = basename($_SERVER['PHP_SELF']);
 
     <div class="sidebar-nav-label">Config</div>
     <?php if (in_array($role_dash, ['owner','admin'])): ?>
-    <a class="nav-btn <?= $active_page==='panel_customizer.php'?'active-page':'' ?>" href="panel_customizer.php"><i class="fas fa-paint-brush"></i> Customizer</a>
+    <a class="nav-btn <?= $active_page==='panel_customizer.php'?'active-page':'' ?>" href="<?= htmlspecialchars($route('appearance')) ?>"><i class="fas fa-paint-brush"></i> Customizer</a>
     <?php endif; ?>
-    <a class="nav-btn <?= $active_page==='settings.php'?'active-page':'' ?>" href="settings.php"><i class="fas fa-cog"></i> Settings</a>
-    <a class="nav-btn" href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>
+    <a class="nav-btn <?= $active_page==='settings.php'?'active-page':'' ?>" href="<?= htmlspecialchars($route('settings')) ?>"><i class="fas fa-cog"></i> Settings</a>
+    <a class="nav-btn" href="<?= htmlspecialchars($route('logout')) ?>"><i class="fas fa-sign-out-alt"></i> Logout</a>
 </aside>
