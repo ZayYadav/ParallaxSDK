@@ -4,6 +4,10 @@ declare(strict_types=1);
 if (!defined('SDK_PANEL_BOOTSTRAPPED')) {
     define('SDK_PANEL_BOOTSTRAPPED', true);
 
+    require_once __DIR__ . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'Core' . DIRECTORY_SEPARATOR . 'Env.php';
+    Env::load(__DIR__ . DIRECTORY_SEPARATOR . '.env');
+    $envConfig = Env::panelConfigFromEnvironment();
+
     $configuredPath = getenv('SDK_PANEL_CONFIG') ?: '';
     $candidates = array_filter([
         $configuredPath,
@@ -19,13 +23,23 @@ if (!defined('SDK_PANEL_BOOTSTRAPPED')) {
         }
     }
 
-    if ($configPath === null) {
+    if ($configPath === null && $envConfig === []) {
         error_log('SDK Panel: private configuration file not found.');
         http_response_code(500);
         exit('SERVER_CONFIGURATION_ERROR');
     }
 
-    $SDK_PANEL_CONFIG = require $configPath;
+    $fileConfig = [];
+    if ($configPath !== null) {
+        $fileConfig = require $configPath;
+    }
+    if (!is_array($fileConfig)) {
+        error_log('SDK Panel: configuration must return an array.');
+        http_response_code(500);
+        exit('SERVER_CONFIGURATION_ERROR');
+    }
+
+    $SDK_PANEL_CONFIG = array_replace($fileConfig, $envConfig);
     if (!is_array($SDK_PANEL_CONFIG)) {
         error_log('SDK Panel: configuration must return an array.');
         http_response_code(500);
