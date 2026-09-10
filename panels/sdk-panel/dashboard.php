@@ -575,6 +575,27 @@ header {
     <!-- Title -->
     <div class="page-title"><?= htmlspecialchars($P['dashboard_title']) ?></div>
 
+    <div class="quick-actions glass">
+        <a class="quick-action" href="generate_ui.php">
+            <i class="fas fa-plus"></i>
+            <span>New License</span>
+        </a>
+        <a class="quick-action" href="license_list.php">
+            <i class="fas fa-magnifying-glass"></i>
+            <span>Search Keys</span>
+        </a>
+        <?php if (in_array($role_dash, ['owner','admin'], true)): ?>
+        <a class="quick-action" href="security_dashboard.php">
+            <i class="fas fa-shield-halved"></i>
+            <span>Security Center</span>
+        </a>
+        <?php endif; ?>
+        <button class="quick-action" type="button" data-copy="<?= htmlspecialchars(function_exists('panel_route') ? panel_route('connect') : 'connect.php') ?>">
+            <i class="fas fa-link"></i>
+            <span>Copy Connect</span>
+        </button>
+    </div>
+
     <!-- KPI Cards -->
     <div class="kpi-grid">
         <div class="kpi-card glass" style="--i:0">
