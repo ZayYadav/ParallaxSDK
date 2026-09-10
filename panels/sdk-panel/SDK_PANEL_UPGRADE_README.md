@@ -1,4 +1,4 @@
-# Parallax SDK Panel - secure API v3
+# Parallax SDK Panel - secure API v3 + UI v3
 
 This panel and `BLACK-OPNE/RIYAZ-VIP` now share one fail-closed activation
 contract. API v3 does not place a server secret in the APK.
@@ -26,6 +26,10 @@ contract. API v3 does not place a server secret in the APK.
   encrypted with a separate server-only data key.
 - Browser sessions use Secure/HttpOnly/SameSite cookies, idle and absolute
   expiry, periodic ID rotation, CSRF checks, HSTS and restrictive headers.
+- Browser panel POSTs also validate request origin/fetch metadata and reject
+  oversized requests before form handlers run.
+- Apache deployments deny direct access to `.env`, local config, private keys,
+  SQL dumps, logs and Markdown upgrade notes.
 
 No client-side SDK can be made literally uncrackable: an attacker controlling a
 device can patch application code. V3 removes the reusable API secret and makes
@@ -43,21 +47,53 @@ Security decisions no longer depend on `strlen` or another hookable C helper.
    php tools/generate-api-v3-keys.php /home/ACCOUNT/private parallax-2026-09
    ```
 
-4. Put the printed `PANEL_DATA_KEY` and `API_V3_KEYS` entries in the private
-   `sdk-panel-config.php`. Never commit or upload private keys to a public path.
+4. Copy `.env.example` to `.env` on the server and fill database, v2/v3, session
+   and Telegram settings. Existing private `sdk-panel-config.php` files still
+   work, and `.env` values override them.
 5. Confirm the public key id and public keys printed by the tool match the three
    `SDK_PANEL_*` BuildConfig trust anchors in `BLACK-OPNE/RIYAZ-VIP/build.gradle`.
    The exact HTTPS endpoint is masked in native code and independently
    integrity-checked by the Java/Kotlin activation client.
 6. Upload the panel code, then run `php tools/check-schema.php`.
 7. Sign in, open Settings, and enable MFA. Save the recovery codes offline.
-8. Open `security_dashboard.php` and confirm API v3 and signing keys are ready.
+8. Open `/security` or `security_dashboard.php` and confirm API v3 and signing
+   keys are ready.
 9. Build and release the new SDK. Test activation with a disposable license.
 10. Keep `LEGACY_API_ENABLED` and `API_V2_ENABLED` false. Enable them only for a
     short, controlled migration; they do not provide v3 panel-swap protection.
 
 The panel must be deployed before distributing the v3 SDK. Old SDKs cannot
 understand signed v3 envelopes.
+
+## Folder routing
+
+The old `.php` files remain valid for SDK and admin compatibility. New installs
+can use the folder routes below when Apache rewrite is enabled:
+
+| Folder route | Legacy file |
+|---|---|
+| `/dashboard` | `dashboard.php` |
+| `/licenses` | `license_list.php` |
+| `/licenses/generate` | `generate_ui.php` |
+| `/licenses/check` | `check_license.php` |
+| `/security` | `security_dashboard.php` |
+| `/users` | `manage_users.php` |
+| `/referrals` | `manage_referrals.php` |
+| `/server` | `online_server.php` |
+| `/appearance` | `panel_customizer.php` |
+| `/api/connect` and `/connect` | `connect.php` |
+| `/telegram/webhook` | `telegram_bot.php` |
+
+Do not remove `connect.php` unless every shipped SDK has been updated to the
+new path. The request and response contract inside `connect.php` is unchanged.
+
+## UI v3
+
+The new visual system is injected from `panel_css_vars()` so every existing page
+receives the same modern shell without rewriting business logic. It upgrades
+buttons, tables, cards, dropdowns, dialogs, loading states, sidebar behavior,
+mobile layouts and reduced-motion handling while keeping form names, POST
+targets and endpoint payloads intact.
 
 ## Key rotation
 
