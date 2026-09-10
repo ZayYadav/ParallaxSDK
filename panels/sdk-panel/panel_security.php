@@ -25,7 +25,9 @@ function panel_security_bootstrap(array $config): void
     header('X-Frame-Options: DENY');
     header('Referrer-Policy: no-referrer');
     header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
-    header("Content-Security-Policy: frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests");
+    header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests");
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
 
     $https = panel_is_https($config);
     if (($config['REQUIRE_HTTPS'] ?? true) && !$https) {
@@ -88,15 +90,27 @@ function panel_security_bootstrap(array $config): void
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     }
 
-    $script = strtolower(basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')));
+    $script = strtolower((string) ($_SERVER['SDK_PANEL_ROUTE_TARGET'] ?? basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''))));
     $csrfExempt = in_array($script, ['connect.php', 'telegram_bot.php'], true);
     $authUpgradeExempt = in_array($script, ['login.php', 'logout.php', 'register.php', 'connect.php', 'telegram_bot.php'], true);
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+        $contentLength = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
+        $maxPostBytes = max(8192, min(1048576, (int) ($config['MAX_POST_BYTES'] ?? 65536)));
+        if ($contentLength > $maxPostBytes) {
+            http_response_code(413);
+            exit('REQUEST_TOO_LARGE');
+        }
+    }
     if (!$authUpgradeExempt && !empty($_SESSION['user_id']) && empty($_SESSION['auth_v3'])) {
         panel_destroy_session();
         header('Location: login.php');
         exit;
     }
     if (!$csrfExempt && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+        if (!panel_browser_post_is_same_origin($config)) {
+            http_response_code(403);
+            exit('ORIGIN_VALIDATION_FAILED');
+        }
         $provided = (string) ($_POST['_csrf'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''));
         if ($provided === '' || !hash_equals((string) $_SESSION['csrf_token'], $provided)) {
             http_response_code(419);
@@ -105,7 +119,7 @@ function panel_security_bootstrap(array $config): void
     }
 
     if (!$csrfExempt) {
-        ob_start('panel_inject_csrf_fields');
+        ob_start('panel_enhance_html');
     }
 }
 
@@ -158,6 +172,30 @@ function panel_is_https(array $config = []): bool
     return false;
 }
 
+function panel_browser_post_is_same_origin(array $config = []): bool
+{
+    $fetchSite = strtolower((string) ($_SERVER['HTTP_SEC_FETCH_SITE'] ?? ''));
+    if (in_array($fetchSite, ['cross-site', 'none'], true)) {
+        return false;
+    }
+
+    $origin = (string) ($_SERVER['HTTP_ORIGIN'] ?? '');
+    if ($origin === '') {
+        return true;
+    }
+
+    $expected = panel_request_origin($config);
+    return hash_equals($expected, rtrim($origin, '/'));
+}
+
+function panel_request_origin(array $config = []): string
+{
+    $scheme = panel_is_https($config) ? 'https' : 'http';
+    $host = strtolower((string) ($_SERVER['HTTP_HOST'] ?? 'localhost'));
+    $host = preg_replace('/[^a-z0-9.:\[\]-]/', '', $host) ?: 'localhost';
+    return $scheme . '://' . $host;
+}
+
 function panel_destroy_session(): void
 {
     $_SESSION = [];
@@ -199,6 +237,71 @@ function panel_inject_csrf_fields(string $html): string
         static fn(array $match): string => $match[0] . $field,
         $html
     );
+}
+
+function panel_enhance_html(string $html): string
+{
+    $html = panel_inject_csrf_fields($html);
+    if (stripos($html, '</body>') === false || stripos($html, '<html') === false) {
+        return $html;
+    }
+
+    $script = <<<'HTML'
+<script>
+(() => {
+  const root = document.documentElement;
+  root.classList.add('sdk-ui-v3');
+
+  window.toggleSidebar = window.toggleSidebar || function () {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('overlay');
+    const icon = document.getElementById('menuIcon');
+    sidebar?.classList.toggle('active');
+    overlay?.classList.toggle('active');
+    if (icon) {
+      icon.classList.toggle('fa-bars');
+      icon.classList.toggle('fa-times');
+    }
+  };
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    document.getElementById('sidebar')?.classList.remove('active');
+    document.getElementById('overlay')?.classList.remove('active');
+  });
+
+  document.addEventListener('submit', (event) => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || form.dataset.noLoading === 'true') return;
+    if (typeof form.checkValidity === 'function' && !form.checkValidity()) return;
+    form.classList.add('is-loading');
+    const button = form.querySelector('button[type="submit"], input[type="submit"]');
+    if (button && !button.dataset.originalText) {
+      button.dataset.originalText = button.value || button.textContent || '';
+      if ('value' in button && button.tagName === 'INPUT') {
+        button.value = 'Working...';
+      } else {
+        button.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span>Working...</span>';
+      }
+    }
+  }, {capture:true});
+
+  document.addEventListener('click', async (event) => {
+    const copyButton = event.target.closest('[data-copy]');
+    if (!copyButton || !navigator.clipboard) return;
+    event.preventDefault();
+    const value = copyButton.getAttribute('data-copy') || '';
+    try {
+      await navigator.clipboard.writeText(value);
+      copyButton.classList.add('copied');
+      setTimeout(() => copyButton.classList.remove('copied'), 1100);
+    } catch (_) {}
+  });
+})();
+</script>
+HTML;
+
+    return str_ireplace('</body>', $script . "\n</body>", $html);
 }
 
 function panel_client_ip(): string
