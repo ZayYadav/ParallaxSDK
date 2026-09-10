@@ -356,7 +356,7 @@ if ($apiVersion === 3 && $signingMode !== 'ANY') {
 }
 
 $deviceCheck = $conn->prepare(
-    'SELECT blocked, license_key, client_key_fingerprint
+    'SELECT blocked, license_key, package_name, client_key_fingerprint
      FROM devices WHERE license_key = ? AND device_id = ? LIMIT 1 FOR UPDATE'
 );
 $deviceCheck->bind_param('ss', $licenseKey, $deviceId);
@@ -369,12 +369,23 @@ if ((int) ($existingDevice['blocked'] ?? 0) === 1) {
     $send(['status' => 'fail', 'server_mode' => 'online', 'message' => 'DEVICE_BLOCKED'], 403);
 }
 $deviceMode = strtoupper((string) ($license['device_mode'] ?? 'SINGLE'));
+$deviceKeyRebound = false;
 if ($apiVersion === 3 && $deviceMode !== 'DISABLED' && is_array($deviceProof)) {
     $boundFingerprint = strtolower(trim((string) ($existingDevice['client_key_fingerprint'] ?? '')));
     if ($boundFingerprint !== '' && !hash_equals($boundFingerprint, $deviceProof['fingerprint'])) {
-        $conn->rollback();
-        panel_audit($conn, 'activation', 'device_key_mismatch', $deviceId);
-        $send(['status' => 'fail', 'server_mode' => 'online', 'message' => 'DEVICE_KEY_MISMATCH'], 403);
+        // AndroidKeyStore app keys are removed when the app is uninstalled. A
+        // reinstall on the same stable device therefore presents a new proof
+        // key. License, package policy, signing policy and device_id have
+        // already been validated above, so allow only a same-package rebind.
+        $boundPackage = trim((string) ($existingDevice['package_name'] ?? ''));
+        if ($boundPackage !== '' && !hash_equals($boundPackage, $packageName)) {
+            $conn->rollback();
+            panel_audit($conn, 'activation', 'device_key_rebind_package_mismatch', $deviceId, [
+                'package' => $packageName,
+            ]);
+            $send(['status' => 'fail', 'server_mode' => 'online', 'message' => 'DEVICE_KEY_MISMATCH'], 403);
+        }
+        $deviceKeyRebound = true;
     }
 }
 
@@ -411,8 +422,8 @@ $deviceStmt = $conn->prepare(
      ON DUPLICATE KEY UPDATE
         package_name = VALUES(package_name), app_name = VALUES(app_name),
         ip_address = VALUES(ip_address), status = 'connected',
-        client_public_key = COALESCE(client_public_key, VALUES(client_public_key)),
-        client_key_fingerprint = COALESCE(client_key_fingerprint, VALUES(client_key_fingerprint)),
+        client_public_key = COALESCE(VALUES(client_public_key), client_public_key),
+        client_key_fingerprint = COALESCE(VALUES(client_key_fingerprint), client_key_fingerprint),
         last_seen = UTC_TIMESTAMP()"
 );
 $deviceStmt->bind_param(
@@ -427,6 +438,13 @@ $deviceStmt->bind_param(
 );
 $deviceStmt->execute();
 $deviceStmt->close();
+if ($deviceKeyRebound) {
+    panel_audit($conn, 'activation', 'device_key_rebound', $deviceId, [
+        'license_id' => $licenseId,
+        'package' => $packageName,
+        'reason' => 'same_device_reinstall',
+    ]);
+}
 $sessionId = null;
 $sessionToken = null;
 $leaseExpiresAt = null;
