@@ -1,7 +1,8 @@
 <?php
 declare(strict_types=1);
 
-// Copy this file to /home/ACCOUNT/private/sdk-panel-config.php (recommended)
+// Prefer .env for new installs. This PHP config remains supported for existing
+// servers: copy it to /home/ACCOUNT/private/sdk-panel-config.php (recommended)
 // or to config.local.php beside conn.php. Never commit or share the real file.
 return [
     'DB_HOST' => 'localhost',
@@ -44,6 +45,7 @@ return [
     'API_REPLAY_WINDOW_SECONDS' => 120,
     'SESSION_IDLE_SECONDS' => 1800,
     'SESSION_ABSOLUTE_SECONDS' => 28800,
+    'MAX_POST_BYTES' => 65536,
 
     // Empty means licenses control their own package_name/package_lock.
     'ALLOWED_PACKAGES' => [],
