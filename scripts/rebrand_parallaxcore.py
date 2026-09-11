@@ -12,6 +12,8 @@ AIDL_ROOT = ROOT / "src/main/aidl"
 
 # SDK-owned namespaces. Android platform mirror namespaces (android.app,
 # android.os, com.android, etc.) are intentionally not touched.
+# top.niunaijun.blackreflection is NOT owned by this SDK; it comes from the
+# external BlackReflection dependency and must retain its published namespace.
 PACKAGE_MAP = [
     ("top.niunaijun.blackbox", "com.Parallax.SDK.core"),
     ("top.niunaijun.jnihook", "com.Parallax.SDK.nativebridge"),
@@ -73,7 +75,6 @@ def clean_type_body(name: str) -> str:
 def parallax_type_name(name: str) -> str:
     if name.startswith("Parallax") or name.startswith("IParallax"):
         return name
-    # Preserve Java interface convention while branding the implementation name.
     if len(name) > 1 and name.startswith("I") and name[1].isupper():
         body = clean_type_body(name[1:])
         return "IParallax" + body
@@ -110,7 +111,6 @@ def replace_identifier(text: str, old: str, new: str) -> str:
 
 
 def jni_mangle_package(pkg: str) -> str:
-    # JNI underscore escaping: '_' -> '_1', then package separators -> '_'.
     return "_".join(part.replace("_", "_1") for part in pkg.split("."))
 
 
@@ -119,8 +119,6 @@ metadata: dict[Path, tuple[str, str]] = {}
 class_map: dict[str, str] = {}
 used_new: dict[str, str] = {}
 
-# Build one deterministic FQCN map first so Java/Kotlin/AIDL references can be
-# rewritten consistently before any file is moved.
 for path in files:
     text = read_text(path)
     m = PACKAGE_RE.search(text)
@@ -132,8 +130,6 @@ for path in files:
     if stem in {"package-info", "module-info"} or not should_rename_type(pkg):
         continue
     if not primary_decl_matches(text, stem, path.suffix):
-        # Kotlin source files containing only top-level functions keep their JVM
-        # file facade name; their package is still migrated.
         continue
     old_fqcn = f"{pkg}.{stem}"
     new_pkg = map_package(pkg)
@@ -178,23 +174,19 @@ def source_simple_replacements(text: str, current_pkg: str, own_fqcn: str | None
 
 
 def rewrite_common(text: str) -> str:
-    # Fully-qualified type references first.
     for old_fqcn in all_old_fqcns:
         text = text.replace(old_fqcn, class_map[old_fqcn])
         text = text.replace(old_fqcn.replace(".", "/"), class_map[old_fqcn].replace(".", "/"))
         text = text.replace(jni_mangle_package(old_fqcn), jni_mangle_package(class_map[old_fqcn]))
 
-    # Then namespace prefixes, including JNI and slash-form reflection strings.
     for old_pkg, new_pkg in package_pairs:
         text = text.replace(old_pkg, new_pkg)
         text = text.replace(old_pkg.replace(".", "/"), new_pkg.replace(".", "/"))
         text = text.replace(jni_mangle_package(old_pkg), jni_mangle_package(new_pkg))
-        # Some hand-written native symbols used naive dot->underscore names.
         text = text.replace(old_pkg.replace(".", "_"), new_pkg.replace(".", "_"))
     return text
 
 
-# Rewrite source with import/same-package-aware simple-name changes.
 for path in files:
     if not path.exists():
         continue
@@ -210,9 +202,6 @@ for path in files:
     text = rewrite_common(text)
     path.write_text(text, encoding="utf-8")
 
-# Rewrite every other textual project/build/native resource. In non-language
-# files it is safe and necessary to update simple class strings used by JNI,
-# reflection, manifests and ProGuard rules.
 simple_global: dict[str, str] = {}
 for old_fqcn, new_fqcn in class_map.items():
     old_simple = old_fqcn.rsplit(".", 1)[1]
@@ -234,15 +223,12 @@ for path in ROOT.rglob("*"):
             text = replace_identifier(text, old_simple, new_simple)
     path.write_text(text, encoding="utf-8")
 
-# Gradle namespace is SDK-owned and should expose the Parallax package.
 gradle = ROOT / "build.gradle"
 if gradle.exists():
     text = read_text(gradle)
     text = re.sub(r'namespace\s+["\'][^"\']+["\']', 'namespace "com.Parallax.SDK"', text, count=1)
     gradle.write_text(text, encoding="utf-8")
 
-# Move Java/Kotlin/AIDL files so filesystem paths match the new package and
-# primary type names. Platform mirror packages not covered by PACKAGE_MAP stay.
 for old_path in files:
     if not old_path.exists():
         continue
@@ -263,8 +249,6 @@ for old_path in files:
         raise SystemExit(f"Target already exists: {new_path}")
     run("git", "mv", str(old_path), str(new_path))
 
-# Final content pass after moves catches relative class names in manifests and
-# native registration tables that were not source imports.
 for path in ROOT.rglob("*"):
     if not path.is_file() or path.suffix.lower() not in TEXT_EXTS:
         continue
@@ -275,8 +259,14 @@ for path in ROOT.rglob("*"):
     text = rewrite_common(text)
     path.write_text(text, encoding="utf-8")
 
-# Strong audit: old SDK-owned namespaces/folders must be gone from the module.
-old_tokens = ["top.niunaijun", "net_62v", "android.MetaCore"]
+# Only SDK-owned legacy namespaces are forbidden. The published third-party
+# BlackReflection dependency legitimately uses top.niunaijun.blackreflection.
+old_tokens = [
+    "top.niunaijun.blackbox",
+    "top.niunaijun.jnihook",
+    "net_62v",
+    "android.MetaCore",
+]
 bad_tokens: list[str] = []
 for path in ROOT.rglob("*"):
     if not path.is_file() or path.suffix.lower() not in TEXT_EXTS:
@@ -308,7 +298,6 @@ if bad_tokens:
     print("\n".join(bad_tokens[:200]))
     raise SystemExit(1)
 
-# Audit primary custom types: every SDK-owned implementation type is branded.
 bad_types: list[str] = []
 for path in source_files():
     text = read_text(path)
@@ -332,8 +321,9 @@ report = ROOT / "REBRAND_REPORT.md"
 lines = [
     "# ParallaxCore rebrand report",
     "",
-    "SDK-owned implementation namespaces were migrated to Parallax namespaces.",
-    "Android/framework mirror namespaces required for platform compatibility were retained.",
+    "SDK-owned implementation namespaces and primary classes were migrated to Parallax namespaces/names.",
+    "Android/framework mirror identities required for platform compatibility were retained.",
+    "The external BlackReflection dependency keeps its published top.niunaijun.blackreflection namespace.",
     "",
     f"Renamed primary SDK-owned types: **{len(class_map)}**",
     "",
