@@ -62,10 +62,19 @@ jobs:
           grep -F 'public static void activate' ParallaxCore/src/main/java/com/Parallax/SDK/ParallaxSDK.java
           grep -F 'namespace "com.Parallax.SDK"' ParallaxCore/build.gradle
           ! grep -R -n -E 'top\.niunaijun\.blackbox|top\.niunaijun\.jnihook|net_62v|android\.MetaCore' ParallaxCore --include='*.java' --include='*.kt' --include='*.aidl' --include='*.xml' --include='*.gradle' --include='*.pro'
-          test ! -d ParallaxCore/src/main/java/top/niunaijun
-          test ! -d ParallaxCore/src/main/java/net_62v
-          test ! -d ParallaxCore/src/main/java/android/MetaCore
-          test ! -d ParallaxCore/src/main/java/black
+          for legacy_dir in \
+            ParallaxCore/src/main/java/top/niunaijun \
+            ParallaxCore/src/main/java/net_62v \
+            ParallaxCore/src/main/java/android/MetaCore \
+            ParallaxCore/src/main/java/black \
+            ParallaxCore/src/main/aidl/top/niunaijun \
+            ParallaxCore/src/main/aidl/android/MetaCore; do
+            if [ -d "$legacy_dir" ] && find "$legacy_dir" -type f -print -quit | grep -q .; then
+              echo "Legacy source files still present under $legacy_dir"
+              find "$legacy_dir" -type f | head -50
+              exit 1
+            fi
+          done
 
       - name: Build ParallaxCore release AAR
         shell: bash
