@@ -10,10 +10,10 @@ ROOT = Path("ParallaxCore")
 JAVA_ROOT = ROOT / "src/main/java"
 AIDL_ROOT = ROOT / "src/main/aidl"
 
-# SDK-owned namespaces. Android platform mirror namespaces (android.app,
-# android.os, com.android, etc.) are intentionally not touched.
-# top.niunaijun.blackreflection is NOT owned by this SDK; it comes from the
-# external BlackReflection dependency and must retain its published namespace.
+# SDK-owned namespaces. Android platform/Binder mirror identities such as
+# android.app/android.os/com.android are intentionally preserved.
+# top.niunaijun.blackreflection is an external published dependency and is
+# explicitly NOT part of this map.
 PACKAGE_MAP = [
     ("top.niunaijun.blackbox", "com.Parallax.SDK.core"),
     ("top.niunaijun.jnihook", "com.Parallax.SDK.nativebridge"),
@@ -76,8 +76,7 @@ def parallax_type_name(name: str) -> str:
     if name.startswith("Parallax") or name.startswith("IParallax"):
         return name
     if len(name) > 1 and name.startswith("I") and name[1].isupper():
-        body = clean_type_body(name[1:])
-        return "IParallax" + body
+        return "IParallax" + clean_type_body(name[1:])
     return "Parallax" + clean_type_body(name)
 
 
@@ -93,7 +92,7 @@ def primary_decl_matches(text: str, stem: str, suffix: str) -> bool:
 
 
 def source_files() -> list[Path]:
-    out = []
+    out: list[Path] = []
     for root in (JAVA_ROOT, AIDL_ROOT):
         if root.exists():
             out.extend(p for p in root.rglob("*") if p.is_file() and p.suffix in SOURCE_EXTS)
@@ -110,9 +109,37 @@ def replace_identifier(text: str, old: str, new: str) -> str:
     return re.sub(rf"(?<![A-Za-z0-9_$]){re.escape(old)}(?![A-Za-z0-9_$])", new, text)
 
 
+def replace_package_prefix(text: str, old: str, new: str) -> str:
+    """Replace a dot-form package only when it begins a qualified identifier.
+
+    The preceding-dot exclusion is important for the root package `black`: it
+    prevents touching the external `top.niunaijun.blackreflection` namespace.
+    """
+    pattern = rf"(?<![A-Za-z0-9_$\.]){re.escape(old)}(?=\.|\b)"
+    return re.sub(pattern, new, text)
+
+
+def replace_slash_prefix(text: str, old: str, new: str) -> str:
+    old_slash = old.replace(".", "/")
+    new_slash = new.replace(".", "/")
+    pattern = rf"(?<![A-Za-z0-9_$\/]){re.escape(old_slash)}(?=/|\b)"
+    return re.sub(pattern, new_slash, text)
+
+
 def jni_mangle_package(pkg: str) -> str:
     return "_".join(part.replace("_", "_1") for part in pkg.split("."))
 
+
+def replace_jni_prefix(text: str, old: str, new: str) -> str:
+    old_jni = jni_mangle_package(old)
+    new_jni = jni_mangle_package(new)
+    return re.sub(rf"(?<![A-Za-z0-9_$]){re.escape(old_jni)}(?=_|\b)", new_jni, text)
+
+
+# Old editor backup sources are not compiled and only preserve obsolete folder
+# names. Remove them rather than carrying stale duplicate code into the SDK.
+for backup in JAVA_ROOT.rglob("*.bak") if JAVA_ROOT.exists() else []:
+    backup.unlink()
 
 files = source_files()
 metadata: dict[Path, tuple[str, str]] = {}
@@ -146,24 +173,19 @@ for path in files:
 by_package: dict[str, dict[str, str]] = defaultdict(dict)
 for old_fqcn, new_fqcn in class_map.items():
     old_pkg, old_simple = old_fqcn.rsplit(".", 1)
-    new_simple = new_fqcn.rsplit(".", 1)[1]
-    by_package[old_pkg][old_simple] = new_simple
+    by_package[old_pkg][old_simple] = new_fqcn.rsplit(".", 1)[1]
 
 all_old_fqcns = sorted(class_map, key=len, reverse=True)
 package_pairs = sorted(PACKAGE_MAP, key=lambda x: len(x[0]), reverse=True)
 
 
 def source_simple_replacements(text: str, current_pkg: str, own_fqcn: str | None) -> dict[str, str]:
-    replacements: dict[str, str] = {}
-    replacements.update(by_package.get(current_pkg, {}))
+    replacements: dict[str, str] = dict(by_package.get(current_pkg, {}))
     if own_fqcn and own_fqcn in class_map:
-        old_simple = own_fqcn.rsplit(".", 1)[1]
-        replacements[old_simple] = class_map[own_fqcn].rsplit(".", 1)[1]
-
+        replacements[own_fqcn.rsplit(".", 1)[1]] = class_map[own_fqcn].rsplit(".", 1)[1]
     for match in IMPORT_RE.finditer(text):
         target = match.group(1)
-        wildcard = bool(match.group(2))
-        if wildcard:
+        if match.group(2):
             replacements.update(by_package.get(target, {}))
             continue
         for old_fqcn in all_old_fqcns:
@@ -174,16 +196,20 @@ def source_simple_replacements(text: str, current_pkg: str, own_fqcn: str | None
 
 
 def rewrite_common(text: str) -> str:
+    # Concrete classes first so reflection strings/JNI registration entries are
+    # updated before their package prefix is moved.
     for old_fqcn in all_old_fqcns:
-        text = text.replace(old_fqcn, class_map[old_fqcn])
-        text = text.replace(old_fqcn.replace(".", "/"), class_map[old_fqcn].replace(".", "/"))
-        text = text.replace(jni_mangle_package(old_fqcn), jni_mangle_package(class_map[old_fqcn]))
+        new_fqcn = class_map[old_fqcn]
+        text = replace_package_prefix(text, old_fqcn, new_fqcn)
+        text = replace_slash_prefix(text, old_fqcn, new_fqcn)
+        text = replace_jni_prefix(text, old_fqcn, new_fqcn)
 
     for old_pkg, new_pkg in package_pairs:
-        text = text.replace(old_pkg, new_pkg)
-        text = text.replace(old_pkg.replace(".", "/"), new_pkg.replace(".", "/"))
-        text = text.replace(jni_mangle_package(old_pkg), jni_mangle_package(new_pkg))
-        text = text.replace(old_pkg.replace(".", "_"), new_pkg.replace(".", "_"))
+        text = replace_package_prefix(text, old_pkg, new_pkg)
+        text = replace_slash_prefix(text, old_pkg, new_pkg)
+        # Do not apply the extremely generic `black_` JNI prefix globally.
+        if old_pkg != "black":
+            text = replace_jni_prefix(text, old_pkg, new_pkg)
     return text
 
 
@@ -196,11 +222,12 @@ for path in files:
         continue
     old_pkg, stem = meta
     own_fqcn = f"{old_pkg}.{stem}"
-    replacements = source_simple_replacements(text, old_pkg, own_fqcn)
-    for old_simple, new_simple in sorted(replacements.items(), key=lambda x: len(x[0]), reverse=True):
+    for old_simple, new_simple in sorted(
+        source_simple_replacements(text, old_pkg, own_fqcn).items(),
+        key=lambda x: len(x[0]), reverse=True
+    ):
         text = replace_identifier(text, old_simple, new_simple)
-    text = rewrite_common(text)
-    path.write_text(text, encoding="utf-8")
+    path.write_text(rewrite_common(text), encoding="utf-8")
 
 simple_global: dict[str, str] = {}
 for old_fqcn, new_fqcn in class_map.items():
@@ -229,6 +256,7 @@ if gradle.exists():
     text = re.sub(r'namespace\s+["\'][^"\']+["\']', 'namespace "com.Parallax.SDK"', text, count=1)
     gradle.write_text(text, encoding="utf-8")
 
+# Move files according to their rewritten package and primary class names.
 for old_path in files:
     if not old_path.exists():
         continue
@@ -249,6 +277,7 @@ for old_path in files:
         raise SystemExit(f"Target already exists: {new_path}")
     run("git", "mv", str(old_path), str(new_path))
 
+# Catch manifests/native tables/ProGuard strings after the physical moves.
 for path in ROOT.rglob("*"):
     if not path.is_file() or path.suffix.lower() not in TEXT_EXTS:
         continue
@@ -256,11 +285,8 @@ for path in ROOT.rglob("*"):
         text = read_text(path)
     except UnicodeDecodeError:
         continue
-    text = rewrite_common(text)
-    path.write_text(text, encoding="utf-8")
+    path.write_text(rewrite_common(text), encoding="utf-8")
 
-# Only SDK-owned legacy namespaces are forbidden. The published third-party
-# BlackReflection dependency legitimately uses top.niunaijun.blackreflection.
 old_tokens = [
     "top.niunaijun.blackbox",
     "top.niunaijun.jnihook",
@@ -280,6 +306,9 @@ for path in ROOT.rglob("*"):
             bad_tokens.append(f"{path}: {token}")
     if re.search(r"(?m)^\s*(?:package|import)\s+black(?:\.|;)", text):
         bad_tokens.append(f"{path}: black package/import")
+    # Guard the external dependency from accidental rebranding.
+    if "com.Parallax.SDK.mirrorreflection" in text or "top.niunaijun.com.Parallax" in text:
+        bad_tokens.append(f"{path}: BlackReflection namespace was corrupted")
 
 old_dirs = [
     JAVA_ROOT / "top/niunaijun",
@@ -305,12 +334,17 @@ for path in source_files():
     if not m:
         continue
     pkg = m.group(1)
-    if not pkg.startswith(("com.Parallax.SDK.core", "com.Parallax.SDK.nativebridge", "com.Parallax.SDK.internal", "com.Parallax.SDK.runtime")):
+    if not pkg.startswith((
+        "com.Parallax.SDK.core",
+        "com.Parallax.SDK.nativebridge",
+        "com.Parallax.SDK.internal",
+        "com.Parallax.SDK.runtime",
+    )):
         continue
     stem = path.stem
-    if stem in {"package-info", "module-info"}:
-        continue
-    if not (stem.startswith("Parallax") or stem.startswith("IParallax")):
+    if stem not in {"package-info", "module-info"} and not (
+        stem.startswith("Parallax") or stem.startswith("IParallax")
+    ):
         bad_types.append(str(path))
 if bad_types:
     print("Unbranded custom primary types remain:")
