@@ -250,14 +250,48 @@ function panel_enhance_html(string $html): string
     if (stripos($html, 'name="csrf-token"') === false && stripos($html, '</head>') !== false) {
         $runtimeCss = <<<'CSS'
 <style id="sdk-panel-runtime-polish">
-html,body{min-height:100%;overflow-x:hidden!important;overflow-y:auto!important}
+html,body{width:100%;min-height:100%;overflow-x:hidden!important;overflow-y:auto!important;overscroll-behavior-y:none}
+body{min-width:0;touch-action:manipulation}
+body.sdk-sidebar-open{overflow:hidden!important}
+img,svg,canvas,video{max-width:100%;height:auto}
 .page,.login-wrap,.auth-wrap{min-height:100svh!important}
 .login-card,.register-card,.auth-card{max-width:min(100%,460px)}
+.main,main,.page,.wrap{min-width:0}
+#sidebar{max-width:min(88vw,292px)!important}
+#sidebar.active{visibility:visible}
+#overlay{touch-action:none}
+.table-responsive,.table-wrap,.table-card{max-width:100%;overflow:auto!important;-webkit-overflow-scrolling:touch}
+table,.table{max-width:100%}
+code,pre,.lic-key,.key-text,.app-name-value,.device-id,.mono,[data-copy]{overflow-wrap:anywhere;word-break:break-word}
+.modal-dialog{max-width:min(96vw,720px);margin:.75rem auto}
+.modal-content,.modal-box,.popup-card,.success-card,.usage-modal-content,.delete-modal-content{max-height:calc(100svh - 24px);overflow:hidden}
+.modal-body,.modal-box-body,.usage-list,.device-list{overflow:auto;-webkit-overflow-scrolling:touch}
+.overlay-modal,.success-overlay,.usage-modal,.delete-modal{padding:12px!important;align-items:center!important;justify-content:center!important}
+.overlay-modal.active,.success-overlay.active,.usage-modal.active,.delete-modal.active{display:flex!important}
+.overlay-modal .modal-box,.success-overlay .success-card,.usage-modal .usage-modal-content,.delete-modal .delete-modal-content{width:min(100%,560px)!important;max-width:100%!important;overflow:auto}
+.actions,.action-row,.button-row,.modal-footer{gap:10px;flex-wrap:wrap}
+.form-control,.form-select,input,select,textarea,button{font-size:16px}
+.spinner-border{flex:0 0 auto}
 @media(max-width:680px){
   html,body{height:auto!important}
-  .page,.login-wrap,.auth-wrap{min-height:100svh!important;overflow-y:visible!important;justify-content:flex-start!important}
-  .login-card,.register-card,.auth-card{width:min(100%,420px)!important;margin:16px auto!important}
+  body{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
+  .page,.login-wrap,.auth-wrap{min-height:100svh!important;overflow-y:visible!important;justify-content:flex-start!important;padding:18px 12px max(22px,env(safe-area-inset-bottom))!important}
+  .login-card,.register-card,.auth-card{width:min(100%,420px)!important;margin:12px auto!important}
+  .brand-title,.page-heading,.page-title{font-size:clamp(1.35rem,7vw,1.85rem)!important;line-height:1.15!important}
+  .header-title{max-width:58vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .user-badge span{display:none}
+  table,.table{min-width:680px}
+  .modal-dialog{width:calc(100vw - 20px);margin:10px auto}
+  .modal-content,.modal-box,.popup-card,.success-card,.usage-modal-content,.delete-modal-content{max-height:calc(100svh - 20px)}
+  .modal-footer>*{flex:1 1 auto}
+  .actions .btn,.action-row .btn,.button-row .btn,.actions button,.action-row button,.button-row button{width:100%}
   .watermark{position:static!important;margin:14px 0!important}
+}
+@media(min-width:1180px){
+  body.sdk-sidebar-open{overflow-y:auto!important}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}
 }
 </style>
 CSS;
@@ -294,23 +328,65 @@ CSS;
     window.fetch.__sdkPanelWrapped = true;
   }
 
-  window.toggleSidebar = window.toggleSidebar || function () {
+  const setSidebarOpen = (open) => {
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('overlay');
     const icon = document.getElementById('menuIcon');
-    sidebar?.classList.toggle('active');
-    overlay?.classList.toggle('active');
+    const next = Boolean(open);
+    sidebar?.classList.toggle('active', next);
+    overlay?.classList.toggle('active', next);
+    const overlayMode = !window.matchMedia || window.matchMedia('(max-width: 1179px)').matches;
+    document.body.classList.toggle('sdk-sidebar-open', next && overlayMode);
     if (icon) {
-      icon.classList.toggle('fa-bars');
-      icon.classList.toggle('fa-times');
+      icon.classList.toggle('fa-bars', !next);
+      icon.classList.toggle('fa-times', next);
+      icon.style.transform = next ? 'rotate(90deg)' : '';
     }
+  };
+
+  window.toggleSidebar = function () {
+    const sidebar = document.getElementById('sidebar');
+    setSidebarOpen(!sidebar?.classList.contains('active'));
+  };
+  window.closeSidebar = function () {
+    setSidebarOpen(false);
   };
 
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
-    document.getElementById('sidebar')?.classList.remove('active');
-    document.getElementById('overlay')?.classList.remove('active');
+    setSidebarOpen(false);
   });
+
+  document.addEventListener('click', (event) => {
+    if (!(event.target instanceof Element)) return;
+    if (event.target.id === 'overlay') setSidebarOpen(false);
+    if (event.target.closest('#sidebar a')) setSidebarOpen(false);
+  });
+
+  window.addEventListener('resize', () => {
+    const sidebar = document.getElementById('sidebar');
+    const overlayMode = !window.matchMedia || window.matchMedia('(max-width: 1179px)').matches;
+    document.body.classList.toggle(
+      'sdk-sidebar-open',
+      Boolean(sidebar?.classList.contains('active')) && overlayMode
+    );
+  });
+
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('overlay');
+  if ((sidebar || overlay) && 'MutationObserver' in window) {
+    const syncSidebar = () => {
+      const overlayMode = !window.matchMedia || window.matchMedia('(max-width: 1179px)').matches;
+      document.body.classList.toggle(
+        'sdk-sidebar-open',
+        Boolean(sidebar?.classList.contains('active')) && overlayMode
+      );
+    };
+    const observer = new MutationObserver(syncSidebar);
+    if (sidebar) observer.observe(sidebar, {attributes: true, attributeFilter: ['class']});
+    if (overlay) observer.observe(overlay, {attributes: true, attributeFilter: ['class']});
+    syncSidebar();
+  }
 
   document.addEventListener('submit', (event) => {
     if (event.defaultPrevented) return;
