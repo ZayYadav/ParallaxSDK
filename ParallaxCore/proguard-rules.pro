@@ -20,6 +20,9 @@
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
 
+# Stable public Parallax SDK facade used by consumer applications.
+-keep class com.Parallax.SDK.ParallaxSDK { public *; }
+
 -keep class top.niunaijun.blackbox.core.system.api.MetaActivationManager { *; }
 -keep class top.niunaijun.blackbox.** {*; }
 -keep class top.niunaijun.jnihook.** {*; }
