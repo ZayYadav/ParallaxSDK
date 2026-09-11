@@ -1,4 +1,0 @@
-include ':TeamDarkCore'
-project(':TeamDarkCore').projectDir = file('RIYAZ-VIP')
-
-rootProject.name = "TeamDark SDK"

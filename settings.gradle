@@ -1,0 +1,2 @@
+include ':ParallaxCore'
+rootProject.name = "ParallaxCore"

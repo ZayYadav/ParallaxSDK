@@ -1,9 +1,7 @@
-# Private SDK panel configuration and generated server keys
-panels/sdk-panel/config.local.php
-panels/sdk-panel/private/
-panels/sdk-panel/*-private.pem
-
-# Local Android/IDE state
-**/local.properties
-**/.gradle/
-**/build/
+.gradle/
+.kotlin/
+.cxx/
+build/
+local.properties
+RIYAZ-VIP/build/
+RIYAZ-VIP/.cxx/

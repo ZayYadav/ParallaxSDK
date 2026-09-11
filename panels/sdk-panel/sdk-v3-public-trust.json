@@ -1,8 +1,0 @@
-{
-  "contract_version": 3,
-  "key_id": "parallax-2026-09",
-  "ecdh_public_key_b64": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE8FaLLJyEs4s6PwotLl/4QPo4u/e7BykS9N9x6Vmay/BDtVHgorPldGxAlET4rJXGuckHzWuZ6oBHpYIVY9nsvA==",
-  "signing_public_key_b64": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEn2ZzqmASjb6P3QoSqafVYzXCtuo54BkVitVeNEv9Pm6+vptUJy2YNAafjIVeSonL/VXOjNpxBjOWnd3zLnXLjw==",
-  "endpoint": "https://parallaxloadersdk.parallaxserver.online/connect.php",
-  "endpoint_sha256": "55b2fbc90180027df80f3a31e7bad41c2abc63a8b4998e416af11c02b729456a"
-}
