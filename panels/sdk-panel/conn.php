@@ -95,6 +95,7 @@ if (!function_exists('sdk_panel_schema_problems')) {
             'panel_settings' => ['setting_key', 'setting_value'],
             'server_settings' => ['setting_key', 'setting_value', 'broadcast_version'],
             'api_rate_limits' => ['bucket_hash', 'window_start', 'request_count'],
+            'api_nonces' => ['nonce_hash', 'device_id', 'expires_at'],
             'api_request_ids' => ['request_id_hash', 'device_id', 'expires_at'],
             'api_sessions' => ['session_id', 'token_hash', 'license_id', 'device_id', 'expires_at'],
             'api_audit_logs' => [
