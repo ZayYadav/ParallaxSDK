@@ -61,7 +61,11 @@ jobs:
           grep -F 'package com.Parallax.SDK;' ParallaxCore/src/main/java/com/Parallax/SDK/ParallaxSDK.java
           grep -F 'public static void activate' ParallaxCore/src/main/java/com/Parallax/SDK/ParallaxSDK.java
           grep -F 'namespace "com.Parallax.SDK"' ParallaxCore/build.gradle
-          ! grep -R -n -E 'top\.niunaijun|net_62v|android\.MetaCore' ParallaxCore --include='*.java' --include='*.kt' --include='*.aidl' --include='*.xml' --include='*.gradle' --include='*.pro'
+          ! grep -R -n -E 'top\.niunaijun\.blackbox|top\.niunaijun\.jnihook|net_62v|android\.MetaCore' ParallaxCore --include='*.java' --include='*.kt' --include='*.aidl' --include='*.xml' --include='*.gradle' --include='*.pro'
+          test ! -d ParallaxCore/src/main/java/top/niunaijun
+          test ! -d ParallaxCore/src/main/java/net_62v
+          test ! -d ParallaxCore/src/main/java/android/MetaCore
+          test ! -d ParallaxCore/src/main/java/black
 
       - name: Build ParallaxCore release AAR
         shell: bash
