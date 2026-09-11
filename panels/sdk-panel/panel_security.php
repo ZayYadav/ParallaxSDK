@@ -175,7 +175,7 @@ function panel_is_https(array $config = []): bool
 function panel_browser_post_is_same_origin(array $config = []): bool
 {
     $fetchSite = strtolower((string) ($_SERVER['HTTP_SEC_FETCH_SITE'] ?? ''));
-    if (in_array($fetchSite, ['cross-site', 'none'], true)) {
+    if ($fetchSite === 'cross-site') {
         return false;
     }
 
@@ -246,11 +246,53 @@ function panel_enhance_html(string $html): string
         return $html;
     }
 
+    $token = htmlspecialchars(panel_csrf_token(), ENT_QUOTES, 'UTF-8');
+    if (stripos($html, 'name="csrf-token"') === false && stripos($html, '</head>') !== false) {
+        $runtimeCss = <<<'CSS'
+<style id="sdk-panel-runtime-polish">
+html,body{min-height:100%;overflow-x:hidden!important;overflow-y:auto!important}
+.page,.login-wrap,.auth-wrap{min-height:100svh!important}
+.login-card,.register-card,.auth-card{max-width:min(100%,460px)}
+@media(max-width:680px){
+  html,body{height:auto!important}
+  .page,.login-wrap,.auth-wrap{min-height:100svh!important;overflow-y:visible!important;justify-content:flex-start!important}
+  .login-card,.register-card,.auth-card{width:min(100%,420px)!important;margin:16px auto!important}
+  .watermark{position:static!important;margin:14px 0!important}
+}
+</style>
+CSS;
+        $html = str_ireplace(
+            '</head>',
+            '<meta name="csrf-token" content="' . $token . '">' . "\n" . $runtimeCss . "\n</head>",
+            $html
+        );
+    }
+
     $script = <<<'HTML'
 <script>
 (() => {
   const root = document.documentElement;
   root.classList.add('sdk-ui-v3');
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+  if (csrfToken && window.fetch && !window.fetch.__sdkPanelWrapped) {
+    const nativeFetch = window.fetch.bind(window);
+    const sameOrigin = (url) => {
+      try { return new URL(url, window.location.href).origin === window.location.origin; }
+      catch (_) { return false; }
+    };
+    window.fetch = (input, init = {}) => {
+      const url = typeof input === 'string' ? input : input?.url;
+      const method = String(init.method || (input?.method ?? 'GET')).toUpperCase();
+      if (url && sameOrigin(url) && method !== 'GET' && method !== 'HEAD') {
+        const headers = new Headers(init.headers || input?.headers || {});
+        if (!headers.has('X-CSRF-Token')) headers.set('X-CSRF-Token', csrfToken);
+        init = {...init, headers};
+      }
+      return nativeFetch(input, init);
+    };
+    window.fetch.__sdkPanelWrapped = true;
+  }
 
   window.toggleSidebar = window.toggleSidebar || function () {
     const sidebar = document.getElementById('sidebar');
@@ -271,6 +313,7 @@ function panel_enhance_html(string $html): string
   });
 
   document.addEventListener('submit', (event) => {
+    if (event.defaultPrevented) return;
     const form = event.target;
     if (!(form instanceof HTMLFormElement) || form.dataset.noLoading === 'true') return;
     if (typeof form.checkValidity === 'function' && !form.checkValidity()) return;
@@ -284,9 +327,10 @@ function panel_enhance_html(string $html): string
         button.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span>Working...</span>';
       }
     }
-  }, {capture:true});
+  });
 
   document.addEventListener('click', async (event) => {
+    if (!(event.target instanceof Element)) return;
     const copyButton = event.target.closest('[data-copy]');
     if (!copyButton || !navigator.clipboard) return;
     event.preventDefault();
