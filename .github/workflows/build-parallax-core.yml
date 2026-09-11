@@ -3,10 +3,10 @@ name: Build ParallaxCore
 on:
   workflow_dispatch:
   push:
-    branches:
-      - ParallaxCore
+    branches: [ParallaxCore]
     paths:
       - 'ParallaxCore/**'
+      - 'scripts/rebrand_parallaxcore.py'
       - 'build.gradle'
       - 'settings.gradle'
       - 'gradle.properties'
@@ -15,20 +15,20 @@ on:
       - '.github/workflows/build-parallax-core.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  build:
-    name: ParallaxCore Release AAR
+  rebrand-build:
+    name: Rebrand and verify ParallaxCore
     runs-on: ubuntu-22.04
     timeout-minutes: 60
-
     steps:
       - name: Checkout ParallaxCore
         uses: actions/checkout@v4
         with:
           ref: ParallaxCore
           fetch-depth: 1
+          persist-credentials: true
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -45,59 +45,30 @@ jobs:
         run: |
           set -euo pipefail
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager \
-            "platform-tools" \
-            "platforms;android-36" \
-            "build-tools;36.0.0" \
-            "ndk;27.2.12479018"
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018"
 
-      - name: Configure project
+      - name: Rebrand all SDK-owned packages and primary types
         shell: bash
         run: |
           set -euo pipefail
-          chmod +x ./gradlew
-          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
-          test -f ParallaxCore/build.gradle
-          grep -F "include ':ParallaxCore'" settings.gradle >/dev/null
-          grep -F 'rootProject.name = "ParallaxCore"' settings.gradle >/dev/null
+          python3 scripts/rebrand_parallaxcore.py
 
-      - name: Verify ParallaxCore branding
+      - name: Verify public Parallax API
         shell: bash
         run: |
           set -euo pipefail
-          python3 <<'PY'
-          from pathlib import Path
-          import re
-
-          forbidden = re.compile(r'TeamDark|TEAM DARK|TEAMDARK|teamdark|team_dark')
-          url_re = re.compile(r'https?://[^\s"\'<>]+')
-          bad = []
-
-          for p in Path('ParallaxCore').rglob('*'):
-              if not p.is_file() or any(part in {'.gradle', 'build'} for part in p.parts):
-                  continue
-              try:
-                  text = p.read_text(encoding='utf-8')
-              except Exception:
-                  continue
-              # Existing backend/trust URLs are compatibility contracts and may retain
-              # their deployed hostnames. Product/module/source branding may not.
-              sanitized = url_re.sub('<COMPAT_URL>', text)
-              if forbidden.search(sanitized):
-                  bad.append(str(p))
-
-          if bad:
-              print('Old TeamDark branding remains outside compatibility URLs:')
-              print('\n'.join(bad[:100]))
-              raise SystemExit(1)
-
-          print('ParallaxCore branding audit passed')
-          PY
+          test -f ParallaxCore/src/main/java/com/Parallax/SDK/ParallaxSDK.java
+          grep -F 'package com.Parallax.SDK;' ParallaxCore/src/main/java/com/Parallax/SDK/ParallaxSDK.java
+          grep -F 'public static void activate' ParallaxCore/src/main/java/com/Parallax/SDK/ParallaxSDK.java
+          grep -F 'namespace "com.Parallax.SDK"' ParallaxCore/build.gradle
+          ! grep -R -n -E 'top\.niunaijun|net_62v|android\.MetaCore' ParallaxCore --include='*.java' --include='*.kt' --include='*.aidl' --include='*.xml' --include='*.gradle' --include='*.pro'
 
       - name: Build ParallaxCore release AAR
         shell: bash
         run: |
           set -euo pipefail
+          chmod +x ./gradlew
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
           ./gradlew :ParallaxCore:assembleRelease --no-daemon --stacktrace
 
       - name: Verify release AAR
@@ -108,26 +79,18 @@ jobs:
           test -s "$AAR"
           unzip -tq "$AAR"
           unzip -Z1 "$AAR" | grep -qx 'classes.jar'
+          unzip -Z1 "$AAR" | grep -E '^jni/[^/]+/libParallaxCore\.so$'
 
-          mapfile -t CORE_LIBS < <(unzip -Z1 "$AAR" | grep -E '^jni/[^/]+/libParallaxCore\.so$' | sort)
-          printf 'ParallaxCore native libraries:\n'
-          printf '  %s\n' "${CORE_LIBS[@]}"
-          test "${#CORE_LIBS[@]}" -ge 1
-
-          if unzip -Z1 "$AAR" | grep -Ei 'libTeamDarkCore\.so|TeamDarkCore|TeamDarkSDK'; then
-            echo 'Legacy TeamDark native/module branding found in AAR'
-            exit 1
+      - name: Commit verified rebrand
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No migration changes to commit'
+            exit 0
           fi
-
-          cp "$AAR" ParallaxCore-release.aar
-          sha256sum ParallaxCore-release.aar | tee ParallaxCore-release.aar.sha256
-
-      - name: Upload ParallaxCore AAR
-        uses: actions/upload-artifact@v4
-        with:
-          name: ParallaxCore-release-aar
-          path: |
-            ParallaxCore-release.aar
-            ParallaxCore-release.aar.sha256
-          if-no-files-found: error
-          retention-days: 30
+          git commit -m 'Fully rebrand SDK internals to ParallaxCore [skip ci]'
+          git push origin HEAD:ParallaxCore
