@@ -82,7 +82,16 @@ jobs:
           set -euo pipefail
           chmod +x ./gradlew
           printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
-          ./gradlew :ParallaxCore:assembleRelease --no-daemon --stacktrace
+          ./gradlew :ParallaxCore:assembleRelease --no-daemon --stacktrace 2>&1 | tee parallaxcore-build.log
+
+      - name: Upload build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parallaxcore-build-log-${{ github.run_number }}
+          path: parallaxcore-build.log
+          if-no-files-found: ignore
+          retention-days: 3
 
       - name: Verify release AAR
         shell: bash
