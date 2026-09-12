@@ -81,6 +81,25 @@ if (!defined('SDK_PANEL_BOOTSTRAPPED')) {
 
     require_once __DIR__ . DIRECTORY_SEPARATOR . 'panel_security.php';
     panel_security_bootstrap($SDK_PANEL_CONFIG);
+
+    // Add TeamDark-style panel management features around the existing SDK
+    // contract. The feature bootstrap explicitly excludes connect.php/API
+    // validation paths, so native request/response and crypto behavior stay
+    // unchanged. Until its additive SQL migration completes, this layer is a
+    // no-op and the existing panel behaves exactly as before.
+    require_once __DIR__ . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'Core' . DIRECTORY_SEPARATOR . 'FeatureSuite.php';
+
+    // Admins, resellers and users use the balance-aware generator; Owner keeps
+    // the original advanced generator with unlimited management access.
+    if (sdk_feature_installed($conn) && sdk_feature_script_name() === 'generate_ui.php') {
+        $featureActor = sdk_feature_current_user($conn);
+        if ($featureActor && in_array((string) $featureActor['role'], ['admin', 'reseller', 'user'], true)) {
+            header('Location: feature_generate.php');
+            exit;
+        }
+    }
+
+    sdk_feature_bootstrap($conn);
 }
 
 if (!function_exists('sdk_panel_schema_problems')) {
