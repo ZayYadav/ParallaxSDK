@@ -61,6 +61,7 @@ jobs:
           grep -q "owner_user_id" panels/sdk-panel/get_devices.php
           grep -q "sdk_feature_is_owner_chat" panels/sdk-panel/app/Core/FeatureTelegramWebhook.php
           grep -q "claimed_at" panels/sdk-panel/app/Core/FeatureLoginBroadcast.php
+          grep -q "auth_version=auth_version+1" panels/sdk-panel/app/Core/FeatureAccessControl.php
 
       - name: Install MySQL client
         run: sudo apt-get update && sudo apt-get install -y mysql-client
@@ -99,3 +100,19 @@ jobs:
           "
           mysql -h 127.0.0.1 -uroot sdk_test < panels/sdk-panel/database/teamdark-feature-parity-hardening.sql
           test "$(mysql -N -B -h 127.0.0.1 -uroot sdk_test -e "SELECT COUNT(*) FROM licenses l JOIN users u ON u.id=l.owner_user_id WHERE l.license_key='SDK-AUDIT-OWNERSHIP' AND u.username='audit_reseller'")" = "1"
+
+      - name: Run PHP feature runtime integration
+        shell: bash
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: '3306'
+          DB_NAME: sdk_test
+          DB_USER: root
+          DB_PASSWORD: sdk_test_root
+          REQUIRE_HTTPS: 'false'
+          DISPLAY_TIMEZONE: Asia/Kolkata
+          SESSION_IDLE_SECONDS: '1800'
+          SESSION_ABSOLUTE_SECONDS: '28800'
+        run: |
+          set -euo pipefail
+          php panels/sdk-panel/tests/feature-parity-integration.php
