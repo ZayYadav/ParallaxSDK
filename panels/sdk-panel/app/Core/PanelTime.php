@@ -70,7 +70,7 @@ final class PanelTime
         return $value;
     }
 
-    public static function transformHtmlOutput(string $html): string
+    public static function transformHtmlOutput(string $html, int $phase = 0): string
     {
         if ($html === '' || (stripos($html, '<html') === false && stripos($html, '<!doctype') === false)) {
             return $html;
@@ -133,7 +133,7 @@ final class PanelTime
             $text
         );
         $text = (string) preg_replace_callback(
-            '/\\b(\\d{4}-\\d{2}-\\d{2})[ T](\\d{2}:\\d{2})\\s+UTC\\b/',
+            '/\\b(\\d{4}-\\d{2}-\\d{2})[ T](\\d{2}:\\d{2})(?!:)\\s+UTC\\b/',
             static function (array $m): string {
                 return self::convertExact($m[1] . ' ' . $m[2], 'Y-m-d H:i', 'Y-m-d H:i') . ' IST';
             },
@@ -141,15 +141,16 @@ final class PanelTime
         );
 
         // Raw SQL-style UTC timestamps rendered by management/security pages.
+        // Do not re-convert values that were already changed above and labelled IST.
         $text = (string) preg_replace_callback(
-            '/\\b(\\d{4}-\\d{2}-\\d{2}) (\\d{2}:\\d{2}:\\d{2})\\b/',
+            '/\\b(\\d{4}-\\d{2}-\\d{2}) (\\d{2}:\\d{2}:\\d{2})(?!\\s+IST\\b)/',
             static function (array $m): string {
                 return self::convertExact($m[1] . ' ' . $m[2], 'Y-m-d H:i:s', 'Y-m-d H:i:s');
             },
             $text
         );
         $text = (string) preg_replace_callback(
-            '/\\b(\\d{4}-\\d{2}-\\d{2}) (\\d{2}:\\d{2})\\b/',
+            '/\\b(\\d{4}-\\d{2}-\\d{2}) (\\d{2}:\\d{2})(?!:)(?!\\s+IST\\b)/',
             static function (array $m): string {
                 return self::convertExact($m[1] . ' ' . $m[2], 'Y-m-d H:i', 'Y-m-d H:i');
             },
@@ -165,7 +166,7 @@ final class PanelTime
             $text
         );
         $text = (string) preg_replace_callback(
-            '/\\b(\\d{2} [A-Z][a-z]{2} \\d{4})\\s*·\\s*(\\d{2}:\\d{2})\\b/',
+            '/\\b(\\d{2} [A-Z][a-z]{2} \\d{4})\\s*·\\s*(\\d{2}:\\d{2})(?!:)/',
             static function (array $m): string {
                 return self::convertExact($m[1] . ' ' . $m[2], 'd M Y H:i', 'd M Y · H:i');
             },
@@ -179,7 +180,7 @@ final class PanelTime
             $text
         );
         $text = (string) preg_replace_callback(
-            '/\\b(\\d{2} [A-Z][a-z]{2} \\d{4}) (\\d{2}:\\d{2})\\b/',
+            '/\\b(\\d{2} [A-Z][a-z]{2} \\d{4}) (\\d{2}:\\d{2})(?!:)/',
             static function (array $m): string {
                 return self::convertExact($m[1] . ' ' . $m[2], 'd M Y H:i', 'd M Y H:i');
             },
