@@ -46,6 +46,10 @@ jobs:
         run: |
           set -euo pipefail
           php -l panels/sdk-panel/panel_security.php
+          php -l panels/sdk-panel/connect.php
+          php -l panels/sdk-panel/license_list.php
+          php -l panels/sdk-panel/panel_helper.php
+          php -l panels/sdk-panel/login.php
           php -l panels/sdk-panel/CryptoV3.php
           php -l panels/sdk-panel/MfaHelper.php
           php -l panels/sdk-panel/tests/security-self-test.php
