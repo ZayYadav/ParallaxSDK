@@ -245,7 +245,13 @@ for path in ROOT.rglob("*"):
     except UnicodeDecodeError:
         continue
     text = rewrite_common(text)
-    if path.suffix.lower() in {".xml", ".cpp", ".cc", ".c", ".h", ".hpp", ".mk", ".pro", ".gradle", ".properties"}:
+    # Simple Java type names are safe to update in declarative consumer files,
+    # but not in native C/C++ or Android.mk. Native source has local symbols and
+    # physical include paths such as JniHook/JniHook.h and BoxCore.h which are
+    # intentionally not Java type names. Rewriting those strings without moving
+    # the native files corrupts the NDK build. Fully-qualified JNI/reflection
+    # identities above are still migrated by rewrite_common().
+    if path.suffix.lower() in {".xml", ".pro", ".gradle", ".properties"}:
         for old_simple, new_simple in sorted(simple_global.items(), key=lambda x: len(x[0]), reverse=True):
             text = replace_identifier(text, old_simple, new_simple)
     path.write_text(text, encoding="utf-8")
