@@ -6,6 +6,13 @@ if (!defined('SDK_PANEL_BOOTSTRAPPED')) {
 
     require_once __DIR__ . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'Core' . DIRECTORY_SEPARATOR . 'Env.php';
     Env::load(__DIR__ . DIRECTORY_SEPARATOR . '.env');
+
+    // Keep all backend/API calculations deterministic in UTC. Human-facing
+    // panel output is converted separately by PanelTime to Asia/Kolkata.
+    date_default_timezone_set('UTC');
+    require_once __DIR__ . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'Core' . DIRECTORY_SEPARATOR . 'PanelTime.php';
+    PanelTime::bootstrapForRequest();
+
     $envConfig = Env::panelConfigFromEnvironment();
 
     $configuredPath = getenv('SDK_PANEL_CONFIG') ?: '';
