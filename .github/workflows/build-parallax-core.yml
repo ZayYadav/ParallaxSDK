@@ -69,8 +69,28 @@ jobs:
           grep -RIl 'com.Parallax.SDK.core.BuildConfig' ParallaxCore/src/main/java \
             | xargs -r sed -i 's/com\.Parallax\.SDK\.core\.BuildConfig/com.Parallax.SDK.BuildConfig/g'
 
+          # ParallaxCore moved out of the Android namespace root, so its old
+          # package-local R reference now needs an explicit generated R import.
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('ParallaxCore/src/main/java/com/Parallax/SDK/core/ParallaxCore.java')
+          text = path.read_text(encoding='utf-8')
+          if 'R.string.' in text and 'import com.Parallax.SDK.R;' not in text:
+              marker = 'package com.Parallax.SDK.core;\n'
+              if marker not in text:
+                  raise SystemExit('Unexpected ParallaxCore package declaration')
+              text = text.replace(marker, marker + '\nimport com.Parallax.SDK.R;\n', 1)
+              path.write_text(text, encoding='utf-8')
+          PY
+
+          # The type rebrand also renamed the ProxyManifest helper method because
+          # it shared a name with the TransparentProxyActivity class. Align its
+          # callers with the migrated method name.
+          grep -RIl 'ParallaxProxyManifest.TransparentProxyActivity(' ParallaxCore/src/main/java \
+            | xargs -r sed -i 's/ParallaxProxyManifest\.TransparentProxyActivity(/ParallaxProxyManifest.ParallaxTransparentProxyActivity(/g'
+
           # Fail early if the known invalid rebrand forms ever return.
-          ! grep -R -n -E 'ActivityManager\.ParallaxRunning(Service|AppProcess)Info|com\.Parallax\.SDK\.core\.(R|BuildConfig)' \
+          ! grep -R -n -E 'ActivityManager\.ParallaxRunning(Service|AppProcess)Info|com\.Parallax\.SDK\.core\.(R|BuildConfig)|ParallaxProxyManifest\.TransparentProxyActivity\(' \
             ParallaxCore/src/main/java
 
       - name: Verify public Parallax API
