@@ -79,6 +79,92 @@ function sdk_feature_is_owner_chat(mysqli $conn, string $chatId): bool
     return $ok;
 }
 
+function sdk_feature_settings_security_post(mysqli $conn, array $user): void
+{
+    if (sdk_feature_script_name() !== 'settings.php'
+        || strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET')) !== 'POST') {
+        return;
+    }
+
+    $uid = (int)$user['id'];
+
+    // The legacy settings page previously accepted any >=3-character username,
+    // while login.php accepts only this safe alphabet. Intercept the change so
+    // an account cannot save a username that can never be used to sign in.
+    if (isset($_POST['change_username'])) {
+        $username = trim((string)($_POST['new_username'] ?? ''));
+        if (preg_match('/^[A-Za-z0-9_.-]{3,32}$/D', $username) !== 1) {
+            $_SESSION['sdk_settings_error'] = 'Username must be 3-32 characters using letters, numbers, dot, underscore or hyphen.';
+            header('Location: settings.php', true, 303);
+            exit;
+        }
+        $check = $conn->prepare('SELECT id FROM users WHERE username=? AND id<>? LIMIT 1');
+        $check->bind_param('si', $username, $uid);
+        $check->execute();
+        $exists = (bool)$check->get_result()->fetch_assoc();
+        $check->close();
+        if ($exists) {
+            $_SESSION['sdk_settings_error'] = 'Username already exists.';
+            header('Location: settings.php', true, 303);
+            exit;
+        }
+        $update = $conn->prepare('UPDATE users SET username=? WHERE id=?');
+        $update->bind_param('si', $username, $uid);
+        if (!$update->execute() || $update->affected_rows !== 1) {
+            $update->close();
+            $_SESSION['sdk_settings_error'] = 'Username could not be updated.';
+            header('Location: settings.php', true, 303);
+            exit;
+        }
+        $update->close();
+        $_SESSION['username'] = $username;
+        sdk_feature_audit($conn, 'account_username_change', 'success', $uid, $uid);
+        $_SESSION['sdk_settings_message'] = 'Username updated successfully.';
+        header('Location: settings.php', true, 303);
+        exit;
+    }
+
+    // Password changes are security-sensitive: rotate auth_version so every
+    // older browser session is invalidated. The current session is intentionally
+    // destroyed too, requiring a clean sign-in with the new password/MFA.
+    if (isset($_POST['change_password'])) {
+        $current = (string)($_POST['current_password'] ?? '');
+        $new = (string)($_POST['new_password'] ?? '');
+        $confirm = (string)($_POST['confirm_password'] ?? '');
+        $q = $conn->prepare('SELECT password FROM users WHERE id=? LIMIT 1');
+        $q->bind_param('i', $uid);
+        $q->execute();
+        $row = $q->get_result()->fetch_assoc();
+        $q->close();
+        if (!$row || !password_verify($current, (string)$row['password'])) {
+            $_SESSION['sdk_settings_error'] = 'Current password is incorrect.';
+            header('Location: settings.php', true, 303);
+            exit;
+        }
+        if (strlen($new) < 12 || strlen($new) > 128 || $new !== $confirm) {
+            $_SESSION['sdk_settings_error'] = 'New password must be 12-128 characters and both entries must match.';
+            header('Location: settings.php', true, 303);
+            exit;
+        }
+        $hash = password_hash($new, PASSWORD_DEFAULT);
+        $update = $conn->prepare('UPDATE users SET password=?,auth_version=auth_version+1 WHERE id=?');
+        $update->bind_param('si', $hash, $uid);
+        if (!$update->execute() || $update->affected_rows !== 1) {
+            $update->close();
+            $_SESSION['sdk_settings_error'] = 'Password could not be updated.';
+            header('Location: settings.php', true, 303);
+            exit;
+        }
+        $update->close();
+        sdk_feature_audit($conn, 'account_password_change', 'success', $uid, $uid);
+        if (function_exists('panel_destroy_session')) {
+            panel_destroy_session();
+        }
+        header('Location: login.php?password_changed=1', true, 303);
+        exit;
+    }
+}
+
 function sdk_feature_access_preflight(mysqli $conn): void
 {
     if (PHP_SAPI === 'cli' || !sdk_feature_installed($conn)) {
@@ -152,6 +238,8 @@ function sdk_feature_access_preflight(mysqli $conn): void
         sdk_feature_render_maintenance((string)($settings['maintenance_message'] ?? 'Maintenance in progress.'));
     }
 
+    sdk_feature_settings_security_post($conn, $user);
+
     // The legacy pages were designed for owner/admin global data. Route lower
     // roles to ownership-aware pages instead of merely hiding buttons.
     if ($script === 'dashboard.php' && in_array($role, ['reseller', 'user'], true)) {
@@ -160,6 +248,10 @@ function sdk_feature_access_preflight(mysqli $conn): void
     }
     if ($script === 'license_list.php' && in_array($role, ['reseller', 'user'], true)) {
         header('Location: feature_licenses.php', true, 303);
+        exit;
+    }
+    if ($script === 'announcements.php' && in_array($role, ['reseller', 'user'], true)) {
+        header('Location: feature_announcements.php', true, 303);
         exit;
     }
     if ($script === 'manage_users.php') {
