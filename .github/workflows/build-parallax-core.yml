@@ -53,6 +53,26 @@ jobs:
           set -euo pipefail
           python3 scripts/rebrand_parallaxcore.py
 
+      - name: Normalize Android and generated namespace references
+        shell: bash
+        run: |
+          set -euo pipefail
+          # These are Android framework nested classes, not SDK-owned types.
+          grep -RIl 'ActivityManager.ParallaxRunningServiceInfo' ParallaxCore/src/main/java \
+            | xargs -r sed -i 's/ActivityManager\.ParallaxRunningServiceInfo/ActivityManager.RunningServiceInfo/g'
+          grep -RIl 'ActivityManager.ParallaxRunningAppProcessInfo' ParallaxCore/src/main/java \
+            | xargs -r sed -i 's/ActivityManager\.ParallaxRunningAppProcessInfo/ActivityManager.RunningAppProcessInfo/g'
+
+          # R and BuildConfig are generated at the Android module namespace root.
+          grep -RIl 'com.Parallax.SDK.core.R' ParallaxCore/src/main/java \
+            | xargs -r sed -i 's/com\.Parallax\.SDK\.core\.R/com.Parallax.SDK.R/g'
+          grep -RIl 'com.Parallax.SDK.core.BuildConfig' ParallaxCore/src/main/java \
+            | xargs -r sed -i 's/com\.Parallax\.SDK\.core\.BuildConfig/com.Parallax.SDK.BuildConfig/g'
+
+          # Fail early if the known invalid rebrand forms ever return.
+          ! grep -R -n -E 'ActivityManager\.ParallaxRunning(Service|AppProcess)Info|com\.Parallax\.SDK\.core\.(R|BuildConfig)' \
+            ParallaxCore/src/main/java
+
       - name: Verify public Parallax API
         shell: bash
         run: |
