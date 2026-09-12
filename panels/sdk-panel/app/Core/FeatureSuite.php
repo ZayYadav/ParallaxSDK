@@ -7,3 +7,4 @@ require_once __DIR__ . '/FeatureTelegramWebhook.php';
 require_once __DIR__ . '/FeatureTelegramAccounts.php';
 require_once __DIR__ . '/FeatureTelegramOwner.php';
 require_once __DIR__ . '/FeatureLoginBroadcast.php';
+require_once __DIR__ . '/FeatureAccessControl.php';
