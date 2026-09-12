@@ -10,6 +10,7 @@ return [
     'dashboard' => 'dashboard.php',
     'licenses' => 'license_list.php',
     'licenses/generate' => 'generate_ui.php',
+    'licenses/self-service' => 'feature_generate.php',
     'licenses/check' => 'check_license.php',
     'licenses/edit' => 'keyEdit.php',
     'licenses/packages' => 'manage_packages.php',
@@ -21,6 +22,12 @@ return [
     'appearance' => 'panel_customizer.php',
     'settings' => 'settings.php',
     'security' => 'security_dashboard.php',
+
+    'owner-console' => 'owner_console.php',
+    'activity' => 'activity.php',
+    'telegram-users' => 'telegram_users.php',
+    'account' => 'account_security.php',
+    'registration-review' => 'registration_review.php',
 
     'api/connect' => 'connect.php',
     'connect' => 'connect.php',
