@@ -5,6 +5,7 @@ import android.content.ContentValues;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -13,15 +14,16 @@ import top.niunaijun.blackbox.utils.Slog;
 import top.niunaijun.blackbox.utils.compat.BundleCompat;
 
 /**
- * Created by @RIYAZXERO on 3/31/21.
- * * ∧＿∧
- * (`･ω･∥
- * 丶　つ０
- * しーＪ
- * 此处无Bug
+ * System service provider for Parallax Virtual.
+ *
+ * Provider creation happens before the first Activity is shown. A virtual-core
+ * compatibility failure must therefore never kill the host process here. The
+ * host Application/dashboard can surface the degraded-core state safely.
  */
 public class SystemCallProvider extends ContentProvider {
     public static final String TAG = "SystemCallProvider";
+    private static volatile boolean systemReady;
+    private static volatile String startupError = "";
 
     @Override
     public boolean onCreate() {
@@ -29,8 +31,27 @@ public class SystemCallProvider extends ContentProvider {
     }
 
     private boolean initSystem() {
-        BlackBoxSystem.getSystem().startup();
-        return true;
+        try {
+            BlackBoxSystem.getSystem().startup();
+            systemReady = true;
+            startupError = "";
+            return true;
+        } catch (Throwable throwable) {
+            systemReady = false;
+            String message = throwable.getMessage();
+            startupError = throwable.getClass().getSimpleName()
+                    + (message == null || message.trim().isEmpty() ? "" : ": " + message.trim());
+            Log.e(TAG, "Virtual system startup failed; keeping host process alive", throwable);
+            return false;
+        }
+    }
+
+    public static boolean isSystemReady() {
+        return systemReady;
+    }
+
+    public static String getStartupError() {
+        return startupError;
     }
 
     @Nullable
@@ -39,6 +60,10 @@ public class SystemCallProvider extends ContentProvider {
         Slog.d(TAG, "call: " + method + ", " + extras);
         if ("VM".equals(method)) {
             Bundle bundle = new Bundle();
+            if (!systemReady) {
+                bundle.putString("_PV_|_startup_error_", startupError);
+                return bundle;
+            }
             if (extras != null) {
                 String name = extras.getString("_G_|_server_name_");
                 BundleCompat.putBinder(bundle, "_G_|_server_", ServiceManager.getService(name));
@@ -50,7 +75,8 @@ public class SystemCallProvider extends ContentProvider {
 
     @Nullable
     @Override
-    public Cursor query(@NonNull Uri uri, @Nullable String[] projection, @Nullable String selection, @Nullable String[] selectionArgs, @Nullable String sortOrder) {
+    public Cursor query(@NonNull Uri uri, @Nullable String[] projection, @Nullable String selection,
+                        @Nullable String[] selectionArgs, @Nullable String sortOrder) {
         return null;
     }
 
@@ -72,7 +98,8 @@ public class SystemCallProvider extends ContentProvider {
     }
 
     @Override
-    public int update(@NonNull Uri uri, @Nullable ContentValues values, @Nullable String selection, @Nullable String[] selectionArgs) {
+    public int update(@NonNull Uri uri, @Nullable ContentValues values, @Nullable String selection,
+                      @Nullable String[] selectionArgs) {
         return 0;
     }
 }
