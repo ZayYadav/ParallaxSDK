@@ -37,6 +37,46 @@ try {
     $SDK_PANEL_CONFIG['TRUSTED_PROXIES'] = [];
     proxy_test_check(panel_client_ip() === '10.0.0.10', 'Empty proxy allowlist did not fail closed.');
     proxy_test_check(!panel_is_https($SDK_PANEL_CONFIG), 'Empty proxy allowlist trusted forwarded HTTPS.');
+
+    // Same-host browser POSTs must survive TLS termination even when the
+    // backend transport cannot safely infer the browser-facing scheme.
+    $_SERVER['HTTP_HOST'] = 'panel.example.test';
+    $_SERVER['HTTP_SEC_FETCH_SITE'] = 'same-origin';
+    $_SERVER['HTTP_ORIGIN'] = 'https://panel.example.test';
+    proxy_test_check(
+        panel_browser_post_is_same_origin($SDK_PANEL_CONFIG),
+        'Same-host HTTPS origin was rejected behind a TLS-terminating proxy.'
+    );
+
+    $_SERVER['HTTP_ORIGIN'] = 'https://attacker.example.test';
+    proxy_test_check(
+        !panel_browser_post_is_same_origin($SDK_PANEL_CONFIG),
+        'Different-host origin was accepted.'
+    );
+
+    $_SERVER['HTTP_ORIGIN'] = 'null';
+    proxy_test_check(!panel_browser_post_is_same_origin($SDK_PANEL_CONFIG), 'Opaque null origin was accepted.');
+
+    $_SERVER['HTTP_ORIGIN'] = 'https://panel.example.test:8443';
+    proxy_test_check(!panel_browser_post_is_same_origin($SDK_PANEL_CONFIG), 'Unexpected origin port was accepted.');
+
+    $_SERVER['HTTP_HOST'] = 'panel.example.test:8443';
+    proxy_test_check(
+        panel_browser_post_is_same_origin($SDK_PANEL_CONFIG),
+        'Matching non-standard host/origin port was rejected.'
+    );
+
+    $_SERVER['HTTP_HOST'] = 'panel.example.test';
+    $_SERVER['HTTP_ORIGIN'] = 'https://panel.example.test';
+    $_SERVER['HTTP_SEC_FETCH_SITE'] = 'cross-site';
+    proxy_test_check(!panel_browser_post_is_same_origin($SDK_PANEL_CONFIG), 'Cross-site browser signal was accepted.');
+
+    unset($_SERVER['HTTP_ORIGIN']);
+    $_SERVER['HTTP_SEC_FETCH_SITE'] = 'same-origin';
+    proxy_test_check(
+        panel_browser_post_is_same_origin($SDK_PANEL_CONFIG),
+        'Origin-less legacy request was rejected before CSRF validation.'
+    );
 } finally {
     $_SERVER = $originalServer;
     if ($originalConfig === null) {
