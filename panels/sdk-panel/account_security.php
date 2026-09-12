@@ -46,7 +46,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             $up=$conn->prepare('UPDATE users SET telegram_chat_id=NULL,auth_version=auth_version+1 WHERE id=?');$up->bind_param('i',$uid);$up->execute();$up->close();$_SESSION['sdk_auth_version']=(int)$user['auth_version']+1;$msg='Telegram unlinked.';sdk_feature_audit($conn,'telegram_unlink','success',$uid,$uid);
         }
         $user=sdk_feature_current_user($conn)?:$user;
-    } catch(Throwable $e){ if($conn->errno===0 && method_exists($conn,'rollback')){ @ $conn->rollback(); } $err=$e->getMessage(); }
+    } catch(Throwable $e){
+        // rollback() is harmless when no transaction is active and prevents a
+        // failed 2FA activation transaction from leaking into later statements.
+        @$conn->rollback();
+        $err=$e->getMessage();
+    }
 }
 ?>
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Account Security</title><style>
