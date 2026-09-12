@@ -124,7 +124,8 @@ function sdk_feature_handle_telegram_webhook(mysqli $conn): bool
     $cmd = strtolower((string)($cmdParts[0] ?? ''));
     $arg1 = (string)($cmdParts[1] ?? '');
     $arg2 = (string)($cmdParts[2] ?? '');
-    $admin = in_array($chatId, sdk_feature_admin_chat_ids($conn), true);
+    $ownerChat = function_exists('sdk_feature_is_owner_chat') && sdk_feature_is_owner_chat($conn, $chatId);
+    $admin = $ownerChat || in_array($chatId, sdk_feature_admin_chat_ids($conn), true);
     if (!$admin && function_exists('panel_rate_limit') && !panel_rate_limit($conn, 'telegram-feature|' . $chatId, 30)) {
         sdk_feature_telegram_send($chatId, 'Too many requests. Try again in a minute.');
         if ($updateId !== '') {
@@ -153,7 +154,8 @@ function sdk_feature_handle_telegram_webhook(mysqli $conn): bool
     if (!$handled && in_array($cmd, ['/start', '/help'], true)) {
         $handled = true;
         if ($admin) {
-            sdk_feature_telegram_send($chatId, '<b>Parallax SDK Owner Console</b>\nChoose a read-only view below. Existing license-management commands remain available.', [
+            $label = $ownerChat ? 'Owner Console' : 'Admin Read-only Console';
+            sdk_feature_telegram_send($chatId, '<b>Parallax SDK ' . $label . '</b>\nChoose a read-only view below. Existing license-management commands remain available.', [
                 [['text' => '📊 Stats', 'callback_data' => 'sdk:stats'], ['text' => '👥 Users', 'callback_data' => 'sdk:users']],
                 [['text' => '📱 TG Users', 'callback_data' => 'sdk:tgusers'], ['text' => '🔑 Keys', 'callback_data' => 'sdk:keys']],
                 [['text' => '🎟 Referrals', 'callback_data' => 'sdk:refs']],
@@ -193,13 +195,19 @@ function sdk_feature_handle_telegram_webhook(mysqli $conn): bool
     if (!$handled && $admin && $cmd === '/tgusers') {
         $handled = true; sdk_feature_telegram_owner_tgusers($conn, $chatId);
     }
-    if (!$handled && $admin && $cmd === '/balance') {
+
+    $mutationCommand = in_array($cmd, ['/balance', '/userdisable', '/userenable', '/announce'], true);
+    if (!$handled && $mutationCommand && !$ownerChat) {
+        $handled = true;
+        sdk_feature_telegram_send($chatId, '⛔ Owner Telegram authority required for mutation commands.');
+    }
+    if (!$handled && $ownerChat && $cmd === '/balance') {
         $handled = true; sdk_feature_telegram_owner_balance($conn, $chatId, $arg1, $arg2);
     }
-    if (!$handled && $admin && in_array($cmd, ['/userdisable', '/userenable'], true)) {
+    if (!$handled && $ownerChat && in_array($cmd, ['/userdisable', '/userenable'], true)) {
         $handled = true; sdk_feature_telegram_owner_status($conn, $chatId, $arg1, $cmd === '/userenable');
     }
-    if (!$handled && $admin && $cmd === '/announce') {
+    if (!$handled && $ownerChat && $cmd === '/announce') {
         $handled = true;
         $messageText = trim(substr($text, strlen('/announce')));
         sdk_feature_telegram_owner_announce($conn, $chatId, $messageText);
