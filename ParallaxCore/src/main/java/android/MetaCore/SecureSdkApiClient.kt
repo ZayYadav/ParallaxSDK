@@ -8,7 +8,7 @@ import android.security.keystore.KeyProperties
 import android.util.Base64
 import org.json.JSONObject
 import org.lsposed.lsparanoid.Obfuscate
-import top.niunaijun.blackbox.BuildConfig
+import com.Parallax.SDK.BuildConfig
 import top.niunaijun.blackbox.core.RNative
 import java.io.ByteArrayOutputStream
 import java.net.URL
