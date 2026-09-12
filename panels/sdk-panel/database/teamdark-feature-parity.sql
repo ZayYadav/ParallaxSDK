@@ -111,6 +111,47 @@ SET @sdk_sql := IF(@sdk_exists=0,
   'SELECT 1');
 PREPARE sdk_stmt FROM @sdk_sql; EXECUTE sdk_stmt; DEALLOCATE PREPARE sdk_stmt;
 
+-- ---------- license ownership isolation ----------
+-- Owner/Admin keep global management visibility. Reseller/User pages use this
+-- server-side owner id so URL guessing cannot expose another account's key,
+-- device id, IP address, reset action, or delete action.
+SET @sdk_exists := (
+  SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='licenses' AND COLUMN_NAME='owner_user_id'
+);
+SET @sdk_sql := IF(@sdk_exists=0,
+  'ALTER TABLE licenses ADD COLUMN owner_user_id BIGINT UNSIGNED NULL AFTER generated_by',
+  'SELECT 1');
+PREPARE sdk_stmt FROM @sdk_sql; EXECUTE sdk_stmt; DEALLOCATE PREPARE sdk_stmt;
+
+SET @sdk_exists := (
+  SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='licenses' AND INDEX_NAME='idx_licenses_owner_user'
+);
+SET @sdk_sql := IF(@sdk_exists=0,
+  'ALTER TABLE licenses ADD INDEX idx_licenses_owner_user(owner_user_id,id)',
+  'SELECT 1');
+PREPARE sdk_stmt FROM @sdk_sql; EXECUTE sdk_stmt; DEALLOCATE PREPARE sdk_stmt;
+
+SET @sdk_exists := (
+  SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+  WHERE CONSTRAINT_SCHEMA=DATABASE() AND TABLE_NAME='licenses'
+    AND CONSTRAINT_NAME='fk_licenses_owner_user'
+);
+SET @sdk_sql := IF(@sdk_exists=0,
+  'ALTER TABLE licenses ADD CONSTRAINT fk_licenses_owner_user FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE SET NULL',
+  'SELECT 1');
+PREPARE sdk_stmt FROM @sdk_sql; EXECUTE sdk_stmt; DEALLOCATE PREPARE sdk_stmt;
+
+-- Best-effort ownership backfill for historical panel-generated rows. The
+-- username column is unique, so this mapping is deterministic when present.
+UPDATE licenses l
+JOIN users u ON u.username=l.generated_by
+SET l.owner_user_id=u.id
+WHERE l.owner_user_id IS NULL
+  AND l.generated_by IS NOT NULL
+  AND l.generated_by<>'';
+
 -- ---------- referral upgrades ----------
 ALTER TABLE referral_codes
   MODIFY assigned_to ENUM('admin','reseller','user') NOT NULL DEFAULT 'user';
@@ -368,5 +409,5 @@ CREATE TABLE IF NOT EXISTS sdk_feature_suite_meta (
   installed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (feature_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-INSERT INTO sdk_feature_suite_meta(feature_key,feature_version) VALUES('teamdark_feature_parity',1)
+INSERT INTO sdk_feature_suite_meta(feature_key,feature_version) VALUES('teamdark_feature_parity',2)
 ON DUPLICATE KEY UPDATE feature_version=VALUES(feature_version);
