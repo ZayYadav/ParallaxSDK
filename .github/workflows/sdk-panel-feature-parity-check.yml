@@ -1,0 +1,68 @@
+name: SDK Panel Feature Parity Check
+
+on:
+  push:
+    branches:
+      - sdk-panel-teamdark-feature-parity
+  pull_request:
+    paths:
+      - 'panels/sdk-panel/**'
+      - '.github/workflows/sdk-panel-feature-parity-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-schema:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: sdk_test_root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot --silent || mysqladmin ping -h 127.0.0.1 -psdk_test_root --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mysqli, openssl, mbstring
+
+      - name: Lint SDK panel PHP
+        shell: bash
+        run: |
+          set -euo pipefail
+          find panels/sdk-panel -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+
+      - name: Assert SDK connect contract file is untouched
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --depth=1
+          git diff --exit-code origin/main...HEAD -- panels/sdk-panel/connect.php
+
+      - name: Install MySQL client
+        run: sudo apt-get update && sudo apt-get install -y mysql-client
+
+      - name: Test fresh schema plus feature migration
+        shell: bash
+        env:
+          MYSQL_PWD: sdk_test_root
+        run: |
+          set -euo pipefail
+          mysql -h 127.0.0.1 -uroot -e "CREATE DATABASE sdk_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+          mysql -h 127.0.0.1 -uroot sdk_test < panels/sdk-panel/database/fresh-install.sql
+          mysql -h 127.0.0.1 -uroot sdk_test < panels/sdk-panel/database/teamdark-feature-parity.sql
+          mysql -h 127.0.0.1 -uroot sdk_test < panels/sdk-panel/database/teamdark-feature-parity.sql
+          mysql -h 127.0.0.1 -uroot sdk_test -e "SELECT feature_key,feature_version FROM sdk_feature_suite_meta; SHOW COLUMNS FROM users LIKE 'balance'; SHOW COLUMNS FROM users LIKE 'telegram_chat_id'; SHOW COLUMNS FROM referral_codes LIKE 'max_uses';"
