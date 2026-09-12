@@ -763,7 +763,9 @@ header,.topbar,.navbar{
 
 .main,main,.page,.wrap{
   position:relative!important;
-  z-index:1!important;
+  /* Do not create a stacking context here. Bootstrap appends its backdrop to
+     <body>; a z-index on .main traps nested modals underneath that backdrop. */
+  z-index:auto!important;
 }
 .main{
   width:min(1440px,100%)!important;
@@ -915,8 +917,10 @@ input[type="checkbox"],input[type="radio"]{
   color:#07101f!important;
   font-weight:800!important;
   letter-spacing:.01em!important;
-  background:linear-gradient(135deg,var(--ux-primary),#ffe08a)!important;
-  box-shadow:0 10px 28px color-mix(in srgb,var(--ux-primary) 22%,transparent)!important;
+  background:linear-gradient(135deg,color-mix(in srgb,var(--ux-primary) 84%,transparent),color-mix(in srgb,#ffe08a 68%,transparent))!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.42),0 10px 28px color-mix(in srgb,var(--ux-primary) 22%,transparent)!important;
+  backdrop-filter:blur(16px) saturate(145%)!important;
+  -webkit-backdrop-filter:blur(16px) saturate(145%)!important;
   text-decoration:none!important;
   transition:transform .16s ease,box-shadow .16s ease,filter .16s ease,background .16s ease!important;
 }
@@ -928,23 +932,46 @@ input[type="checkbox"],input[type="radio"]{
 .btn:active,.btn-ios:active,.btn-save:active,.btn-submit:active,.btn-login:active,.btn-back:active,.glass-btn:active,.btn-glass:active,.ob-btn:active,button:active{
   transform:translateY(0)!important;
 }
-.btn-secondary,.btn-outline,.btn-dark,.btn-light,.btnx,.copy-btn,.action-btn,.small-btn{
+.btn-secondary,.btn-outline,.btn-dark,.btn-light,.btnx,.copy-btn,.action-btn,.small-btn,
+.btn-back,.btn-edit,.btn-edit-glass,.app-name-edit{
   color:#f8fbff!important;
-  background:rgba(255,255,255,.07)!important;
-  border:1px solid var(--ux-line)!important;
-  box-shadow:none!important;
+  background:linear-gradient(135deg,rgba(255,255,255,.105),rgba(255,255,255,.035))!important;
+  border:1px solid rgba(255,255,255,.14)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 8px 22px rgba(0,0,0,.16)!important;
 }
-.btn-danger,.delete-btn,.btn-delete{
+.btn-copy-glass{
+  color:#ddd6fe!important;
+  background:linear-gradient(135deg,rgba(124,58,237,.24),rgba(99,102,241,.1))!important;
+  border-color:rgba(167,139,250,.34)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.13),0 9px 24px rgba(76,29,149,.2)!important;
+}
+.btn-usage-glass{
+  color:#a7f3d0!important;
+  background:linear-gradient(135deg,rgba(5,150,105,.23),rgba(16,185,129,.08))!important;
+  border-color:rgba(52,211,153,.32)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.13),0 9px 24px rgba(5,150,105,.17)!important;
+}
+.btn-edit-glass{
+  color:#bae6fd!important;
+  background:linear-gradient(135deg,rgba(2,132,199,.23),rgba(6,182,212,.08))!important;
+  border-color:rgba(56,189,248,.32)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.13),0 9px 24px rgba(3,105,161,.17)!important;
+}
+.btn-danger,.delete-btn,.btn-delete,.btn-delete-glass,.btn-danger-glass,.btn-danger-modal{
   color:#fff!important;
-  background:linear-gradient(135deg,#ef4444,#fb7185)!important;
+  background:linear-gradient(135deg,rgba(225,29,72,.72),rgba(251,113,133,.48))!important;
+  border-color:rgba(251,113,133,.52)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.17),0 10px 25px rgba(225,29,72,.2)!important;
 }
 .btn-success,.enable-btn{
   color:#04140f!important;
-  background:linear-gradient(135deg,#34d399,#86efac)!important;
+  background:linear-gradient(135deg,rgba(52,211,153,.84),rgba(134,239,172,.68))!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.32),0 10px 24px rgba(16,185,129,.18)!important;
 }
 .btn-warning{
   color:#1d1302!important;
-  background:linear-gradient(135deg,#fbbf24,#fde68a)!important;
+  background:linear-gradient(135deg,rgba(251,191,36,.84),rgba(253,230,138,.68))!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.32),0 10px 24px rgba(245,158,11,.18)!important;
 }
 .is-loading,.is-loading *{cursor:progress!important}
 .is-loading button[type="submit"],.is-loading input[type="submit"]{
@@ -976,8 +1003,10 @@ input[type="checkbox"],input[type="radio"]{
 
 @media (min-width:1180px){
   #sidebar{left:0!important}
+  body.sidebar-collapsed #sidebar{left:-292px!important}
   #overlay{display:none!important}
-  .main{padding-left:294px!important;padding-right:24px!important}
+  .main{padding-left:294px!important;padding-right:24px!important;transition:padding-left .28s cubic-bezier(.4,0,.2,1)!important}
+  body.sidebar-collapsed .main{padding-left:24px!important}
 }
 @media (max-width:760px){
   header{padding-inline:12px!important}
