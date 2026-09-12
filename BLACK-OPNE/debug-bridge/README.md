@@ -7,9 +7,9 @@ This bridge is for apps whose source you control. Parallax Virtual does **not** 
 When you choose **Developer Lab → Load / replace debug .so** for a cloned app, Parallax Virtual:
 
 1. Copies the selected `.so` into the loader's private `debug-libs` directory.
-2. Validates the file name, 64 MB size limit, and ELF magic.
+2. Validates the file name, 64 MB size limit, ELF shared-object type, and arm64-v8a ABI.
 3. On launch, creates a temporary read-only `content://parallax.VIRTUAL.debugfiles/...` URI.
-4. Adds the URI plus target package/session metadata to the app's launch Intent.
+4. Adds the URI, SHA-256 digest, and target package/session metadata to the app's launch Intent.
 5. Grants read access for that launch only.
 
 The loader never calls `System.load()` inside another app on its own.
@@ -40,7 +40,8 @@ The bootstrap accepts only:
 - `content://` URIs;
 - the exact Parallax Virtual debug provider authority;
 - files ending in `.so`;
-- ELF files up to 64 MB.
+- arm64-v8a ELF shared objects up to 64 MB;
+- content whose SHA-256 still matches the launcher-provided digest.
 
 It copies the library into the target app's own `codeCacheDir` before `System.load()`.
 

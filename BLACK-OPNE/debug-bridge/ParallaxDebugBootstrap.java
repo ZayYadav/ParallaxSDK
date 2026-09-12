@@ -8,6 +8,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.security.MessageDigest;
 import java.util.Locale;
 
 /**
@@ -23,6 +24,7 @@ public final class ParallaxDebugBootstrap {
     private static final String EXTRA_ENABLED = "parallax.debug.enabled";
     private static final String EXTRA_URI = "parallax.debug.lib_uri";
     private static final String EXTRA_NAME = "parallax.debug.lib_name";
+    private static final String EXTRA_SHA256 = "parallax.debug.lib_sha256";
     private static final String EXTRA_TARGET = "parallax.debug.target_package";
     private static final String EXTRA_SESSION = "parallax.debug.session_id";
     private static final String EXPECTED_AUTHORITY = "parallax.VIRTUAL.debugfiles";
@@ -69,6 +71,10 @@ public final class ParallaxDebugBootstrap {
         }
         String session = sanitize(intent.getStringExtra(EXTRA_SESSION));
         if (session.isEmpty()) session = "session";
+        String expectedSha256 = intent.getStringExtra(EXTRA_SHA256);
+        if (expectedSha256 == null || !expectedSha256.matches("(?i)[0-9a-f]{64}")) {
+            return LoadResult.fail("debug library digest missing or invalid");
+        }
 
         File dir = new File(activity.getCodeCacheDir(), "parallax-debug");
         if (!dir.exists() && !dir.mkdirs()) {
@@ -96,9 +102,20 @@ public final class ParallaxDebugBootstrap {
             return LoadResult.fail("copy failed: " + throwable.getClass().getSimpleName());
         }
 
-        if (total < 4L || !isElf(output)) {
+        String headerError = validateArm64SharedObject(output);
+        if (headerError != null) {
             output.delete();
-            return LoadResult.fail("selected file is not an ELF library");
+            return LoadResult.fail(headerError);
+        }
+
+        try {
+            if (!expectedSha256.equalsIgnoreCase(sha256(output))) {
+                output.delete();
+                return LoadResult.fail("debug library digest mismatch");
+            }
+        } catch (Throwable throwable) {
+            output.delete();
+            return LoadResult.fail("cannot verify debug library digest");
         }
 
         try {
@@ -109,15 +126,45 @@ public final class ParallaxDebugBootstrap {
         }
     }
 
-    private static boolean isElf(File file) {
+    private static String validateArm64SharedObject(File file) {
+        byte[] header = new byte[20];
         try (FileInputStream input = new FileInputStream(file)) {
-            return input.read() == 0x7f
-                    && input.read() == 'E'
-                    && input.read() == 'L'
-                    && input.read() == 'F';
+            int offset = 0;
+            while (offset < header.length) {
+                int read = input.read(header, offset, header.length - offset);
+                if (read < 0) break;
+                offset += read;
+            }
+            if (offset != header.length) return "ELF header is truncated";
         } catch (Throwable ignored) {
-            return false;
+            return "cannot read debug library";
         }
+
+        if ((header[0] & 0xff) != 0x7f || header[1] != 'E'
+                || header[2] != 'L' || header[3] != 'F') return "file is not ELF";
+        if ((header[4] & 0xff) != 2) return "library is not 64-bit";
+        if ((header[5] & 0xff) != 1) return "library uses unsupported byte order";
+        if (u16le(header, 16) != 3) return "ELF is not a shared object";
+        if (u16le(header, 18) != 183) return "library ABI is not arm64-v8a";
+        return null;
+    }
+
+    private static int u16le(byte[] value, int offset) {
+        return (value[offset] & 0xff) | ((value[offset + 1] & 0xff) << 8);
+    }
+
+    private static String sha256(File file) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        byte[] buffer = new byte[32 * 1024];
+        try (FileInputStream input = new FileInputStream(file)) {
+            int read;
+            while ((read = input.read(buffer)) != -1) digest.update(buffer, 0, read);
+        }
+        StringBuilder out = new StringBuilder(64);
+        for (byte value : digest.digest()) {
+            out.append(String.format(Locale.US, "%02x", value & 0xff));
+        }
+        return out.toString();
     }
 
     private static String sanitize(String value) {
