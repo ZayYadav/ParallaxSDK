@@ -291,7 +291,7 @@ header {
 
 /* ── MAIN ── */
 .main {
-    position:relative; z-index:1;
+    position:relative; z-index:auto;
     padding: 90px 24px 24px;
     max-width: 1400px;
     margin: 0 auto;
@@ -326,6 +326,12 @@ header {
     border-radius: 22px;
     overflow: hidden;
 }
+.card::after {
+    content:''; position:absolute; inset:0; pointer-events:none; border-radius:inherit;
+    background:linear-gradient(135deg,rgba(255,255,255,.09),transparent 34%,rgba(255,255,255,.025));
+    opacity:.65;
+}
+.card > * { position:relative; z-index:1; }
 .card:hover {
     transform: translateY(-5px) scale(1.01);
     box-shadow: 0 15px 45px rgba(0,0,0,.6);
@@ -520,13 +526,21 @@ header {
 
 /* ── BOOTSTRAP OVERRIDES (EDIT MODAL) ── */
 .modal-content {
-    background:rgba(10,16,34,.97) !important;
-    border:1px solid rgba(255,255,255,0.1) !important;
-    border-radius:20px !important; backdrop-filter:blur(24px) !important;
+    max-height:calc(100svh - 32px);
+    overflow:hidden;
+    background:linear-gradient(150deg,rgba(24,34,56,.88),rgba(6,11,24,.93)) !important;
+    border:1px solid rgba(255,255,255,.17) !important;
+    border-radius:22px !important;
+    backdrop-filter:blur(30px) saturate(155%) !important;
+    -webkit-backdrop-filter:blur(30px) saturate(155%) !important;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 30px 90px rgba(0,0,0,.64) !important;
 }
-.modal-header { border-bottom:1px solid rgba(255,255,255,.08) !important; }
-.modal-footer { border-top:1px solid rgba(255,255,255,.08) !important; gap:10px; }
+.modal-dialog { width:min(540px,calc(100% - 24px)); margin:16px auto; }
+.modal-body { overflow-y:auto; overscroll-behavior:contain; padding:20px; }
+.modal-header { border-bottom:1px solid rgba(255,255,255,.1) !important; padding:18px 20px; }
+.modal-footer { border-top:1px solid rgba(255,255,255,.1) !important; gap:10px; padding:16px 20px; }
 .modal-title { font-weight:700; color:var(--p-primary); }
+.modal-backdrop.show { opacity:.68; }
 
 .form-control, .form-select {
     background:rgba(0,0,0,.28) !important; border:1px solid rgba(255,255,255,.1) !important;
@@ -562,7 +576,9 @@ header {
     border:1px solid rgba(255,255,255,.18); display:inline-flex; align-items:center; gap:6px;
     transition:transform .22s cubic-bezier(.34,1.5,.64,1),box-shadow .22s ease,background .22s ease;
     cursor:pointer; backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
-    box-shadow:0 2px 10px rgba(0,0,0,.22); background:rgba(255,255,255,.05); text-decoration:none; font-family:'Montserrat',sans-serif;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.15),0 8px 24px rgba(0,0,0,.2);
+    background:linear-gradient(135deg,rgba(255,255,255,.12),rgba(255,255,255,.035));
+    text-decoration:none; font-family:'Montserrat',sans-serif;
 }
 .glass-btn:hover { transform:translateY(-2px) scale(1.06); color:#fff; }
 .glass-btn:active { transform:scale(.97); }
@@ -599,10 +615,27 @@ header {
 }
 
 @media (max-width: 768px) {
+    .grid { gap:14px; }
+    .card { padding:15px; border-radius:18px; }
+    .app-name-section { padding:10px 12px; gap:10px; }
+    .app-name-value { font-size:1rem; word-break:break-word; }
     .action-bar { flex-direction: column; align-items: stretch; }
-    .glass-buttons { justify-content: center; }
+    .glass-buttons { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+    .glass-buttons .glass-btn { width:100% !important; padding:9px 8px; }
     .glass-status { justify-content: center; }
     .device-meta { flex-direction:column; gap:5px; }
+    .modal-dialog { width:calc(100% - 16px); margin:8px auto; }
+    .modal-content {
+        max-height:calc(100svh - 16px); border-radius:18px !important;
+        backdrop-filter:blur(14px) saturate(135%) !important;
+        -webkit-backdrop-filter:blur(14px) saturate(135%) !important;
+    }
+    .modal-header,.modal-body,.modal-footer { padding-left:15px; padding-right:15px; }
+    .modal-footer { display:grid; grid-template-columns:1fr 1fr; }
+    .modal-footer .btn-back,.modal-footer .btn-ios { width:100% !important; padding:10px 8px !important; }
+}
+@media (max-width: 390px) {
+    .glass-buttons { grid-template-columns:1fr; }
 }
 </style>
 </head>
@@ -618,7 +651,7 @@ header {
 
 <header>
     <div class="header-left">
-        <button class="menu-btn" onclick="toggleSidebar()" aria-label="Menu">
+        <button class="menu-btn" type="button" onclick="toggleSidebar()" aria-label="Toggle navigation" aria-controls="sidebar" aria-expanded="true">
             <i class="fas fa-bars" id="menuIcon"></i>
         </button>
         <span class="header-title"><i class="fas fa-key me-2" style="font-size:.85rem;"></i>List Licenses</span>
@@ -793,13 +826,13 @@ header {
         </div>
     </div>
 
-    <div class="modal fade" id="edit<?=$r['id']?>" tabindex="-1">
+    <div class="modal fade license-edit-modal" id="edit<?=$r['id']?>" tabindex="-1" aria-labelledby="editTitle<?=$r['id']?>" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content text-white">
                 <form method="post">
                     <div class="modal-header border-0">
-                        <h5 class="modal-title"><i class="fas fa-edit me-2"></i>Edit License</h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                        <h5 class="modal-title" id="editTitle<?=$r['id']?>"><i class="fas fa-edit me-2"></i>Edit License</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
                         <input type="hidden" name="edit_id" value="<?=$r['id']?>">
@@ -934,6 +967,19 @@ header {
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
+// Bootstrap backdrops are attached to <body>. Keep edit dialogs there too so
+// no parent stacking context can sit below the backdrop and block all clicks.
+document.querySelectorAll('.license-edit-modal').forEach(function(modal) {
+    document.body.appendChild(modal);
+    modal.addEventListener('show.bs.modal', function() {
+        if (window.innerWidth < 1180 && typeof window.closeSidebar === 'function') window.closeSidebar();
+    });
+    modal.addEventListener('shown.bs.modal', function() {
+        const field = modal.querySelector('input[name="license_key"]');
+        if (field) field.focus({preventScroll:true});
+    });
+});
+
 // Load saved names from localStorage
 document.addEventListener('DOMContentLoaded', function() {
     const licenseIds = <?= json_encode($license_ids) ?>;
