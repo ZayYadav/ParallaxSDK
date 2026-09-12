@@ -24,6 +24,7 @@ return [
     'server' => 'online_server.php',
     'server/control' => 'feature_server.php',
     'announcements' => 'announcements.php',
+    'announcements/inbox' => 'feature_announcements.php',
     'appearance' => 'panel_customizer.php',
     'settings' => 'settings.php',
     'security' => 'security_dashboard.php',
