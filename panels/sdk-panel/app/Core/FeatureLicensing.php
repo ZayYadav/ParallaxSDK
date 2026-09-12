@@ -168,7 +168,7 @@ function sdk_feature_generate_license(mysqli $conn, array $actor, array $input, 
     }
     $prefix = strtoupper(preg_replace('/[^A-Z0-9]/', '', (string)($input['key_prefix'] ?? 'SDK')) ?: 'SDK');
     $license = $custom !== '' ? $custom : $prefix . '-' . strtoupper(bin2hex(random_bytes(12)));
-    $costPerDay = max(0, (int)($settings['key_cost_per_day'] ?? 1));
+    $costPerDay = max(0, min(1000000000, (int)($settings['key_cost_per_day'] ?? 1)));
     $cost = $days * $costPerDay;
     $actorId = (int)$actor['id'];
     $owner = (string)$actor['role'] === 'owner';
@@ -210,15 +210,15 @@ function sdk_feature_generate_license(mysqli $conn, array $actor, array $input, 
         $sessionLifetime = 600;
         $killSwitch = 0;
         $stmt = $conn->prepare(
-            'INSERT INTO licenses(license_key,client_name,expiry_date,status,package_name,package_lock,package_mode,signing_lock,signing_mode,signing_cert_sha256,device_mode,max_devices,java_native_auth,feature_policy,minimum_sdk_version,latest_sdk_version,force_update,blocked_versions,session_lifetime_seconds,kill_switch,generated_by) '
-            . 'VALUES(?,?,?,?,?,?,?,?,?,NULL,?,?,?,?,?,?,?,?,?,?,?)'
+            'INSERT INTO licenses(license_key,client_name,expiry_date,status,package_name,package_lock,package_mode,signing_lock,signing_mode,signing_cert_sha256,device_mode,max_devices,java_native_auth,feature_policy,minimum_sdk_version,latest_sdk_version,force_update,blocked_versions,session_lifetime_seconds,kill_switch,generated_by,owner_user_id) '
+            . 'VALUES(?,?,?,?,?,?,?,?,?,NULL,?,?,?,?,?,?,?,?,?,?,?,?)'
         );
         $stmt->bind_param(
-            'sssisisissiisiiisiis',
+            'sssisisissiisiiisiisi',
             $license, $clientName, $expiry, $status, $packageValue, $packageLock,
             $packageMode, $signingLock, $signingMode, $deviceMode, $maxDevices,
             $javaNativeAuth, $featurePolicy, $minSdk, $latestSdk, $forceUpdate,
-            $blockedVersions, $sessionLifetime, $killSwitch, $generatedBy
+            $blockedVersions, $sessionLifetime, $killSwitch, $generatedBy, $actorId
         );
         if (!$stmt->execute()) {
             if ($conn->errno === 1062) {
