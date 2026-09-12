@@ -1,4 +1,6 @@
 include ':ParallaxCore'
 project(':ParallaxCore').projectDir = file('RIYAZ-VIP')
 
-rootProject.name = "Parallax SDK"
+// Keep the internal Gradle module/native ABI name stable for existing consumers,
+// while the product/SDK branch is branded Parallax Virtual.
+rootProject.name = "Parallax Virtual SDK"
