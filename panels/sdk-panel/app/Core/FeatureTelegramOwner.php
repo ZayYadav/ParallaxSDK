@@ -15,7 +15,8 @@ function sdk_feature_telegram_owner_users(mysqli $conn, string $chatId): void
     $res = $conn->query('SELECT username,role,balance,status FROM users ORDER BY id DESC LIMIT 12');
     $lines = ['<b>Recent users</b>'];
     if ($res) while ($r = $res->fetch_assoc()) {
-        $lines[] = htmlspecialchars((string)$r['username'], ENT_QUOTES, 'UTF-8') . ' · ' . $r['role'] . ' · balance ' . (int)$r['balance'] . ((int)$r['status'] === 1 ? '' : ' · DISABLED');
+        $balance = (string)$r['role'] === 'owner' ? '∞' : (string)(int)$r['balance'];
+        $lines[] = htmlspecialchars((string)$r['username'], ENT_QUOTES, 'UTF-8') . ' · ' . $r['role'] . ' · balance ' . $balance . ((int)$r['status'] === 1 ? '' : ' · DISABLED');
     }
     sdk_feature_telegram_send($chatId, implode("\n", $lines));
 }
@@ -64,11 +65,13 @@ function sdk_feature_owner_user_by_name(mysqli $conn, string $username): ?array
 
 function sdk_feature_telegram_owner_balance(mysqli $conn, string $chatId, string $username, string $amount): void
 {
-    if (!preg_match('/^-?\d{1,9}$/D', $amount)) {
-        sdk_feature_telegram_send($chatId, 'Usage: /balance username +/-amount'); return;
+    if (!preg_match('/^-?\d{1,9}$/D', $amount) || (int)$amount === 0) {
+        sdk_feature_telegram_send($chatId, 'Usage: /balance username +/-amount (non-zero)'); return;
     }
     $user = sdk_feature_owner_user_by_name($conn, $username);
-    if (!$user) { sdk_feature_telegram_send($chatId, 'User not found.'); return; }
+    if (!$user || (string)$user['role'] === 'owner') {
+        sdk_feature_telegram_send($chatId, 'User not found or Owner account is protected.'); return;
+    }
     $delta = (int)$amount;
     try {
         $next = sdk_feature_adjust_balance($conn, (int)$user['id'], $delta, null, 'Telegram owner adjustment');
@@ -95,6 +98,9 @@ function sdk_feature_telegram_owner_announce(mysqli $conn, string $chatId, strin
 {
     $message = trim($message);
     if ($message === '' || mb_strlen($message) > 1000) { sdk_feature_telegram_send($chatId, 'Usage: /announce your message (max 1000 chars)'); return; }
-    sdk_feature_save_setting($conn, 'site_announcement', $message, null);
+    if (!sdk_feature_save_setting($conn, 'site_announcement', $message, null)) {
+        sdk_feature_telegram_send($chatId, '❌ Could not update the panel announcement.');
+        return;
+    }
     sdk_feature_telegram_send($chatId, '✅ Panel announcement updated.');
 }
