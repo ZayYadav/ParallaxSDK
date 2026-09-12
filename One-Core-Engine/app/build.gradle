@@ -249,7 +249,7 @@ android {
             minifyEnabled true
             signingConfig signingConfigs.release
             def releaseSigningSha256 = bindNativeSigningIdentity(
-                    signingConfigs.release, oneCoreAllowedSigningSha256, true)
+                    signingConfigs.release, oneCoreAllowedSigningSha256, releaseTaskRequested)
             buildConfigField "String", "EXPECTED_SIGNATURE_SHA256", javaString(releaseSigningSha256)
             externalNativeBuild {
                 ndkBuild {
