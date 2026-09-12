@@ -179,13 +179,60 @@ function panel_browser_post_is_same_origin(array $config = []): bool
         return false;
     }
 
-    $origin = (string) ($_SERVER['HTTP_ORIGIN'] ?? '');
+    $origin = trim((string) ($_SERVER['HTTP_ORIGIN'] ?? ''));
     if ($origin === '') {
+        // Older clients may omit Origin. The mandatory per-session CSRF token
+        // remains the authorization boundary for those requests.
         return true;
     }
 
-    $expected = panel_request_origin($config);
-    return hash_equals($expected, rtrim($origin, '/'));
+    if (strtolower($origin) === 'null') {
+        return false;
+    }
+
+    $originParts = parse_url($origin);
+    if (!is_array($originParts)
+        || !isset($originParts['scheme'], $originParts['host'])
+        || !in_array(strtolower((string) $originParts['scheme']), ['http', 'https'], true)
+        || isset($originParts['user'])
+        || isset($originParts['pass'])
+        || isset($originParts['query'])
+        || isset($originParts['fragment'])
+        || (isset($originParts['path']) && !in_array($originParts['path'], ['', '/'], true))) {
+        return false;
+    }
+
+    // Compare the browser-facing authority rather than rebuilding the full
+    // origin from the backend transport. With TLS termination the browser can
+    // correctly send https:// while PHP sees the proxy hop as plain HTTP.
+    $requestAuthority = strtolower(trim((string) ($_SERVER['HTTP_HOST'] ?? '')));
+    if ($requestAuthority === ''
+        || preg_match('/[\x00-\x20\x7f\/@\\\\]/', $requestAuthority) === 1) {
+        return false;
+    }
+    $requestParts = parse_url('http://' . $requestAuthority);
+    if (!is_array($requestParts) || empty($requestParts['host'])) {
+        return false;
+    }
+
+    $originHost = strtolower(rtrim((string) $originParts['host'], '.'));
+    $requestHost = strtolower(rtrim((string) $requestParts['host'], '.'));
+    if ($originHost === '' || $requestHost === '' || !hash_equals($requestHost, $originHost)) {
+        return false;
+    }
+
+    $originScheme = strtolower((string) $originParts['scheme']);
+    $originPort = isset($originParts['port'])
+        ? (int) $originParts['port']
+        : ($originScheme === 'https' ? 443 : 80);
+    $requestPort = isset($requestParts['port']) ? (int) $requestParts['port'] : null;
+
+    if ($requestPort !== null) {
+        return $requestPort === $originPort;
+    }
+
+    // When Host has no explicit port, only standard browser origins qualify.
+    return in_array($originPort, [80, 443], true);
 }
 
 function panel_request_origin(array $config = []): string
@@ -250,9 +297,12 @@ function panel_enhance_html(string $html): string
     if (stripos($html, 'name="csrf-token"') === false && stripos($html, '</head>') !== false) {
         $runtimeCss = <<<'CSS'
 <style id="sdk-panel-runtime-polish">
-html,body{min-height:100%;overflow-x:hidden!important;overflow-y:auto!important}
+html,body{min-height:100%;overflow-x:hidden!important}
+body:not(.modal-open){overflow-y:auto!important}
+body.modal-open{overflow-y:hidden!important}
 .page,.login-wrap,.auth-wrap{min-height:100svh!important}
 .login-card,.register-card,.auth-card{max-width:min(100%,460px)}
+@media(max-width:1179px){body.sidebar-open{overflow:hidden!important}}
 @media(max-width:680px){
   html,body{height:auto!important}
   .page,.login-wrap,.auth-wrap{min-height:100svh!important;overflow-y:visible!important;justify-content:flex-start!important}
@@ -294,22 +344,68 @@ CSS;
     window.fetch.__sdkPanelWrapped = true;
   }
 
-  window.toggleSidebar = window.toggleSidebar || function () {
+  const sidebarBreakpoint = window.matchMedia('(min-width: 1180px)');
+
+  const sidebarIsOpen = () => {
+    if (sidebarBreakpoint.matches) {
+      return !document.body.classList.contains('sidebar-collapsed');
+    }
+    return document.getElementById('sidebar')?.classList.contains('active') ?? false;
+  };
+
+  const setSidebar = (open, remember = true) => {
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('overlay');
     const icon = document.getElementById('menuIcon');
-    sidebar?.classList.toggle('active');
-    overlay?.classList.toggle('active');
+    if (!sidebar) return;
+
+    const desktop = sidebarBreakpoint.matches;
+    sidebar.classList.toggle('active', open);
+    document.body.classList.toggle('sidebar-open', open);
+    document.body.classList.toggle('sidebar-collapsed', desktop && !open);
+    overlay?.classList.toggle('active', !desktop && open);
+    document.querySelectorAll('.menu-btn').forEach((button) => {
+      button.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
     if (icon) {
-      icon.classList.toggle('fa-bars');
-      icon.classList.toggle('fa-times');
+      icon.classList.toggle('fa-bars', !open);
+      icon.classList.toggle('fa-times', open);
+    }
+    if (desktop && remember) {
+      try { localStorage.setItem('sdk_sidebar_collapsed', open ? '0' : '1'); } catch (_) {}
     }
   };
 
+  /* Always replace legacy page functions: several pages used a desktop CSS
+     rule that forced the sidebar open, making their three-line button inert. */
+  window.toggleSidebar = function () {
+    setSidebar(!sidebarIsOpen());
+  };
+
+  window.closeSidebar = function () {
+    setSidebar(false);
+  };
+
+  const initialiseSidebar = () => {
+    if (sidebarBreakpoint.matches) {
+      let collapsed = false;
+      try { collapsed = localStorage.getItem('sdk_sidebar_collapsed') === '1'; } catch (_) {}
+      setSidebar(!collapsed, false);
+    } else {
+      setSidebar(false, false);
+    }
+  };
+
+  initialiseSidebar();
+  if (typeof sidebarBreakpoint.addEventListener === 'function') {
+    sidebarBreakpoint.addEventListener('change', initialiseSidebar);
+  } else if (typeof sidebarBreakpoint.addListener === 'function') {
+    sidebarBreakpoint.addListener(initialiseSidebar);
+  }
+
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
-    document.getElementById('sidebar')?.classList.remove('active');
-    document.getElementById('overlay')?.classList.remove('active');
+    setSidebar(false);
   });
 
   document.addEventListener('submit', (event) => {
