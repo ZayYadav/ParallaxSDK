@@ -8,7 +8,9 @@ return [
     'logout' => 'logout.php',
 
     'dashboard' => 'dashboard.php',
+    'dashboard/my' => 'feature_dashboard.php',
     'licenses' => 'license_list.php',
+    'licenses/mine' => 'feature_licenses.php',
     'licenses/generate' => 'generate_ui.php',
     'licenses/self-service' => 'feature_generate.php',
     'licenses/check' => 'check_license.php',
@@ -16,8 +18,11 @@ return [
     'licenses/packages' => 'manage_packages.php',
 
     'users' => 'manage_users.php',
+    'users/directory' => 'feature_users.php',
     'referrals' => 'manage_referrals.php',
+    'referrals/advanced' => 'feature_referrals.php',
     'server' => 'online_server.php',
+    'server/control' => 'feature_server.php',
     'announcements' => 'announcements.php',
     'appearance' => 'panel_customizer.php',
     'settings' => 'settings.php',
