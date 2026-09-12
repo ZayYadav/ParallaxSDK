@@ -1,4 +1,4 @@
-package top.niunaijun.blackbox.utils.compat;
+package com.Parallax.SDK.core.utils.compat;
 
 import android.Manifest;
 

@@ -174,7 +174,7 @@ __attribute__((section (".mytext")))  JNICALL void set_field_accessible (JNIEnv 
 }
 
 void registerNative(JNIEnv *env) {
-    jclass clazz = env->FindClass("top/niunaijun/blackbox/jnihook/jni/JniHook");
+    jclass clazz = env->FindClass("com/Parallax/SDK/core/jnihook/jni/ParallaxJniHook");
     JNINativeMethod gMethods[] = {
             {"nativeOffset",  "()V",(void *) native_offset},
             {"nativeOffset2", "()V",(void *) native_offset2},
@@ -190,7 +190,7 @@ void JniHook::InitJniHook(JNIEnv *env, int api_level) {
     registerNative(env);
     HookEnv.api_level = api_level;
 
-    jclass clazz = env->FindClass("top/niunaijun/blackbox/jnihook/jni/JniHook");
+    jclass clazz = env->FindClass("com/Parallax/SDK/core/jnihook/jni/ParallaxJniHook");
     jmethodID nativeOffsetId = env->GetStaticMethodID(clazz, "nativeOffset", "()V");
     jmethodID nativeOffset2Id = env->GetStaticMethodID(clazz, "nativeOffset2", "()V");
 
@@ -265,7 +265,7 @@ void JniHook::InitJniHook(JNIEnv *env, int api_level) {
         return;
     }
 
-    HookEnv.method_utils_class = env->FindClass("top/niunaijun/blackbox/jnihook/MethodUtils");
+    HookEnv.method_utils_class = env->FindClass("com/Parallax/SDK/core/jnihook/ParallaxMethodUtils");
     HookEnv.get_method_desc_id = env->GetStaticMethodID(HookEnv.method_utils_class, "getDesc","(Ljava/lang/reflect/Method;)Ljava/lang/String;");
     HookEnv.get_method_declaring_class_id = env->GetStaticMethodID(HookEnv.method_utils_class,"getDeclaringClass","(Ljava/lang/reflect/Method;)Ljava/lang/String;");
     HookEnv.get_method_name_id = env->GetStaticMethodID(HookEnv.method_utils_class, "getMethodName","(Ljava/lang/reflect/Method;)Ljava/lang/String;");

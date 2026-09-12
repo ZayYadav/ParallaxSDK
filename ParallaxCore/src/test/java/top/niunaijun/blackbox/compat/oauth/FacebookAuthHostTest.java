@@ -1,4 +1,4 @@
-package top.niunaijun.blackbox.compat.oauth;
+package com.Parallax.SDK.core.compat.oauth;
 
 import org.junit.Test;
 

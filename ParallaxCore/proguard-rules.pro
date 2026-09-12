@@ -23,25 +23,25 @@
 # Stable public Parallax SDK facade used by consumer applications.
 -keep class com.Parallax.SDK.ParallaxSDK { public *; }
 
--keep class top.niunaijun.blackbox.core.system.api.MetaActivationManager { *; }
--keep class top.niunaijun.blackbox.** {*; }
--keep class top.niunaijun.jnihook.** {*; }
--keep class black.** {*; }
+-keep class com.Parallax.SDK.core.core.system.api.ParallaxActivationManager { *; }
+-keep class com.Parallax.SDK.core.** {*; }
+-keep class com.Parallax.SDK.nativebridge.** {*; }
+-keep class com.Parallax.SDK.mirror.** {*; }
 -keep class android.** {*; }
 -keep class com.android.** {*; }
 
-# Keep the BlackBoxCore class and all its methods
--keep class top.niunaijun.blackbox.BlackBoxCore {
+# Keep the ParallaxCore class and all its methods
+-keep class com.Parallax.SDK.core.ParallaxCore {
     *;
 }
 
 # Keep native methods so they aren't removed or renamed
--keepclassmembers class top.niunaijun.blackbox.BlackBoxCore {
+-keepclassmembers class com.Parallax.SDK.core.ParallaxCore {
     public native *;
 }
 
 # Prevent BthreadMain and other sensitive methods from being renamed
--keepclassmembers class top.niunaijun.blackbox.BlackBoxCore {
+-keepclassmembers class com.Parallax.SDK.core.ParallaxCore {
     
     
     public boolean BthreadMain();

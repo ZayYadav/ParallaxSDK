@@ -9,7 +9,7 @@
 #include <unistd.h>
 //#include <fb/include/fb/ALog.h>
 //#include <fb/include/fb/fbjni.h>
-#define VMCORE_CLASS "top/niunaijun/blackbox/core/RNative"
+#define VMCORE_CLASS "com/Parallax/SDK/core/core/ParallaxNative"
 
 class BoxCore {
 public:

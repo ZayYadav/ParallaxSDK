@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="vbox_service_name">:black</string>
+    <string name="vbox_service_name">:com.Parallax.SDK.mirror</string>
 </resources>

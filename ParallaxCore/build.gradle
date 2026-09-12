@@ -90,7 +90,7 @@ android {
         checkOnly += ['NewApi', 'InlinedApi']
     }
 
-    namespace "top.niunaijun.blackbox"
+    namespace "com.Parallax.SDK"
     ndkVersion rootProject.ext.ndkVersion
 }
 

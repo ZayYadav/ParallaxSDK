@@ -1,10 +1,10 @@
-package top.niunaijun.blackbox.fake.service;
+package com.Parallax.SDK.core.fake.service;
 
 import org.junit.Test;
 
 import java.util.Arrays;
 
-import top.niunaijun.blackbox.fake.hook.ProxyMethods;
+import com.Parallax.SDK.core.fake.hook.ParallaxProxyMethods;
 
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;

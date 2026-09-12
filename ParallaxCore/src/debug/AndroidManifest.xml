@@ -26,7 +26,7 @@
 
     <application>
         <activity
-            android:name="top.niunaijun.blackbox.compat.oauth.VirtualOAuthBridgeActivity"
+            android:name="com.Parallax.SDK.core.compat.oauth.ParallaxVirtualOAuthBridgeActivity"
             android:excludeFromRecents="true"
             android:exported="false"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
@@ -34,11 +34,11 @@
         <!--
              Meta's Custom Tab redirect uses fbconnect://cct.<package>. The host
              receiver is deliberately broad at manifest level because the virtual
-             package is dynamic; FacebookOAuthCallbackActivity accepts a URI only
+             package is dynamic; ParallaxFacebookOAuthCallbackActivity accepts a URI only
              when it matches an active, state-validated Facebook OAuth session.
         -->
         <activity
-            android:name="top.niunaijun.blackbox.compat.oauth.FacebookOAuthCallbackActivity"
+            android:name="com.Parallax.SDK.core.compat.oauth.ParallaxFacebookOAuthCallbackActivity"
             android:excludeFromRecents="true"
             android:exported="true"
             android:launchMode="singleTop"
