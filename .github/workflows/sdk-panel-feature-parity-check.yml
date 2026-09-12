@@ -23,7 +23,7 @@ jobs:
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot --silent || mysqladmin ping -h 127.0.0.1 -psdk_test_root --silent"
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -psdk_test_root --silent"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=12
@@ -39,7 +39,7 @@ jobs:
           php-version: '8.2'
           extensions: mysqli, openssl, mbstring
 
-      - name: Lint SDK panel PHP
+      - name: Lint every SDK panel PHP file
         shell: bash
         run: |
           set -euo pipefail
@@ -52,10 +52,20 @@ jobs:
           git fetch origin main --depth=1
           git diff --exit-code origin/main...HEAD -- panels/sdk-panel/connect.php
 
+      - name: Assert hardened access-control wiring exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "FeatureAccessControl.php" panels/sdk-panel/app/Core/FeatureSuite.php
+          grep -q "owner_user_id" panels/sdk-panel/app/Core/FeatureLicensing.php
+          grep -q "owner_user_id" panels/sdk-panel/get_devices.php
+          grep -q "sdk_feature_is_owner_chat" panels/sdk-panel/app/Core/FeatureTelegramWebhook.php
+          grep -q "claimed_at" panels/sdk-panel/app/Core/FeatureLoginBroadcast.php
+
       - name: Install MySQL client
         run: sudo apt-get update && sudo apt-get install -y mysql-client
 
-      - name: Test fresh schema plus feature migration
+      - name: Test schema migrations and idempotency
         shell: bash
         env:
           MYSQL_PWD: sdk_test_root
@@ -64,5 +74,28 @@ jobs:
           mysql -h 127.0.0.1 -uroot -e "CREATE DATABASE sdk_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
           mysql -h 127.0.0.1 -uroot sdk_test < panels/sdk-panel/database/fresh-install.sql
           mysql -h 127.0.0.1 -uroot sdk_test < panels/sdk-panel/database/teamdark-feature-parity.sql
+          mysql -h 127.0.0.1 -uroot sdk_test < panels/sdk-panel/database/teamdark-feature-parity-hardening.sql
+          # Every deployment migration must be safe to run again.
           mysql -h 127.0.0.1 -uroot sdk_test < panels/sdk-panel/database/teamdark-feature-parity.sql
-          mysql -h 127.0.0.1 -uroot sdk_test -e "SELECT feature_key,feature_version FROM sdk_feature_suite_meta; SHOW COLUMNS FROM users LIKE 'balance'; SHOW COLUMNS FROM users LIKE 'telegram_chat_id'; SHOW COLUMNS FROM referral_codes LIKE 'max_uses';"
+          mysql -h 127.0.0.1 -uroot sdk_test < panels/sdk-panel/database/teamdark-feature-parity-hardening.sql
+
+          test "$(mysql -N -B -h 127.0.0.1 -uroot sdk_test -e "SELECT feature_version FROM sdk_feature_suite_meta WHERE feature_key='teamdark_feature_parity'")" = "3"
+          test "$(mysql -N -B -h 127.0.0.1 -uroot sdk_test -e "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='sdk_test' AND TABLE_NAME='licenses' AND COLUMN_NAME='owner_user_id'")" = "1"
+          test "$(mysql -N -B -h 127.0.0.1 -uroot sdk_test -e "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='sdk_test' AND TABLE_NAME='announcement_recipients' AND COLUMN_NAME='claimed_at'")" = "1"
+          test "$(mysql -N -B -h 127.0.0.1 -uroot sdk_test -e "SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='sdk_test' AND TABLE_NAME='licenses' AND INDEX_NAME='idx_licenses_owner_user'")" -ge "1"
+          test "$(mysql -N -B -h 127.0.0.1 -uroot sdk_test -e "SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA='sdk_test' AND TABLE_NAME='licenses' AND CONSTRAINT_NAME='fk_licenses_owner_user'")" = "1"
+
+      - name: Test ownership backfill and isolation schema
+        shell: bash
+        env:
+          MYSQL_PWD: sdk_test_root
+        run: |
+          set -euo pipefail
+          HASH='$2y$10$abcdefghijklmnopqrstuuuuuuuuuuuuuuuuuuuuuuuuuuuuu'
+          mysql -h 127.0.0.1 -uroot sdk_test -e "
+            INSERT INTO users(username,password,role,balance,status) VALUES('audit_reseller', '$HASH', 'reseller', 100, 1);
+            INSERT INTO licenses(license_key,client_name,expiry_date,status,package_mode,signing_mode,device_mode,feature_policy,blocked_versions,generated_by)
+              VALUES('SDK-AUDIT-OWNERSHIP','Audit',UTC_TIMESTAMP()+INTERVAL 1 DAY,1,'ANY','ANY','SINGLE',JSON_OBJECT(),JSON_ARRAY(),'audit_reseller');
+          "
+          mysql -h 127.0.0.1 -uroot sdk_test < panels/sdk-panel/database/teamdark-feature-parity-hardening.sql
+          test "$(mysql -N -B -h 127.0.0.1 -uroot sdk_test -e "SELECT COUNT(*) FROM licenses l JOIN users u ON u.id=l.owner_user_id WHERE l.license_key='SDK-AUDIT-OWNERSHIP' AND u.username='audit_reseller'")" = "1"
