@@ -1,6 +1,207 @@
 <?php
 declare(strict_types=1);
 
+$requestMethod = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? ''));
+
+/*
+ * A browser-friendly landing page for the public endpoint. This branch runs
+ * before database/bootstrap work and is intentionally GET-only. The SDK
+ * activation protocol below remains POST-only and byte-for-byte compatible.
+ */
+if ($requestMethod === 'GET') {
+    header('Content-Type: text/html; charset=UTF-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: DENY');
+    header('Referrer-Policy: no-referrer');
+    header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
+    header("Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; frame-ancestors 'none'; form-action 'none'");
+
+    $forwardedProto = strtolower(trim(explode(',', (string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''))[0]));
+    $isHttps = (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
+        || $forwardedProto === 'https';
+    $scheme = $isHttps ? 'https' : 'http';
+    $host = preg_replace('/[^A-Za-z0-9.\-:\[\]]/', '', (string) ($_SERVER['HTTP_HOST'] ?? 'localhost')) ?: 'localhost';
+    $path = parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/connect'), PHP_URL_PATH);
+    $path = is_string($path) && $path !== '' ? $path : '/connect';
+    $endpoint = htmlspecialchars($scheme . '://' . $host . $path, ENT_QUOTES, 'UTF-8');
+    $serverTime = gmdate('Y-m-d H:i:s') . ' UTC';
+    ?>
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+    <meta name="theme-color" content="#050913">
+    <title>Parallax SDK API</title>
+    <style>
+        :root {
+            color-scheme:dark;
+            --bg:#050913;
+            --surface:rgba(16,27,47,.64);
+            --surface-strong:rgba(17,31,54,.82);
+            --line:rgba(255,255,255,.12);
+            --line-strong:rgba(75,220,255,.3);
+            --text:#f5f9ff;
+            --muted:#94a6bd;
+            --cyan:#35d9ff;
+            --blue:#4f7cff;
+            --green:#42e8a5;
+        }
+        *{box-sizing:border-box}
+        html,body{margin:0;min-height:100%}
+        body{
+            min-height:100svh;
+            display:grid;
+            place-items:center;
+            padding:clamp(18px,4vw,48px);
+            overflow-x:hidden;
+            color:var(--text);
+            font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+            background:
+                radial-gradient(circle at 14% 10%,rgba(53,217,255,.14),transparent 30rem),
+                radial-gradient(circle at 88% 90%,rgba(79,124,255,.14),transparent 30rem),
+                linear-gradient(145deg,#03060d,var(--bg) 55%,#071121);
+        }
+        body::before{
+            content:"";
+            position:fixed;
+            inset:0;
+            pointer-events:none;
+            opacity:.2;
+            background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);
+            background-size:42px 42px;
+            mask-image:linear-gradient(to bottom,#000,transparent 82%);
+        }
+        .shell{position:relative;width:min(920px,100%)}
+        .glass{
+            background:linear-gradient(145deg,var(--surface-strong),var(--surface));
+            border:1px solid var(--line);
+            box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 32px 90px rgba(0,0,0,.48);
+            -webkit-backdrop-filter:blur(24px) saturate(145%);
+            backdrop-filter:blur(24px) saturate(145%);
+        }
+        .hero{position:relative;overflow:hidden;border-radius:28px;padding:clamp(24px,5vw,54px)}
+        .hero::after{
+            content:"";
+            position:absolute;
+            width:260px;
+            height:260px;
+            right:-110px;
+            top:-120px;
+            border-radius:50%;
+            background:rgba(53,217,255,.13);
+            filter:blur(18px);
+            pointer-events:none;
+        }
+        .topline{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:34px}
+        .brand{display:flex;align-items:center;gap:13px;min-width:0}
+        .mark{
+            width:48px;
+            height:48px;
+            flex:0 0 48px;
+            display:grid;
+            place-items:center;
+            border-radius:15px;
+            color:#031018;
+            background:linear-gradient(135deg,var(--cyan),#a7f3ff);
+            border:1px solid rgba(255,255,255,.55);
+            box-shadow:inset 0 1px 0 rgba(255,255,255,.65),0 12px 30px rgba(53,217,255,.2);
+        }
+        .mark svg{width:25px;height:25px}
+        .brand-copy strong{display:block;font-size:.96rem;letter-spacing:.01em}
+        .brand-copy span{display:block;margin-top:3px;color:var(--muted);font-size:.75rem}
+        .live{
+            display:inline-flex;
+            align-items:center;
+            gap:8px;
+            flex:0 0 auto;
+            padding:9px 13px;
+            border-radius:999px;
+            color:#a7f3d0;
+            font-size:.73rem;
+            font-weight:800;
+            letter-spacing:.08em;
+            background:rgba(16,185,129,.1);
+            border:1px solid rgba(66,232,165,.25);
+            box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
+        }
+        .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 5px rgba(66,232,165,.1),0 0 18px var(--green);animation:pulse 2s ease-in-out infinite}
+        h1{max-width:720px;margin:0;font-size:clamp(2rem,6vw,4.15rem);line-height:1.02;letter-spacing:-.055em}
+        h1 span{color:transparent;background:linear-gradient(105deg,var(--cyan),#a8efff 48%,#8fa8ff);-webkit-background-clip:text;background-clip:text}
+        .lead{max-width:670px;margin:20px 0 0;color:#a8b7cb;font-size:clamp(.98rem,2vw,1.12rem);line-height:1.75}
+        .endpoint{
+            margin-top:28px;
+            display:flex;
+            align-items:center;
+            gap:12px;
+            min-width:0;
+            padding:14px 16px;
+            border-radius:15px;
+            background:rgba(2,8,20,.5);
+            border:1px solid rgba(255,255,255,.1);
+            box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
+        }
+        .method{padding:6px 9px;border-radius:8px;color:#05131a;background:linear-gradient(135deg,var(--green),#a7f3d0);font-size:.68rem;font-weight:900;letter-spacing:.08em}
+        code{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#cfefff;font-family:"SFMono-Regular",Consolas,monospace;font-size:.83rem}
+        .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:14px}
+        .tile{min-height:126px;padding:18px;border-radius:18px}
+        .tile-icon{width:34px;height:34px;display:grid;place-items:center;border-radius:11px;color:var(--cyan);background:rgba(53,217,255,.09);border:1px solid rgba(53,217,255,.16);font-weight:900}
+        .tile strong{display:block;margin-top:14px;font-size:.9rem}
+        .tile p{margin:7px 0 0;color:var(--muted);font-size:.76rem;line-height:1.55}
+        footer{display:flex;justify-content:space-between;gap:16px;padding:15px 6px 0;color:#60748e;font-size:.7rem}
+        @keyframes pulse{50%{opacity:.62;transform:scale(.86)}}
+        @media(max-width:700px){
+            body{place-items:start center;padding:12px}
+            .hero{border-radius:22px;padding:22px 18px}
+            .topline{align-items:flex-start;margin-bottom:28px}
+            .brand-copy span{display:none}
+            .live{padding:8px 10px;font-size:.66rem}
+            .grid{grid-template-columns:1fr}
+            .tile{min-height:auto;display:grid;grid-template-columns:36px 1fr;column-gap:12px;align-items:center}
+            .tile strong,.tile p{grid-column:2;margin-top:0}
+            .tile p{margin-top:4px}
+            footer{flex-direction:column;gap:5px;padding:13px 5px 4px}
+        }
+        @media(prefers-reduced-motion:reduce){*{animation:none!important;scroll-behavior:auto!important}}
+    </style>
+</head>
+<body>
+    <main class="shell" aria-labelledby="page-title">
+        <section class="hero glass">
+            <div class="topline">
+                <div class="brand">
+                    <div class="mark" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 20 7v5c0 5-3.4 8-8 9-4.6-1-8-4-8-9V7l8-4Z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg>
+                    </div>
+                    <div class="brand-copy"><strong>PARALLAX SDK</strong><span>Secure License Gateway</span></div>
+                </div>
+                <div class="live"><span class="dot"></span>GATEWAY READY</div>
+            </div>
+
+            <h1 id="page-title">Secure API.<br><span>Built for trusted clients.</span></h1>
+            <p class="lead">This is the Parallax SDK activation gateway. Browser access is informational; license verification requests are accepted only from configured SDK clients through the protected POST protocol.</p>
+
+            <div class="endpoint" title="<?= $endpoint ?>">
+                <span class="method">POST</span>
+                <code><?= $endpoint ?></code>
+            </div>
+
+            <div class="grid" aria-label="API capabilities">
+                <article class="tile glass"><div class="tile-icon">01</div><strong>Version-aware</strong><p>Compatible protocol handling for deployed SDK generations.</p></article>
+                <article class="tile glass"><div class="tile-icon">02</div><strong>Protected traffic</strong><p>Encrypted request support with replay and rate-limit controls.</p></article>
+                <article class="tile glass"><div class="tile-icon">03</div><strong>No public console</strong><p>No credentials, license data, or internal configuration are exposed here.</p></article>
+            </div>
+        </section>
+        <footer><span>Parallax SDK Control</span><span>Server time: <?= htmlspecialchars($serverTime, ENT_QUOTES, 'UTF-8') ?></span></footer>
+    </main>
+</body>
+</html>
+    <?php
+    exit;
+}
+
 require_once __DIR__ . '/conn.php';
 require_once __DIR__ . '/CryptoHelper.php';
 require_once __DIR__ . '/CryptoV3.php';
