@@ -42,7 +42,7 @@ final class Env
             'DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD',
             'ENCRYPTION_KEY', 'PANEL_DATA_KEY',
             'TELEGRAM_BOT_TOKEN', 'TELEGRAM_WEBHOOK_SECRET',
-            'TELEGRAM_DEFAULT_ADMIN_CHAT_ID',
+            'TELEGRAM_DEFAULT_ADMIN_CHAT_ID', 'TELEGRAM_OWNER_CHAT_ID',
         ] as $key) {
             $value = self::get($key);
             if ($value !== null) {
