@@ -11,7 +11,12 @@ if(($_SERVER['REQUEST_METHOD']??'GET')==='POST'){
     try{
         $action=(string)($_POST['action']??'');
         if($action==='create'){
-            $code=sdk_feature_create_referral($conn,$actor,$_POST);$msg='Referral created: '.$code;
+            $input=$_POST;
+            if($role==='admin'){
+                $input['role']='user';
+                $input['grant_balance']='0';
+            }
+            $code=sdk_feature_create_referral($conn,$actor,$input);$msg='Referral created: '.$code;
         }elseif($action==='revoke'){
             $id=(int)($_POST['referral_id']??0);if($id<1)throw new RuntimeException('Invalid referral.');
             if($role==='owner'){$st=$conn->prepare('UPDATE referral_codes SET status=0,revoked_at=UTC_TIMESTAMP() WHERE id=?');$st->bind_param('i',$id);}
