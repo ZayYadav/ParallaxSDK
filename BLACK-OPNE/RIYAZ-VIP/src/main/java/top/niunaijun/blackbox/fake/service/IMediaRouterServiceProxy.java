@@ -9,6 +9,7 @@ import black.android.os.BRServiceManager;
 import top.niunaijun.blackbox.fake.hook.BinderInvocationStub;
 import top.niunaijun.blackbox.fake.hook.MethodHook;
 import top.niunaijun.blackbox.fake.hook.ProxyMethod;
+import top.niunaijun.blackbox.fake.hook.ProxyMethods;
 import top.niunaijun.blackbox.utils.MethodParameterUtils;
 
 /**
@@ -49,6 +50,24 @@ public class IMediaRouterServiceProxy extends BinderInvocationStub {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             MethodParameterUtils.replaceFirstAppPkg(args);
+            return method.invoke(who, args);
+        }
+    }
+
+    /**
+     * Android 15/16 validates the caller package on MediaRouter2 read APIs.
+     * Virtual applications run under the host UID, so forward the host package
+     * for every signature variant before the platform performs that check.
+     */
+    @ProxyMethods({
+            "getSystemRoutes",
+            "getSystemSessionInfo",
+            "getRemoteSessions"
+    })
+    public static class mediaRouter2ReadCalls extends MethodHook {
+        @Override
+        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+            MethodParameterUtils.replaceAllAppPkg(args);
             return method.invoke(who, args);
         }
     }
